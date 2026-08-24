@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   pCorrect, estimateTheta, standardError, scoreAssessment, nextItem,
-  continuousResidual, updateHiddenAbility, normalCdf, DEFAULT_NORMS,
+  continuousResidual, updateHiddenAbility, normalCdf,
   type ItemParams, type ItemResult,
 } from '../../src/core/rating.js';
 import { makeRng } from '../../src/core/rng.js';

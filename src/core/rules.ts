@@ -178,7 +178,13 @@ export function canClose(level: Level, state: PlayState): Verdict {
 
   const last = pegs[pegs.length - 1];
   const first = pegs[0];
-  if (last === first) return no('repeat-peg');
+  if (last === first) {
+    // The player walked all the way back onto the start peg. The polygon is
+    // already closed at that vertex, so there is no closing edge to check —
+    // just a duplicate to drop. Dragging round and back is far too natural a
+    // gesture to leave in a dead state.
+    return pegs.length >= 4 ? OK : no('too-short');
+  }
 
   const a = pegPos(level, state, last);
   const b = pegPos(level, state, first);
@@ -210,6 +216,12 @@ export function canClose(level: Level, state: PlayState): Verdict {
     if (lengthUsed(level, state) + added > level.budget + 1e-6) return no('over-budget');
   }
   return OK;
+}
+
+/** Drop a trailing duplicate of the start peg, once the loop is tied. */
+export function normalizeClosedPath(pegs: number[]): number[] {
+  if (pegs.length >= 4 && pegs[0] === pegs[pegs.length - 1]) return pegs.slice(0, -1);
+  return pegs;
 }
 
 /**
