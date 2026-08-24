@@ -12,6 +12,8 @@ import { MODE_UNLOCKS, solvedCount, collectionCount, applyDailySolve } from '../
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
 import { themeUnlocked, skinUnlocked } from '../game/progress.js';
 import { dailyLevel } from '../game/generate.js';
+import { estimateDifficulty } from '../core/difficulty.js';
+import { deriveTarget, type Level } from '../core/level.js';
 import { dateKey } from '../core/rng.js';
 import { ticker, easeInOut } from '../render/tween.js';
 import { audio } from '../render/audio.js';
@@ -55,17 +57,19 @@ function heroHeader(): HTMLElement {
   const total = star.length;
   let forward = true;
   const draw = (v: number) => {
-    const n = Math.max(0, Math.min(total, Math.floor(v)));
-    if (n < 2) {
+    const clamped = Math.max(0, Math.min(total, v));
+    const n = Math.floor(clamped);
+    const frac = clamped - n;
+    if (clamped < 0.015) {
       path.setAttribute('d', '');
       return;
     }
-    const frac = v - Math.floor(v);
     let d = `M${star[0][0].toFixed(1)} ${star[0][1].toFixed(1)}`;
-    for (let i = 1; i < n; i++) d += `L${star[i][0].toFixed(1)} ${star[i][1].toFixed(1)}`;
+    for (let i = 1; i <= n && i < total; i++) d += `L${star[i][0].toFixed(1)} ${star[i][1].toFixed(1)}`;
     if (n < total && frac > 0) {
-      const a = star[n - 1];
-      const b = star[n % total];
+      // Partway along the next segment, so the string really does creep.
+      const a = star[n % total];
+      const b = star[(n + 1) % total];
       d += `L${(a[0] + (b[0] - a[0]) * frac).toFixed(1)} ${(a[1] + (b[1] - a[1]) * frac).toFixed(1)}`;
     }
     if (n >= total) d += 'Z';
@@ -133,9 +137,11 @@ function dailyStrip(app: App): HTMLElement {
   const mini = h('div', { class: 'mini' }, miniature(level, solved ? {} : { ink: 'var(--mute)' }));
   if (!solved) mini.style.filter = 'blur(3px)';
 
-  // "% of players who solved it today" is derived from the puzzle's own
-  // difficulty rather than invented — there is no server to ask.
-  const share = estimateSolveRate(key);
+  // No server means no real "% of players who solved it today", and inventing
+  // one would be presenting a fabricated statistic as fact. What CAN be said
+  // truthfully is how hard today's puzzle is, measured by the same estimator
+  // the game uses everywhere else.
+  const band = difficultyBand(level);
 
   return h('button', {
     class: 'strip',
@@ -149,7 +155,7 @@ function dailyStrip(app: App): HTMLElement {
     h('div', {},
       h('h3', { class: 'display', text: 'Daily Thread' }),
       h('p', { text: `${prettyDate(key)}${solved ? ' · solved' : ''}` }),
-      h('p', { class: 'flame', text: `${app.save.daily.streak > 0 ? `🔥 ${app.save.daily.streak}` : 'Start a streak'} · ${share}% solved today` }),
+      h('p', { class: 'flame', text: `${app.save.daily.streak > 0 ? `🔥 ${app.save.daily.streak}` : 'Start a streak'} · ${band}` }),
     ),
     h('span', { class: 'chev', text: '›' }),
   );
@@ -160,11 +166,14 @@ function prettyDate(key: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-/** Deterministic from the date so every player sees the same figure. */
-function estimateSolveRate(key: string): number {
-  let h2 = 0;
-  for (let i = 0; i < key.length; i++) h2 = (h2 * 31 + key.charCodeAt(i)) >>> 0;
-  return 42 + (h2 % 46);
+/** An honest read on today's puzzle, from the static difficulty estimator. */
+function difficultyBand(level: Level): string {
+  const b = estimateDifficulty(level, deriveTarget(level).raster).b;
+  if (b < -1.2) return 'a gentle one today';
+  if (b < -0.2) return 'a fair one today';
+  if (b < 0.8) return 'a bit of a knot today';
+  if (b < 1.8) return 'a hard one today';
+  return 'a brute today';
 }
 
 // ---------------------------------------------------------------------------

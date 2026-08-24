@@ -108,9 +108,11 @@ a self-selected population, with no supervision, is not an IQ.
 So the Assessment builds the most statistically defensible ability estimate it
 can — twelve adaptive items under a two-parameter logistic IRT model, with six
 continuous signals folded in as a bounded residual — reports it on a familiar
-100/15 scale with a confidence interval and a percentile against other Thread
-players, and calls it a **Thread Score**, subtitled *"an IQ-style scale — not a
-clinical IQ test"*. That sentence is shown once, on the first reveal, and then
+100/15 scale with a confidence interval and an estimated percentile, and calls
+it a **Thread Score**, subtitled *"an IQ-style scale — not a clinical IQ
+test"*. The percentile is where the ability model places you, not a count of
+real people: Thread keeps everything on the device and has no telemetry to
+compare against, and the UI says so rather than implying otherwise. That sentence is shown once, on the first reveal, and then
 never again.
 
 Correctness outweighs speed roughly 4:1, deliberately, so frantic tapping

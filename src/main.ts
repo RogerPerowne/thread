@@ -26,6 +26,25 @@ app.registerScreen('settings', (a) => settingsScreen(a));
 app.registerScreen('assess', (a) => assessScreen(a));
 app.registerScreen('workshop', (a) => workshopScreen(a));
 
+// Expose a small surface for the end-to-end harness. It drives the game
+// through real pointer events; this is only for reading state back.
+declare global {
+  interface Window { __thread?: unknown }
+}
+window.__thread = {
+  app,
+  save: () => app.save,
+  levelIds: () => ({
+    classic: app.classic.map((l) => l.id),
+    weave: app.weave.map((l) => l.id),
+    assess: app.assess.map((l) => l.id),
+  }),
+  frameTimes: () => ticker.frameTimes.slice(),
+  startRecording: () => ticker.startRecording(),
+  stopRecording: () => ticker.stopRecording(),
+  current: null as unknown,
+};
+
 // Audio contexts may only start from a gesture.
 const wake = () => {
   audio.setTheme(app.theme);
@@ -61,21 +80,3 @@ try {
   /* storage unavailable */
 }
 
-// Expose a small surface for the end-to-end harness. It drives the game
-// through real pointer events; this is only for reading state back.
-declare global {
-  interface Window { __thread?: unknown }
-}
-window.__thread = {
-  app,
-  save: () => app.save,
-  levelIds: () => ({
-    classic: app.classic.map((l) => l.id),
-    weave: app.weave.map((l) => l.id),
-    assess: app.assess.map((l) => l.id),
-  }),
-  frameTimes: () => ticker.frameTimes.slice(),
-  startRecording: () => ticker.startRecording(),
-  stopRecording: () => ticker.stopRecording(),
-  current: null as unknown,
-};

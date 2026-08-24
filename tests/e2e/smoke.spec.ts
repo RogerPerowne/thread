@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoApp, openLevel, solveByTapping, isSolved } from './helpers.js';
+import { gotoApp, openLevel, solveByTapping, isSolved, waitForBoard } from './helpers.js';
 
 test('the home screen shows the wordmark, continue card, daily and modes', async ({ page }) => {
   await gotoApp(page);
@@ -51,6 +51,7 @@ test('progress survives a reload', async ({ page }) => {
   await gotoApp(page);
   const level = await openLevel(page, 'classic', 'c-1-1');
   await solveByTapping(page, level);
+  expect(await isSolved(page)).toBe(true);
   await page.reload();
   await page.waitForFunction(() => Boolean((window as never as { __thread?: unknown }).__thread));
   const solved = await page.evaluate(
@@ -64,8 +65,7 @@ test('the daily is the same puzzle on every load', async ({ page }) => {
   const a = await page.evaluate(() => JSON.stringify(
     (window as never as { __thread: { current: { pegs: unknown } } }).__thread.current.pegs));
   await page.reload();
-  await page.waitForFunction(() => Boolean(
-    (window as never as { __thread?: { current?: unknown } }).__thread?.current));
+  await waitForBoard(page);
   const b = await page.evaluate(() => JSON.stringify(
     (window as never as { __thread: { current: { pegs: unknown } } }).__thread.current.pegs));
   expect(a).toBe(b);

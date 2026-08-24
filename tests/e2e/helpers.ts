@@ -28,6 +28,17 @@ export async function gotoApp(page: Page, hash = ''): Promise<void> {
   });
   await page.goto(`/${hash}`);
   await page.waitForFunction(() => Boolean((window as never as { __thread?: unknown }).__thread));
+  if (hash.includes('/play/')) await waitForBoard(page);
+}
+
+/** Wait until a level is actually on the board. */
+export async function waitForBoard(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => Boolean((window as never as { __thread: { current: unknown } }).__thread.current),
+    undefined,
+    { timeout: 15_000 },
+  );
+  await page.locator('.board-svg').first().waitFor({ state: 'visible' });
 }
 
 export async function openLevel(page: Page, mode: string, id: string): Promise<Current> {

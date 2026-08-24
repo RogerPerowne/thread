@@ -134,7 +134,7 @@ function runAssessment(app: App, mount: HTMLElement): void {
     engine.resize();
 
     // 120 s cap per item, driven by the ticker like everything else.
-    ticker.after(ITEM_CAP_MS, () => {
+    ticker.schedule(ITEM_CAP_MS, () => {
       if (capFired || results.length >= items.length) return;
       capFired = true;
       recordTimeout(level);
@@ -159,7 +159,7 @@ function runAssessment(app: App, mount: HTMLElement): void {
       timedOut: false,
     });
     theta = estimateTheta(items, results.map((x) => x.firstTry));
-    ticker.after(win ? 520 : 900, nextOne);
+    ticker.schedule(win ? 520 : 900, nextOne);
     ticker.requestFrame();
   }
 
@@ -195,7 +195,7 @@ function runAssessment(app: App, mount: HTMLElement): void {
     mount.appendChild(h('div', { class: 'scroll', style: 'padding:22px 18px' },
       h('div', { class: 'label', text: 'Thread Score' }),
       h('h2', { class: 'display num', style: 'font-size:46px;margin:2px 0 0', text: `${report.score} ± ${report.margin}` }),
-      h('p', { style: 'color:var(--mute);margin:2px 0 14px', text: `${report.percentile}th percentile of Thread players` }),
+      h('p', { style: 'color:var(--mute);margin:2px 0 14px', text: `around the ${report.percentile}th percentile of Thread players` }),
       radar([
         ['Planning', report.profile.planning],
         ['Precision', report.profile.precision],
@@ -208,7 +208,9 @@ function runAssessment(app: App, mount: HTMLElement): void {
         : null,
       h('p', { style: 'font-size:13px;color:var(--mute);line-height:1.5' },
         'The margin is a confidence interval, not decoration: it narrows each time you take the test. '
-        + 'The percentile is measured against other Thread players, which is the number this game can actually stand behind.'),
+        + 'The percentile is where the model places you among Thread players — an estimate from the '
+        + 'ability model, not a count of real people, because Thread keeps everything on your device '
+        + 'and has no one to compare you against.'),
       h('div', { class: 'actions', style: 'margin-top:16px' },
         pill('Home', () => app.go({ name: 'home' }), 'primary')),
     ));

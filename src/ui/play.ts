@@ -111,18 +111,32 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
   const spool = h('i');
   const spoolBar = h('div', { class: 'spool', role: 'progressbar', 'aria-label': 'String remaining' }, spool);
   const label = h('span', { class: 'chapter' });
+  const extraSlot = h('span', { class: 'chapter' });
+  hudEl.append(label, spoolBar, extraSlot);
 
+  /**
+   * Mutate the HUD rather than rebuild it. This runs on every peg the player
+   * adds, and the whole point of the renderer is that a frequent update must
+   * never destroy and recreate nodes.
+   */
   function refreshHud(): void {
-    clear(hudEl);
-    hudEl.append(label);
     const s = engine.spool;
     if (s) {
       spool.style.width = `${Math.round(s.fraction * 100)}%`;
+      spoolBar.style.display = '';
       spoolBar.setAttribute('aria-valuenow', String(Math.round(s.fraction * 100)));
-      hudEl.append(spoolBar);
+    } else {
+      spoolBar.style.display = 'none';
     }
     const extra = session.hud?.();
-    if (extra) hudEl.append(extra);
+    if (extra) {
+      if (extraSlot.firstChild !== extra) {
+        clear(extraSlot);
+        extraSlot.appendChild(extra);
+      }
+    } else if (extraSlot.firstChild) {
+      clear(extraSlot);
+    }
   }
 
   function refreshControls(): void {
@@ -147,7 +161,8 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     label.textContent = session.label(level);
     // Read-only hook for the end-to-end harness. It drives the game through
     // real pointer events; this only lets it see what is on the board.
-    (window as unknown as { __thread?: Record<string, unknown> }).__thread!.current = {
+    const hook = (window as unknown as { __thread?: Record<string, unknown> }).__thread;
+    if (hook) hook.current = {
       id: level.id,
       pegs: level.pegs,
       threads: level.threads.map((t) => ({ sol: t.sol, over: t.over ?? [] })),
@@ -182,7 +197,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     session.onSolved?.(current, res);
     badge.textContent = res.attempt === 1 ? 'Perfect' : 'Solved';
     badge.classList.add('show');
-    ticker.after(900, () => badge.classList.remove('show'));
+    ticker.schedule(900, () => badge.classList.remove('show'));
     if (session.timed) timeLeft += 3000;
     if (!session.autoAdvance) {
       clear(controls);
@@ -197,7 +212,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     // "94%" makes people try again immediately; "wrong" makes them quit.
     badge.textContent = `${Math.round(res.similarity * 100)}%`;
     badge.classList.add('show');
-    ticker.after(1400, () => badge.classList.remove('show'));
+    ticker.schedule(1400, () => badge.classList.remove('show'));
 
     app.save.stats.totalAttempts++;
     const rec = app.save.levels[current.id];
@@ -345,7 +360,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
           a.persist();
           if (usedFreeze) toast('Streak freeze used');
           const grid = shareGrid(res.raster, GRID);
-          ticker.after(700, () => {
+          ticker.schedule(700, () => {
             modal((close) => [
               h('h2', { class: 'display', text: 'Solved' }),
               h('p', { text: `${res.attempt === 1 ? 'First try' : `${res.attempt} tries`} · ${streak} day streak` }),

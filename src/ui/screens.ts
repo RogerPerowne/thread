@@ -228,7 +228,7 @@ export function statsScreen(app: App): { el: HTMLElement } {
       h('div', { class: 'label', text: 'Thread Score' }),
       h('div', { class: 'stat', style: 'text-align:left;margin:4px 0 2px' },
         h('b', { class: 'num', style: 'font-size:38px', text: `${last.score} ± ${last.margin}` }),
-        h('span', { text: `${last.percentile}th percentile of Thread players` }),
+        h('span', { text: `around the ${last.percentile}th percentile` }),
       ),
       h('p', { class: 'sub', style: 'font-size:12px;color:var(--mute);margin:8px 0 0', text: DISCLAIMER }),
       sparkline(history.map((x) => x.score), MODE_ACCENT.assess),

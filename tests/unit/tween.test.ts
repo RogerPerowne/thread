@@ -125,13 +125,28 @@ describe('tween engine', () => {
     expect(t.busy).toBe(false);
   });
 
-  it('reduced motion runs sequences immediately too', () => {
+  it('reduced motion runs visual sequences immediately too', () => {
     const t = new Ticker(() => 0);
     t.reducedMotion = true;
     const order: string[] = [];
     t.sequence([[0, () => order.push('a')], [800, () => order.push('b')]]);
     t.advance(0);
     expect(order).toEqual(['a', 'b']);
+  });
+
+  it('but reduced motion does NOT collapse gameplay pacing', () => {
+    // A player who asked for less movement did not ask for the game to skip
+    // ahead before they have seen what happened.
+    const t = new Ticker(() => 0);
+    t.reducedMotion = true;
+    let advanced = false;
+    t.schedule(1200, () => { advanced = true; });
+    t.advance(0);
+    expect(advanced).toBe(false);
+    t.advance(600);
+    expect(advanced).toBe(false);
+    t.advance(700);
+    expect(advanced).toBe(true);
   });
 
   it('easings are well formed', () => {

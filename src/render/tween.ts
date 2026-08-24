@@ -98,9 +98,23 @@ export class Ticker {
     this.ensureRunning();
   }
 
-  /** Run `fn` after `ms` of animation time. The rAF-driven stand-in for setTimeout. */
+  /**
+   * Run `fn` after `ms` of animation time, for VISUAL beats. Reduced motion
+   * collapses these, because they exist to pace an animation.
+   */
   after(ms: number, fn: () => void): void {
-    this.beats.push({ at: this.clock + (this.reducedMotion ? 0 : ms) , run: fn });
+    this.beats.push({ at: this.clock + (this.reducedMotion ? 0 : ms), run: fn });
+    this.ensureRunning();
+  }
+
+  /**
+   * Run `fn` after `ms`, for GAMEPLAY pacing — the pause before the next level
+   * loads, how long a wrong loop stays up. Reduced motion must not collapse
+   * these: a player who asked for less movement did not ask for the game to
+   * skip ahead before they have seen what happened.
+   */
+  schedule(ms: number, fn: () => void): void {
+    this.beats.push({ at: this.clock + ms, run: fn });
     this.ensureRunning();
   }
 

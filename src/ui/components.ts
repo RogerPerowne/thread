@@ -93,7 +93,7 @@ export function toast(msg: string, ms = 2000): void {
   toastEl.textContent = msg;
   toastEl.classList.add('in');
   toastHideAt = performance.now() + ms;
-  ticker.after(ms, () => {
+  ticker.schedule(ms, () => {
     if (toastEl && performance.now() >= toastHideAt - 16) toastEl.classList.remove('in');
   });
   ticker.requestFrame();

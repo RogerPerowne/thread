@@ -533,7 +533,7 @@ export class Engine {
     if (this.opts.autoAdvance) {
       this.awaitingAdvance = true;
       // The decision to continue should require no decision. A tap skips ahead.
-      this.ticker.after(AUTO_ADVANCE_MS, () => {
+      this.ticker.schedule(AUTO_ADVANCE_MS, () => {
         if (this.awaitingAdvance) this.skipToNext();
       });
     }
@@ -586,7 +586,7 @@ export class Engine {
     if (this.opts.suddenDeath) return; // One Life: the run is over, the caller decides
 
     // Leave the wrong loop up briefly, then release it so the retry is instant.
-    this.ticker.after(MISS_FLOOD_MS, () => {
+    this.ticker.schedule(MISS_FLOOD_MS, () => {
       const st = this.state.threads[this.state.active];
       if (st.closed) {
         st.closed = false;
