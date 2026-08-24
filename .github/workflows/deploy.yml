@@ -2,7 +2,11 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/pegboard-puzzle-game-b52tmm]
+    # main only. Pages deploys from one branch, so a run on any other branch
+    # fails at the deploy step — and because every run shares the "pages"
+    # concurrency group with cancel-in-progress, a branch push landing just
+    # after a main push would cancel the deploy that was going to work.
+    branches: [main]
   workflow_dispatch:
 
 permissions:
