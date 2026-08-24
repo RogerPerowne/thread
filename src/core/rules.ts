@@ -9,7 +9,8 @@ import {
   segmentsCross, pointSegmentDistance, segmentHitsDisc, dist,
   selfCrossings, mutualCrossings,
 } from './geometry.js';
-import { type Level, isPortalEdge, cycleLength, effectiveLoop } from './level.js';
+import { type Level, isPortalEdge, cycleLength, effectiveLoop, objectiveOf } from './level.js';
+import { checkEnclose, checkClues } from './objective.js';
 import { makeRaster, rasterizeLoop, similarity, type Raster } from './region.js';
 
 /** A correct solve scores exactly 1.000; the gate proves no near-miss reaches this. */
@@ -57,6 +58,7 @@ export type Reject =
   | 'thread-cross'
   | 'over-budget'
   | 'repeat-peg'
+  | 'no-wire'
   | 'too-short'
   | 'no-such-peg';
 
@@ -75,6 +77,7 @@ export const REJECT_TEXT: Record<Reject, string> = {
   'thread-cross': 'These threads must stay apart',
   'over-budget': 'Not enough string',
   'repeat-peg': "You're already there",
+  'no-wire': 'The string follows the wires',
   'too-short': 'A loop needs three pegs',
   'no-such-peg': '',
 };
@@ -133,6 +136,11 @@ export function canAdd(level: Level, state: PlayState, peg: number): Verdict {
   if (pegs.length === 0) return OK;
   const last = pegs[pegs.length - 1];
   if (last === peg) return no('repeat-peg');
+
+  // On a wired board the string is not free to cross the field: it runs along
+  // the wires, which is what turns "how many of this cell's sides are used"
+  // into a question with an answer.
+  if (level.wires && !hasWire(level, last, peg)) return no('no-wire');
 
   const a = pegPos(level, state, last);
   const b = pegPos(level, state, peg);
@@ -288,12 +296,33 @@ export function solutionWeaveSet(level: Level): Set<number> {
 
 export type Evaluation = {
   win: boolean;
+  /**
+   * How close this is, 0-1. For a shape objective it is the labelled overlap
+   * with the target. For the rule-based objectives there is no target to be
+   * near, so it is the fraction of the rule that is satisfied — which is the
+   * honest answer to "how close was I" for a level that never had one right
+   * picture.
+   */
   similarity: number;
   raster: Raster;
   /** Why it was not a win, when it was not. */
-  fault: 'none' | 'shape' | 'gold' | 'weave' | 'budget' | 'incomplete';
+  fault: 'none' | 'shape' | 'gold' | 'weave' | 'budget' | 'incomplete'
+  | 'par' | 'enclose' | 'clue';
   lengthUsed: number;
+  /** Pegs on the wrong side of the loop, for an enclose level. */
+  wrongPegs?: number[];
+  /** Cells whose count is wrong, for a clue level. */
+  wrongCells?: number[];
 };
+
+/** Is this pair of pegs joined by a wire? Boards without wires join every pair. */
+export function hasWire(level: Level, a: number, b: number): boolean {
+  if (!level.wires) return true;
+  for (const [x, y] of level.wires) {
+    if ((x === a && y === b) || (x === b && y === a)) return true;
+  }
+  return false;
+}
 
 const evalRaster = makeRaster();
 
@@ -331,8 +360,44 @@ export function evaluate(
       }
     }
   }
+  const objective = objectiveOf(level);
+
+  if (objective.kind === 'enclose') {
+    const verdict = checkEnclose(objective, level.pegs as Pt[], loops[0], state.threads[0].pegs.length);
+    if (!verdict.ok) {
+      return {
+        win: false,
+        similarity: verdict.score,
+        raster: evalRaster,
+        fault: verdict.overBudget ? 'budget' : 'enclose',
+        lengthUsed: used,
+        wrongPegs: [...verdict.wrongInside, ...verdict.wrongOutside],
+      };
+    }
+    return { win: true, similarity: 1, raster: evalRaster, fault: 'none', lengthUsed: used };
+  }
+
+  if (objective.kind === 'clue') {
+    const verdict = checkClues(objective, state.threads[0].pegs);
+    if (!verdict.ok) {
+      return {
+        win: false,
+        similarity: verdict.score,
+        raster: evalRaster,
+        fault: 'clue',
+        lengthUsed: used,
+        wrongCells: verdict.wrong,
+      };
+    }
+    return { win: true, similarity: 1, raster: evalRaster, fault: 'none', lengthUsed: used };
+  }
+
   if (sim < WIN_THRESHOLD) {
     return { win: false, similarity: sim, raster: evalRaster, fault: 'shape', lengthUsed: used };
+  }
+  // The shape is right; on a par level it also has to be the short way round.
+  if (objective.kind === 'par' && used > objective.par + 1e-6) {
+    return { win: false, similarity: sim, raster: evalRaster, fault: 'par', lengthUsed: used };
   }
   if (level.weave) {
     // The same board effect must be applied on both sides, or the crossings
