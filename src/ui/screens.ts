@@ -10,7 +10,8 @@ import { type App, MODE_ACCENT, type Route } from './app.js';
 import { CLASSIC_CHAPTERS, WEAVE_CHAPTERS } from '../core/design.js';
 import { chapterColor } from './palette.js';
 import { chevronRight, locate, download } from './icons.js';
-import { chapterPath, type PathNode } from './path.js';
+import { chapterPath, type PathNode, type PathView } from './path.js';
+import { enterLevel, cancelEnter } from './enter.js';
 import { solvedCount, starCount, dailyArchive } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
 import { themeUnlocked, skinUnlocked } from '../game/progress.js';
@@ -85,6 +86,9 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
 
   const scroll = h('div', { class: 'scroll pathscroll' });
   let firstUnsolved = true;
+  // The view is needed by the tiles' own handlers, so it is bound after the
+  // fact rather than passed in: pressing a tile flies the camera to it.
+  let view: PathView;
   const nodes: PathNode[] = levels.map((l, i) => {
     const rec = app.save.levels[l.id];
     const solved = (rec?.stars ?? 0) > 0;
@@ -96,11 +100,20 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
       stars: solved ? rec!.stars : 0,
       state: solved ? 'done' : isNext ? 'next' : 'locked',
       gem: l.gem,
-      onOpen: () => app.go({ name: 'play', mode: r.mode, levelId: l.id }),
+      onOpen: () => enterLevel({
+        view,
+        index: i,
+        color,
+        eyebrow: `Chapter ${r.chapter} \u00b7 ${levels[0]?.name ?? ''}`,
+        title: `Level ${i + 1}`,
+        level: l,
+        reducedMotion: app.reducedMotion,
+        go: () => app.go({ name: 'play', mode: r.mode, levelId: l.id }),
+      }),
     };
   });
 
-  const view = chapterPath(nodes, color);
+  view = chapterPath(nodes, color);
   scroll.appendChild(view.el);
 
   /*
@@ -153,7 +166,13 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
     view.scrollToCurrent('auto');
   };
   settle = requestAnimationFrame(() => { settle = requestAnimationFrame(land); });
-  return { el, dispose: () => cancelAnimationFrame(settle) };
+  return {
+    el,
+    dispose: () => {
+      cancelAnimationFrame(settle);
+      cancelEnter();
+    },
+  };
 }
 
 function chapterHeader(
