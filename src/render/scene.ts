@@ -79,6 +79,9 @@ export class BoardScene {
   threadFill: SVGPathElement[] = [];
   private portalGhost: SVGPathElement[] = [];
   private targetFill: SVGPathElement[] = [];
+  /** One break mark per crossing, for the over/under weave. */
+  private weaveMarks: SVGLineElement[] = [];
+  private weaveHits: SVGCircleElement[] = [];
   private cursorLine!: SVGLineElement;
   private layers: Record<string, SVGGElement> = {};
 
@@ -126,7 +129,9 @@ export class BoardScene {
     this.targetFill = [];
     this.pegPop = new Float32Array(level.pegs.length);
 
-    for (const name of ['target', 'rails', 'fills', 'posts', 'ghost', 'threads', 'cursor', 'pegs']) {
+    this.weaveMarks = [];
+    this.weaveHits = [];
+    for (const name of ['target', 'rails', 'fills', 'posts', 'ghost', 'threads', 'weave', 'cursor', 'pegs']) {
       const g = el('g', { class: `layer-${name}` });
       this.layers[name] = g;
       this.svg.appendChild(g);
@@ -387,6 +392,70 @@ export class BoardScene {
       const p = pegPos(level, state, i);
       this.pegNodes[i].setAttribute('transform', `translate(${round(p[0])} ${round(p[1])})`);
     }
+  }
+
+  /**
+   * Draw the over/under breaks. The strand that passes under gets a short gap
+   * in the board's own colour at the crossing, which is how a weave reads on
+   * paper. `overFirst` says, for each crossing, whether the first strand is
+   * the one on top.
+   */
+  setWeave(
+    crossings: Array<{ point: Pt; ta: number; sa: number; tb: number; sb: number }>,
+    overFirst: ReadonlySet<number>,
+    loops: ReadonlyArray<readonly Pt[]>,
+  ): void {
+    const layer = this.layers.weave;
+    // Crossings only change when a loop changes, not per frame, so growing the
+    // pool here costs nothing in the play loop.
+    while (this.weaveMarks.length < crossings.length) {
+      const mark = el('line', {
+        stroke: this.opts.theme.board,
+        'stroke-width': 2.2 * this.opts.skin.weight,
+        'stroke-linecap': 'butt',
+        class: 'weave-break',
+      });
+      const hit = el('circle', { r: 3, fill: 'transparent', class: 'weave-hit', cursor: 'pointer' });
+      this.weaveMarks.push(mark);
+      this.weaveHits.push(hit);
+      layer.append(mark, hit);
+    }
+    for (let k = 0; k < this.weaveMarks.length; k++) {
+      const mark = this.weaveMarks[k];
+      const hit = this.weaveHits[k];
+      const x = crossings[k];
+      if (!x) {
+        mark.setAttribute('stroke-opacity', '0');
+        hit.setAttribute('r', '0');
+        continue;
+      }
+      // The UNDER strand is the one that gets the break.
+      const first = overFirst.has(k);
+      const t = first ? x.tb : x.ta;
+      const seg = first ? x.sb : x.sa;
+      const loop = loops[t];
+      if (!loop || loop.length < 2) continue;
+      const a = loop[seg];
+      const b = loop[(seg + 1) % loop.length];
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const half = 1.5 * this.opts.skin.weight;
+      mark.setAttribute('x1', String(round(x.point[0] - (dx / len) * half)));
+      mark.setAttribute('y1', String(round(x.point[1] - (dy / len) * half)));
+      mark.setAttribute('x2', String(round(x.point[0] + (dx / len) * half)));
+      mark.setAttribute('y2', String(round(x.point[1] + (dy / len) * half)));
+      mark.setAttribute('stroke-opacity', '1');
+      hit.setAttribute('cx', String(round(x.point[0])));
+      hit.setAttribute('cy', String(round(x.point[1])));
+      hit.setAttribute('r', '3.2');
+      hit.dataset.crossing = String(k);
+    }
+  }
+
+  clearWeave(): void {
+    for (const m of this.weaveMarks) m.setAttribute('stroke-opacity', '0');
+    for (const hpt of this.weaveHits) hpt.setAttribute('r', '0');
   }
 
   /** Called by the tween engine; never set directly. */

@@ -12,7 +12,8 @@ import { dist } from '../core/geometry.js';
 import { type Level, deriveTarget, parLength, mechanicsOf } from '../core/level.js';
 import {
   initialState, evaluate, canClose, normalizeClosedPath, threadPoints, lengthUsed,
-  REJECT_TEXT, WIN_THRESHOLD, type PlayState, type Evaluation,
+  allCrossings, REJECT_TEXT, WIN_THRESHOLD,
+  type PlayState, type Evaluation, type CrossingRef,
 } from '../core/rules.js';
 import { makeRaster, symmetricDifference, type Raster } from '../core/region.js';
 import { BoardScene } from '../render/scene.js';
@@ -72,6 +73,14 @@ export class Engine {
   private closedAt = -1e9;
   private hitRadius = 4;
 
+  /**
+   * Weave levels: which crossings have the FIRST strand on top. The default is
+   * that the thread laid later passes over, which is what happens if you
+   * really do lay one string across another; tapping a crossing flips it.
+   */
+  private overSet = new Set<number>();
+  private crossings: CrossingRef[] = [];
+
   // Undo history: snapshots of the peg lists, cheap because they are short.
   private history: number[][][] = [];
 
@@ -124,6 +133,8 @@ export class Engine {
     this.levelStartedAt = performance.now();
     this.closedAt = -1e9;
     this.awaitingAdvance = false;
+    this.overSet = new Set();
+    this.crossings = [];
     this.gm.reset();
 
     const theme = themeById(this.opts.themeId);
@@ -213,8 +224,52 @@ export class Engine {
     }
     (ev.target as Element).setPointerCapture?.(ev.pointerId);
     ev.preventDefault();
-    this.feed({ type: 'down', p: this.toBoard(ev), t: ev.timeStamp });
+    const p = this.toBoard(ev);
+    // On a weave level a tap near a crossing flips which strand is on top,
+    // and that takes priority over threading.
+    if (this.level.weave && this.toggleCrossingAt(p)) return;
+    this.feed({ type: 'down', p, t: ev.timeStamp });
   };
+
+  /** Flip the over/under at the nearest crossing, if the tap was near one. */
+  private toggleCrossingAt(p: Pt): boolean {
+    let best = -1;
+    let bestD = Math.max(this.hitRadius * 0.8, 3.2) ** 2;
+    for (let k = 0; k < this.crossings.length; k++) {
+      const c = this.crossings[k].point;
+      const d = (c[0] - p[0]) ** 2 + (c[1] - p[1]) ** 2;
+      if (d <= bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    if (best < 0) return false;
+    if (this.overSet.has(best)) this.overSet.delete(best);
+    else this.overSet.add(best);
+    audio.pluck(28, 0.6);
+    this.refreshWeave();
+    // Flipping a crossing can be the last thing a solve needs.
+    if (this.state.threads.every((t) => t.closed)) {
+      const result = this.score();
+      if (result.win) this.onWin(result);
+    }
+    this.ticker.requestFrame();
+    return true;
+  }
+
+  /** Recompute crossings and redraw the breaks. Once per closed loop, not per frame. */
+  private refreshWeave(): void {
+    if (!this.level.weave) return;
+    const loops = this.state.threads
+      .map((t, i) => (t.closed && t.pegs.length >= 3 ? threadPoints(this.level, this.state, i) : []));
+    if (loops.some((l) => l.length < 3)) {
+      this.crossings = [];
+      this.scene.clearWeave();
+      return;
+    }
+    this.crossings = allCrossings(loops);
+    this.scene.setWeave(this.crossings, this.overSet, loops);
+  }
 
   private onPointerMove = (ev: PointerEvent): void => {
     if (this.awaitingAdvance) return;
@@ -421,6 +476,8 @@ export class Engine {
       onUpdate: (v) => { this.scene.fillOpacity = v; },
     });
 
+    this.refreshWeave();
+
     // Another thread still to lay? Move to it rather than scoring yet.
     const nextOpen = this.state.threads.findIndex((th) => !th.closed);
     if (nextOpen >= 0) {
@@ -438,7 +495,7 @@ export class Engine {
   }
 
   private score(): PlayResult {
-    const e: Evaluation = evaluate(this.level, this.state, this.target);
+    const e: Evaluation = evaluate(this.level, this.state, this.target, this.overSet);
     const now = performance.now();
     return {
       level: this.level,
@@ -496,6 +553,13 @@ export class Engine {
    */
   private onMiss(r: PlayResult): void {
     audio.miss();
+    if (this.level.weave && r.similarity >= WIN_THRESHOLD) {
+      // The shape is right; only the over/under is wrong. Say so, and leave
+      // the loop up so the player can tap the crossings.
+      this.hooks.onToast?.('Right shape — check which thread goes over');
+      this.hooks.onMiss?.(r);
+      return;
+    }
     if (this.level.fog) {
       // Each attempt reveals a little more. Deduction, not vision.
       const reveal = Math.min(1, this.attempts * 0.34);

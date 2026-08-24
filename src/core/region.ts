@@ -153,6 +153,54 @@ export function rastersEqual(a: Raster, b: Raster): boolean {
   return true;
 }
 
+const erodeA = new Uint8Array(CELLS);
+const erodeB = new Uint8Array(CELLS);
+
+/**
+ * Erode a mask by one cell (4-connected). Used to tell a hairline apart from a
+ * region a person would actually see.
+ */
+export function erode(src: Raster, dest: Raster): void {
+  dest.fill(0);
+  for (let y = 1; y < GRID - 1; y++) {
+    const row = y * GRID;
+    for (let x = 1; x < GRID - 1; x++) {
+      const i = row + x;
+      if (!src[i]) continue;
+      if (src[i - 1] && src[i + 1] && src[i - GRID] && src[i + GRID]) dest[i] = 1;
+    }
+  }
+}
+
+/**
+ * Is the difference between two regions everywhere thinner than a couple of
+ * board units — a slit rather than a shape?
+ *
+ * This is the distinction that matters for level quality. A keyhole cut at a
+ * different spoke leaves a hairline the player cannot see, and refusing their
+ * answer would be absurd. A hole with the wrong number of sides is a lens
+ * several units across; it survives erosion, and it must never be accepted.
+ */
+export function isHairlineDifference(a: Raster, b: Raster, passes = 2): boolean {
+  let n = 0;
+  for (let i = 0; i < CELLS; i++) {
+    const d = a[i] !== b[i] ? 1 : 0;
+    erodeA[i] = d;
+    n += d;
+  }
+  if (n === 0) return true;
+  let src = erodeA;
+  let dst = erodeB;
+  for (let p = 0; p < passes; p++) {
+    erode(src, dst);
+    const t = src;
+    src = dst;
+    dst = t;
+  }
+  for (let i = 0; i < CELLS; i++) if (src[i]) return false;
+  return true;
+}
+
 export type Topology = {
   /** Connected filled components (4-connectivity). */
   components: number;

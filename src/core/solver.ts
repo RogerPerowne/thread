@@ -6,16 +6,29 @@
 
 import type { Pt } from './geometry.js';
 import { makeRaster, rasterizeLoop, similarity, type Raster } from './region.js';
-import { type Level, cycleLength } from './level.js';
+import { type Level, cycleLength, effectiveLoop, isPortalEdge } from './level.js';
 import { canAdd, canClose, initialState, type PlayState } from './rules.js';
 
 export type SearchOpts = {
   /** Longest cycle to consider, in pegs. */
   maxLen?: number;
+  /**
+   * Longest cycle to consider, in board-space length. This is the prune that
+   * makes the search tractable: any partial path already longer than the
+   * intended solution — plus the cost of getting home, by the triangle
+   * inequality — can never become a shorter answer, so it is abandoned.
+   */
+  maxLength?: number;
   /** Wall-clock budget in ms. The gate gives each level 2 s. */
   budgetMs?: number;
   /** How many times one peg may appear — 2 lets keyhole solutions be found. */
   maxVisits?: number;
+  /**
+   * Total extra visits allowed across the whole cycle. A keyhole revisits two
+   * pegs, not every peg, so bounding the repeats rather than only the
+   * per-peg limit cuts the search space by orders of magnitude.
+   */
+  maxRepeats?: number;
   /** Stop once this many matches are found. */
   limit?: number;
   /** Region match tolerance. */
@@ -72,7 +85,9 @@ export function findMatchingCycles(
   const now = opts.now ?? (() => Date.now());
   const deadline = now() + (opts.budgetMs ?? 2000);
   const maxLen = opts.maxLen ?? Math.min(level.pegs.length + 2, 12);
+  const maxLength = opts.maxLength ?? Infinity;
   const maxVisits = opts.maxVisits ?? 1;
+  const maxRepeats = opts.maxRepeats ?? (maxVisits > 1 ? 2 : 0);
   const limit = opts.limit ?? 64;
   const tol = opts.tolerance ?? 0.995;
 
@@ -85,16 +100,25 @@ export function findMatchingCycles(
   const state: PlayState = initialState(level);
   state.active = 0;
   const path = state.threads[0].pegs;
+  let openLength = 0;
+  let repeats = 0;
 
-  const consider = () => {
+  const edge = (a: number, b: number): number =>
+    isPortalEdge(level, a, b)
+      ? 0
+      : Math.hypot(level.pegs[a][0] - level.pegs[b][0], level.pegs[a][1] - level.pegs[b][1]);
+
+  const consider = (start: number) => {
     if (path.length < 3) return;
+    const total = openLength + edge(path[path.length - 1], start);
+    if (total > maxLength + 1e-6) return;
     if (!canClose(level, state).ok) return;
     examined++;
     const key = canonicalCycle(path);
     if (seen.has(key)) return;
     seen.add(key);
     searchRaster.fill(0);
-    const pts: Pt[] = path.map((i) => level.pegs[i] as Pt);
+    const pts: Pt[] = effectiveLoop(level, path.map((i) => level.pegs[i] as Pt));
     rasterizeLoop(pts, 1, searchRaster);
     const sim = similarity(searchRaster, target);
     if (sim >= tol) {
@@ -108,16 +132,46 @@ export function findMatchingCycles(
       return false;
     }
     if (matches.length >= limit) return false;
-    consider();
+    consider(start);
     if (path.length >= maxLen) return true;
+    const last = path[path.length - 1];
+
+    // Try the nearest legal peg first. A taut string that makes a clean shape
+    // almost always steps to a near neighbour, so nearest-first finds the
+    // real answers early and the length bound then prunes the rest.
+    const order: number[] = [];
     for (let p = start; p < n; p++) {
       if (visits[p] >= maxVisits) continue;
+      if (visits[p] >= 1 && repeats >= maxRepeats) continue;
+      order.push(p);
+    }
+    for (let a = 1; a < order.length; a++) {
+      const v = order[a];
+      const d = edge(last, v);
+      let b = a - 1;
+      while (b >= 0 && edge(last, order[b]) > d) {
+        order[b + 1] = order[b];
+        b--;
+      }
+      order[b + 1] = v;
+    }
+
+    for (const p of order) {
+      const step = edge(last, p);
+      // Lower bound on any cycle through this partial path: what it has cost
+      // so far, plus this step, plus the direct journey home.
+      if (openLength + step + edge(p, start) > maxLength + 1e-6) continue;
       if (!canAdd(level, state, p).ok) continue;
+      const isRepeat = visits[p] >= 1;
       visits[p]++;
+      if (isRepeat) repeats++;
       path.push(p);
+      openLength += step;
       const cont = dfs(start);
+      openLength -= step;
       path.pop();
       visits[p]--;
+      if (isRepeat) repeats--;
       if (!cont) return false;
     }
     return true;
@@ -127,6 +181,8 @@ export function findMatchingCycles(
     // Canonicalisation puts the smallest peg first, so only start there.
     visits[s]++;
     path.push(s);
+    openLength = 0;
+    repeats = 0;
     const cont = dfs(s);
     path.pop();
     visits[s]--;
@@ -197,7 +253,7 @@ export function worstNearMiss(
   let which: number[] | null = null;
   for (const c of nearMisses(level, sol)) {
     searchRaster.fill(0);
-    rasterizeLoop(c.map((i) => level.pegs[i] as Pt), 1, searchRaster);
+    rasterizeLoop(effectiveLoop(level, c.map((i) => level.pegs[i] as Pt)), 1, searchRaster);
     const s = similarity(searchRaster, target);
     if (s > worst) {
       worst = s;
@@ -237,7 +293,7 @@ export function greedySolves(level: Level, target: Raster, tol = 0.995): boolean
       path.push(best);
       if (path.length >= 3 && canClose(level, state).ok) {
         searchRaster.fill(0);
-        rasterizeLoop(path.map((i) => level.pegs[i] as Pt), 1, searchRaster);
+        rasterizeLoop(effectiveLoop(level, path.map((i) => level.pegs[i] as Pt)), 1, searchRaster);
         if (similarity(searchRaster, target) >= tol) return true;
       }
     }
@@ -269,7 +325,7 @@ export function decoyCount(level: Level, sol: readonly number[], target: Raster)
   let n = 0;
   for (const c of nearMisses(level, sol)) {
     searchRaster.fill(0);
-    rasterizeLoop(c.map((i) => level.pegs[i] as Pt), 1, searchRaster);
+    rasterizeLoop(effectiveLoop(level, c.map((i) => level.pegs[i] as Pt)), 1, searchRaster);
     if (similarity(searchRaster, target) > 0.9) n++;
   }
   return n;

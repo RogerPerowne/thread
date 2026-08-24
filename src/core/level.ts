@@ -5,7 +5,7 @@
  */
 
 import type { Pt } from './geometry.js';
-import { rotateAboutCentre, mirrorPoint } from './geometry.js';
+import { rotateAboutCentre, mirrorPoint, selfCrossings } from './geometry.js';
 import { makeRaster, rasterizeLoop, type Raster, topology, symmetryGroup, signature } from './region.js';
 
 export type Mode = 'classic' | 'weave' | 'daily' | 'blitz' | 'onelife' | 'zen' | 'assess';
@@ -52,7 +52,11 @@ export type Mechanic = (typeof MECHANICS)[number];
 export function mechanicsOf(level: Level): Mechanic[] {
   const m = new Set<Mechanic>(['loop']);
   if (level.budget !== undefined) m.add('budget');
-  if (level.allowCross) m.add('cross');
+  // allowCross is declared for two different reasons: because the solution
+  // really crosses itself, and because it revisits a peg (a keyhole), where
+  // it tells the gesture layer that returning to the start is a move rather
+  // than a request to tie off. Only the first is the 'cross' mechanic.
+  if (level.allowCross && solutionSelfCrosses(level)) m.add('cross');
   if (level.posts?.length) m.add('post');
   if (level.gold?.length) m.add('gold');
   if (level.thorn?.length) m.add('thorn');
@@ -72,6 +76,14 @@ function hasRepeatedPeg(sol: number[]): boolean {
   return new Set(sol).size !== sol.length;
 }
 
+/** Does any thread's authored solution properly cross itself? */
+export function solutionSelfCrosses(level: Level): boolean {
+  for (const t of level.threads) {
+    if (selfCrossings(t.sol.map((i) => level.pegs[i] as Pt), true).length > 0) return true;
+  }
+  return false;
+}
+
 function blendPossible(level: Level): boolean {
   // A blend exists when two threads' regions overlap in the target.
   const t = deriveTarget(level);
@@ -89,8 +101,10 @@ export function solutionPoints(level: Level, threadIndex: number): Pt[] {
 }
 
 export type DerivedTarget = {
+  /** The raster the player is scored against. Never rotated. */
   raster: Raster;
-  /** Per-thread loops in board space, after mirror/rotation are applied. */
+  /** Per-thread loops as DRAWN — rotated on rotate levels, so the player has
+   *  to recognise the shape independent of its orientation. */
   loops: Pt[][];
   holes: number;
   components: number;
@@ -101,9 +115,25 @@ export type DerivedTarget = {
 const targetCache = new WeakMap<Level, DerivedTarget>();
 
 /**
- * The target region, computed from the authored solution. `mirror` doubles the
- * loop across an axis; `rotateTarget` presents the same region turned, so the
- * player must recognise shape independent of orientation.
+ * The board effect applied to whatever the player threads.
+ *
+ * On a mirror level the board doubles your loop across an axis — you shape
+ * both halves at once — so the mirror belongs to the loop itself and must be
+ * applied when scoring the player exactly as it is when deriving the target.
+ */
+export function effectiveLoop(level: Level, pts: Pt[]): Pt[] {
+  if (!level.mirror || pts.length < 3) return pts;
+  const mirrored = pts.map((p) => mirrorPoint(p, level.mirror!));
+  return [...pts, ...mirrored.reverse()];
+}
+
+/**
+ * The target region, computed from the authored solution — never authored by
+ * hand, so a level cannot be impossible by construction.
+ *
+ * `rotateTarget` turns only what is DRAWN. The region the player is scored
+ * against stays put, because the puzzle is to recognise a shape through a
+ * rotation, not to thread a shape the pegs cannot make.
  */
 export function deriveTarget(level: Level): DerivedTarget {
   const cached = targetCache.get(level);
@@ -111,19 +141,15 @@ export function deriveTarget(level: Level): DerivedTarget {
 
   const loops: Pt[][] = [];
   for (let i = 0; i < level.threads.length; i++) {
-    loops.push(solutionPoints(level, i));
-  }
-  if (level.mirror) {
-    const axis = level.mirror;
-    const mirrored = loops.map((l) => l.map((p) => mirrorPoint(p, axis)));
-    for (let i = 0; i < loops.length; i++) loops[i] = [...loops[i], ...mirrored[i].slice().reverse()];
+    loops.push(effectiveLoop(level, solutionPoints(level, i)));
   }
 
   const raster = makeRaster();
+  for (let t = 0; t < loops.length; t++) rasterizeLoop(loops[t], 1 << t, raster);
+
   const shown = loops.map((l) =>
     level.rotateTarget ? l.map((p) => rotateAboutCentre(p, level.rotateTarget!)) : l,
   );
-  for (let t = 0; t < shown.length; t++) rasterizeLoop(shown[t], 1 << t, raster);
 
   const topo = topology(raster);
   const derived: DerivedTarget = {

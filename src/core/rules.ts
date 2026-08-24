@@ -9,7 +9,7 @@ import {
   segmentsCross, pointSegmentDistance, segmentHitsDisc, dist,
   selfCrossings, mutualCrossings,
 } from './geometry.js';
-import { type Level, isPortalEdge, cycleLength } from './level.js';
+import { type Level, isPortalEdge, cycleLength, effectiveLoop } from './level.js';
 import { makeRaster, rasterizeLoop, similarity, type Raster } from './region.js';
 
 /** A correct solve scores exactly 1.000; the gate proves no near-miss reaches this. */
@@ -309,7 +309,9 @@ export function evaluate(
   evalRaster.fill(0);
   const loops: Pt[][] = [];
   for (let t = 0; t < state.threads.length; t++) {
-    const pts = threadPoints(level, state, t);
+    // The mirror is a property of the board, so it applies to the player's
+    // loop exactly as it does to the solution the target came from.
+    const pts = effectiveLoop(level, threadPoints(level, state, t));
     loops.push(pts);
     if (state.threads[t].closed && pts.length >= 3) rasterizeLoop(pts, 1 << t, evalRaster);
   }
@@ -333,7 +335,8 @@ export function evaluate(
     return { win: false, similarity: sim, raster: evalRaster, fault: 'shape', lengthUsed: used };
   }
   if (level.weave) {
-    const want = weaveSignature(allCrossings(level.threads.map((t) => t.sol.map((i) => level.pegs[i] as Pt))), solutionWeaveSet(level));
+    const solutionLoops = level.threads.map((t) => t.sol.map((i) => level.pegs[i] as Pt));
+    const want = weaveSignature(allCrossings(solutionLoops), solutionWeaveSet(level));
     const got = weaveSignature(allCrossings(loops), overSet);
     if (want !== got) {
       return { win: false, similarity: sim, raster: evalRaster, fault: 'weave', lengthUsed: used };
