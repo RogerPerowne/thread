@@ -1183,8 +1183,10 @@ pre.share {
   color: var(--card-ink);
   margin-top: 2px;
 }
+.chapterhead .iconbtn:last-of-type { justify-self: end; }
 .headtext {
   grid-column: 2;
+  grid-row: 1;
   text-align: center;
   min-width: 0;
 }
@@ -1252,32 +1254,6 @@ pre.share {
 }
 .ptile.next { animation: ptile-pulse 3.4s var(--ease) infinite; }
 
-/* Fixed, not absolute: on a long chapter the document is what scrolls, so an
-   absolutely-positioned button would sit at the very bottom of the path rather
-   than floating over it. */
-.jumpbtn {
-  position: fixed;
-  left: 50%;
-  bottom: calc(20px + var(--safe-b));
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 0 20px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
-  font-family: var(--ui);
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: var(--shadow-2);
-  z-index: 3;
-}
-.jumpbtn:active { transform: translateX(-50%) scale(0.96); }
-.jumpbtn .arrow { font-size: 17px; line-height: 1; }
 
 /* --- accessibility ------------------------------------------------------- */
 

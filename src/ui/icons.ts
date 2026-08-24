@@ -200,6 +200,16 @@ export function codeMark(size = 20): SVGSVGElement {
     line('M14.5 7.5 L19 12 L14.5 16.5', 2.1));
 }
 
+/** Take me back to where I am — a locator, so it does not have to know
+ *  whether the thing it is finding is above or below. */
+export function locate(size = 18): SVGSVGElement {
+  return markSvg(size,
+    svg('circle', { cx: 12, cy: 12, r: 5.4, fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2 }),
+    svg('circle', { cx: 12, cy: 12, r: 1.7, fill: 'currentColor' }),
+    line('M12 2.6 V5.4 M12 18.6 V21.4 M2.6 12 H5.4 M18.6 12 H21.4', 2.2),
+  );
+}
+
 /** A star, filled or hollow, for a level's three-star rating. */
 export function star(filled: boolean, size = 13): SVGSVGElement {
   const pts: string[] = [];

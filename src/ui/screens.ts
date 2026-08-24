@@ -9,7 +9,7 @@ import * as haptics from '../render/haptics.js';
 import { type App, MODE_ACCENT, type Route } from './app.js';
 import { CLASSIC_CHAPTERS, WEAVE_CHAPTERS } from '../core/design.js';
 import { chapterColor } from './palette.js';
-import { chevronRight, arrowDown, download } from './icons.js';
+import { chevronRight, locate, download } from './icons.js';
 import { chapterPath, type PathNode } from './path.js';
 import { solvedCount, starCount, dailyArchive } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
@@ -84,14 +84,6 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
   const done = solvedCount(app.save, ids);
 
   const scroll = h('div', { class: 'scroll pathscroll' });
-  const el = h('div', {
-    class: 'screen chapterscreen',
-    style: `--card:${color};--accent:${MODE_ACCENT[r.mode]}`,
-  },
-    chapterHeader(app, r, levels[0]?.name ?? `Chapter ${r.chapter}`, idea, done, ids.length),
-    scroll,
-  );
-
   let firstUnsolved = true;
   const nodes: PathNode[] = levels.map((l, i) => {
     const rec = app.save.levels[l.id];
@@ -111,19 +103,35 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
   const view = chapterPath(nodes, color);
   scroll.appendChild(view.el);
 
-  // Brilliant puts a button here that drops you back to where you were on the
-  // path. It earns its place on a long chapter and gets in the way on a short
-  // one, so it only appears when the current tile can actually be off screen.
-  const jumpNeeded = view.currentY > 900;
-  if (jumpNeeded) {
-    el.appendChild(h('button', {
-      class: 'jumpbtn',
+  /*
+   * Take me back to where I am. It sits in the header, opposite the back
+   * button, rather than floating over the path: a pill hovering above the
+   * board covers a tile and a label at every scroll position, and the one
+   * thing this screen is for is seeing the whole route.
+   *
+   * It earns its place on a chapter longer than a screen or so, and gets in
+   * the way on a short one, so it appears on the length of the run rather
+   * than on where the player happens to be.
+   */
+  const jump = view.height > 2400
+    ? h('button', {
+      class: 'iconbtn',
+      title: 'Where I am',
+      'aria-label': 'Scroll to the level you are up to',
       onclick: () => {
         haptics.tick();
         view.scrollToCurrent();
       },
-    }, h('span', { class: 'arrow' }, arrowDown()), h('span', { text: 'Where I am' })));
-  }
+    }, locate(22))
+    : null;
+
+  const el = h('div', {
+    class: 'screen chapterscreen',
+    style: `--card:${color};--accent:${MODE_ACCENT[r.mode]}`,
+  },
+    chapterHeader(app, r, levels[0]?.name ?? `Chapter ${r.chapter}`, idea, done, ids.length, jump),
+    scroll,
+  );
 
   /*
    * Land on the level you are up to, not on level one, and without an
@@ -155,6 +163,7 @@ function chapterHeader(
   idea: string,
   done: number,
   total: number,
+  right: HTMLElement | null,
 ): HTMLElement {
   return h('header', { class: 'chapterhead' },
     h('button', {
@@ -171,6 +180,7 @@ function chapterHeader(
       h('h1', { class: 'display', text: title }),
       idea ? h('p', { class: 'idea', text: idea }) : null,
     ),
+    right ?? h('span'),
     h('div', { class: 'headbar', role: 'img', 'aria-label': `${done} of ${total} solved` },
       h('span', { style: `width:${Math.round((done / Math.max(total, 1)) * 100)}%` }),
     ),

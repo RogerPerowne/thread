@@ -30,8 +30,11 @@ const CORNERS: [number, number][] = [
   [835, 394], [289, 721], [639, 927], [330, 1117],
 ];
 const PATH_W = 11.6;
-/** Vertical room above the first tile and below the last. */
+/** Vertical room past the tile at each end of the run. */
 const HEAD = 196, TAIL = 216;
+/** Behind you, and ahead of you. */
+const PATH_WALKED = '#121212';
+const PATH_AHEAD = '#B3B3B3';
 
 export type TileState = 'done' | 'next' | 'locked';
 
@@ -50,13 +53,26 @@ export interface PathView {
   /** Scroll the container so the `next` tile sits in comfortable view. */
   scrollToCurrent: (behavior?: ScrollBehavior) => void;
   currentY: number;
+  /** Total height of the run, in reference units. */
+  height: number;
 }
 
-/** Where tile `i` sits, in reference units. */
-export function tileAt(i: number): [number, number] {
-  const turn = Math.floor(i / TILE_SLOTS.length);
-  const [x, dy] = TILE_SLOTS[i % TILE_SLOTS.length];
+/** The k-th slot down the meander, in reference units. */
+function slotAt(k: number): [number, number] {
+  const turn = Math.floor(k / TILE_SLOTS.length);
+  const [x, dy] = TILE_SLOTS[k % TILE_SLOTS.length];
   return [x, HEAD + turn * PERIOD + dy];
+}
+
+/**
+ * Where level `i` of `count` sits.
+ *
+ * You climb: level one is the bottom slot and the chapter runs up the screen,
+ * so the direction of travel matches the direction of progress. The meander
+ * itself is unchanged — only which level gets which slot.
+ */
+export function tileAt(i: number, count: number): [number, number] {
+  return slotAt(count - 1 - i);
 }
 
 function meanderPoints(count: number): [number, number][] {
@@ -238,8 +254,7 @@ function starsUnder(cx: number, cy: number, got: number): SVGElement {
 
 export function chapterPath(nodes: PathNode[], color: string): PathView {
   const count = nodes.length;
-  const height = HEAD + Math.floor((count - 1) / TILE_SLOTS.length) * PERIOD
-    + TILE_SLOTS[(count - 1) % TILE_SLOTS.length][1] + TAIL;
+  const height = slotAt(count - 1)[1] + TAIL;
 
   const root = svg('svg', {
     class: 'pathsvg',
@@ -261,34 +276,60 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
   defs.appendChild(halo);
   root.appendChild(defs);
 
-  // The ribbon. Two strokes on the same polyline: the whole run in a soft
-  // wash, then the solved prefix in ink, so progress is legible at a glance
-  // without a separate progress read-out.
+  /*
+   * The ribbon: one polyline drawn twice. Grey for the road ahead, ink for the
+   * part you have walked, clipped at the level you are up to, so the chapter
+   * reads as a route with a position on it.
+   *
+   * The meander runs past both end tiles — it has to, or the first and last
+   * levels would sit on a stub. Rather than cut it flat, it is masked to fade
+   * out beyond them, so the chapter has an end without having a hard edge.
+   */
   const pts = meanderPoints(count);
   const asStr = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-  root.appendChild(svg('polyline', {
-    points: asStr, fill: 'none', stroke: 'rgba(255,255,255,0.55)',
-    'stroke-width': PATH_W, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
-  }));
+  const topY = tileAt(count - 1, count)[1];
+  const botY = tileAt(0, count)[1];
 
-  const doneUpTo = nodes.findIndex((n) => n.state !== 'done');
-  const lastDone = doneUpTo === -1 ? count - 1 : doneUpTo - 1;
-  if (lastDone >= 0) {
-    const [, cutY] = tileAt(lastDone);
-    const trail = svg('polyline', {
-      points: asStr, fill: 'none', stroke: shade(color, 0.55),
-      'stroke-width': PATH_W, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
-      'clip-path': 'url(#pathdone)',
-    });
-    const clip = svg('clipPath', { id: 'pathdone' });
-    clip.appendChild(svg('rect', { x: -80, y: 0, width: VIEW_W + 200, height: cutY + HH }));
-    defs.appendChild(clip);
-    root.appendChild(trail);
-  }
+  const fade = (id: string, up: boolean) => {
+    const g = svg('linearGradient', { id, x1: 0, y1: 0, x2: 0, y2: 1 });
+    g.appendChild(svg('stop', { offset: '0', 'stop-color': up ? '#000' : '#fff' }));
+    g.appendChild(svg('stop', { offset: '1', 'stop-color': up ? '#fff' : '#000' }));
+    return g;
+  };
+  defs.appendChild(fade('pathfadetop', true));
+  defs.appendChild(fade('pathfadebot', false));
+  const mask = svg('mask', { id: 'pathends' });
+  const wide = { x: -80, width: VIEW_W + 200 };
+  mask.appendChild(svg('rect', { ...wide, y: 0, height: topY - 40, fill: 'url(#pathfadetop)' }));
+  mask.appendChild(svg('rect', { ...wide, y: topY - 40, height: botY - topY + 80, fill: '#fff' }));
+  mask.appendChild(svg('rect', {
+    ...wide, y: botY + 40, height: Math.max(0, height - botY - 40), fill: 'url(#pathfadebot)',
+  }));
+  defs.appendChild(mask);
+
+  const ribbon = svg('g', { mask: 'url(#pathends)' });
+  const stroke = (color2: string, clipId?: string) => svg('polyline', {
+    points: asStr, fill: 'none', stroke: color2, 'stroke-width': PATH_W,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+    ...(clipId ? { 'clip-path': `url(#${clipId})` } : {}),
+  });
+  ribbon.appendChild(stroke(PATH_AHEAD));
+
+  // Where you are: the level you are up to, or the top of the run once the
+  // chapter is finished. You climb, so "walked" is everything below it.
+  const nextIndex = nodes.findIndex((n) => n.state === 'next');
+  const walkedFrom = nextIndex === -1 ? topY : tileAt(nextIndex, count)[1];
+  const clip = svg('clipPath', { id: 'pathdone' });
+  clip.appendChild(svg('rect', {
+    x: -80, y: walkedFrom, width: VIEW_W + 200, height: height - walkedFrom + 60,
+  }));
+  defs.appendChild(clip);
+  ribbon.appendChild(stroke(PATH_WALKED, 'pathdone'));
+  root.appendChild(ribbon);
 
   let currentY = 0;
   nodes.forEach((node, i) => {
-    const [cx, cy] = tileAt(i);
+    const [cx, cy] = tileAt(i, count);
     const f = faces(node.state, color);
     if (node.state === 'next') currentY = cy;
 
@@ -375,5 +416,5 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
     else window.scrollBy({ top: delta, behavior });
   };
 
-  return { el, scrollToCurrent, currentY };
+  return { el, scrollToCurrent, currentY, height };
 }
