@@ -151,27 +151,45 @@ function spreadTopologies(blocks: Level[][], prefix: string): Level[] {
 
   for (const block of blocks) {
     const remaining = block.map((l) => ({ level: l, topo: fingerprint(l, 0).topo }));
+    const left = new Map<string, number>();
+    for (const c of remaining) left.set(c.topo, (left.get(c.topo) ?? 0) + 1);
+
     while (remaining.length) {
       const here = out.length;
-      // Prefer a topology not seen in the last five levels, keeping difficulty
-      // order among those. When every remaining candidate collides, take the
-      // LEAST RECENTLY used one rather than the first — that is what stops the
-      // tail of a chapter clumping together.
-      let pick = remaining.findIndex((c) => here - (lastUsedAt.get(c.topo) ?? -Infinity) > 4);
+      const free = (c: { topo: string }) => here - (lastUsedAt.get(c.topo) ?? -Infinity) > 4;
+
+      // Among the topologies far enough back, take the one with the MOST
+      // copies still to place. Taking the first in difficulty order instead
+      // paints the tail of a chapter into a corner: the last few levels all
+      // turn out to share a signature because nothing else is left.
+      let pick = -1;
+      let bestLeft = -1;
+      remaining.forEach((c, i2) => {
+        if (!free(c)) return;
+        const n = left.get(c.topo) ?? 0;
+        if (n > bestLeft) {
+          bestLeft = n;
+          pick = i2;
+        }
+      });
+
       if (pick < 0) {
+        // Nothing is far enough back. Take the least recently used.
         stillColliding++;
         let oldest = Infinity;
-        remaining.forEach((c, i) => {
+        remaining.forEach((c, i2) => {
           const at = lastUsedAt.get(c.topo) ?? -Infinity;
           if (at < oldest) {
             oldest = at;
-            pick = i;
+            pick = i2;
           }
         });
       }
+
       const [chosen] = remaining.splice(pick, 1);
       out.push(chosen.level);
       lastUsedAt.set(chosen.topo, here);
+      left.set(chosen.topo, (left.get(chosen.topo) ?? 1) - 1);
     }
   }
   // Renumber so the ids follow play order.

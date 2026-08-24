@@ -2,6 +2,180 @@
  {
   "pegs": [
    [
+    34,
+    26.6
+   ],
+   [
+    66,
+    26.6
+   ],
+   [
+    82,
+    73.4
+   ],
+   [
+    18,
+    73.4
+   ]
+  ],
+  "threads": [
+   {
+    "color": "#7A4FBF",
+    "sol": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  ],
+  "rails": [
+   {
+    "peg": 2,
+    "a": [
+     61.3,
+     62.7
+    ],
+    "b": [
+     89.2,
+     77.1
+    ]
+   }
+  ],
+  "id": "a-1",
+  "mode": "assess",
+  "chapter": 0,
+  "name": "rail"
+ },
+ {
+  "pegs": [
+   [
+    41.4,
+    32.6
+   ],
+   [
+    48.5,
+    56.5
+   ],
+   [
+    24.6,
+    63.7
+   ],
+   [
+    17.5,
+    39.7
+   ],
+   [
+    79.8,
+    45.1
+   ],
+   [
+    80.8,
+    71.8
+   ],
+   [
+    54.2,
+    72.8
+   ],
+   [
+    53.2,
+    46.1
+   ]
+  ],
+  "threads": [
+   {
+    "color": "#7A4FBF",
+    "sol": [
+     0,
+     1,
+     2,
+     3
+    ]
+   },
+   {
+    "color": "#D98324",
+    "sol": [
+     4,
+     5,
+     6,
+     7
+    ]
+   }
+  ],
+  "id": "a-2",
+  "mode": "assess",
+  "chapter": 0,
+  "name": "multi"
+ },
+ {
+  "pegs": [
+   [
+    31.2,
+    29.1
+   ],
+   [
+    43.2,
+    48.3
+   ],
+   [
+    28.7,
+    65.7
+   ],
+   [
+    7.7,
+    57.2
+   ],
+   [
+    9.2,
+    34.6
+   ],
+   [
+    82,
+    32.8
+   ],
+   [
+    93.4,
+    56.3
+   ],
+   [
+    70,
+    67.7
+   ],
+   [
+    58.6,
+    44.2
+   ]
+  ],
+  "threads": [
+   {
+    "color": "#7A4FBF",
+    "sol": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "color": "#D98324",
+    "sol": [
+     5,
+     6,
+     7,
+     8
+    ]
+   }
+  ],
+  "apart": true,
+  "id": "a-3",
+  "mode": "assess",
+  "chapter": 0,
+  "name": "multi"
+ },
+ {
+  "pegs": [
+   [
     16,
     23
    ],
@@ -36,7 +210,7 @@
   "thorn": [
    4
   ],
-  "id": "a-1",
+  "id": "a-4",
   "mode": "assess",
   "chapter": 0,
   "name": "gold"
@@ -84,55 +258,7 @@
     ]
    }
   ],
-  "id": "a-2",
-  "mode": "assess",
-  "chapter": 0,
-  "name": "rail"
- },
- {
-  "pegs": [
-   [
-    34,
-    26.6
-   ],
-   [
-    66,
-    26.6
-   ],
-   [
-    82,
-    73.4
-   ],
-   [
-    18,
-    73.4
-   ]
-  ],
-  "threads": [
-   {
-    "color": "#7A4FBF",
-    "sol": [
-     0,
-     1,
-     2,
-     3
-    ]
-   }
-  ],
-  "rails": [
-   {
-    "peg": 2,
-    "a": [
-     61.3,
-     62.7
-    ],
-    "b": [
-     89.2,
-     77.1
-    ]
-   }
-  ],
-  "id": "a-3",
+  "id": "a-5",
   "mode": "assess",
   "chapter": 0,
   "name": "rail"
@@ -184,10 +310,46 @@
     5.5
    ]
   ],
-  "id": "a-4",
+  "id": "a-6",
   "mode": "assess",
   "chapter": 0,
   "name": "post"
+ },
+ {
+  "pegs": [
+   [
+    38.7,
+    42.4
+   ],
+   [
+    35.6,
+    60.7
+   ],
+   [
+    17.3,
+    57.6
+   ],
+   [
+    20.4,
+    39.3
+   ]
+  ],
+  "threads": [
+   {
+    "color": "#7A4FBF",
+    "sol": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  ],
+  "mirror": "x",
+  "id": "a-7",
+  "mode": "assess",
+  "chapter": 0,
+  "name": "mirror"
  },
  {
   "pegs": [
@@ -220,7 +382,7 @@
    }
   ],
   "rotateTarget": 90,
-  "id": "a-5",
+  "id": "a-8",
   "mode": "assess",
   "chapter": 0,
   "name": "rotate"
@@ -261,7 +423,7 @@
    }
   ],
   "mirror": "x",
-  "id": "a-6",
+  "id": "a-9",
   "mode": "assess",
   "chapter": 0,
   "name": "mirror"
@@ -296,43 +458,7 @@
    }
   ],
   "mirror": "x",
-  "id": "a-7",
-  "mode": "assess",
-  "chapter": 0,
-  "name": "mirror"
- },
- {
-  "pegs": [
-   [
-    38.7,
-    42.4
-   ],
-   [
-    35.6,
-    60.7
-   ],
-   [
-    17.3,
-    57.6
-   ],
-   [
-    20.4,
-    39.3
-   ]
-  ],
-  "threads": [
-   {
-    "color": "#7A4FBF",
-    "sol": [
-     0,
-     1,
-     2,
-     3
-    ]
-   }
-  ],
-  "mirror": "x",
-  "id": "a-8",
+  "id": "a-10",
   "mode": "assess",
   "chapter": 0,
   "name": "mirror"
@@ -379,7 +505,7 @@
     ]
    }
   ],
-  "id": "a-9",
+  "id": "a-11",
   "mode": "assess",
   "chapter": 0,
   "name": "loop"
@@ -429,7 +555,7 @@
     7.1
    ]
   ],
-  "id": "a-10",
+  "id": "a-12",
   "mode": "assess",
   "chapter": 0,
   "name": "post"
@@ -481,7 +607,7 @@
     ]
    }
   ],
-  "id": "a-11",
+  "id": "a-13",
   "mode": "assess",
   "chapter": 0,
   "name": "rail"
@@ -517,7 +643,7 @@
    }
   ],
   "mirror": "y",
-  "id": "a-12",
+  "id": "a-14",
   "mode": "assess",
   "chapter": 0,
   "name": "mirror"
@@ -568,7 +694,7 @@
    }
   ],
   "rotateTarget": 90,
-  "id": "a-13",
+  "id": "a-15",
   "mode": "assess",
   "chapter": 0,
   "name": "rotate"
@@ -629,7 +755,7 @@
     5.5
    ]
   ],
-  "id": "a-14",
+  "id": "a-16",
   "mode": "assess",
   "chapter": 0,
   "name": "post"
@@ -684,7 +810,7 @@
     ]
    }
   ],
-  "id": "a-15",
+  "id": "a-17",
   "mode": "assess",
   "chapter": 0,
   "name": "loop"
@@ -724,7 +850,7 @@
    }
   ],
   "allowCross": true,
-  "id": "a-16",
+  "id": "a-18",
   "mode": "assess",
   "chapter": 0,
   "name": "cross"
@@ -781,7 +907,7 @@
     ]
    }
   ],
-  "id": "a-17",
+  "id": "a-19",
   "mode": "assess",
   "chapter": 0,
   "name": "rail"
@@ -833,7 +959,7 @@
     ]
    }
   ],
-  "id": "a-18",
+  "id": "a-20",
   "mode": "assess",
   "chapter": 0,
   "name": "portal"
@@ -894,7 +1020,7 @@
   "thorn": [
    7
   ],
-  "id": "a-19",
+  "id": "a-21",
   "mode": "assess",
   "chapter": 0,
   "name": "gold"
@@ -938,7 +1064,7 @@
    }
   ],
   "allowCross": true,
-  "id": "a-20",
+  "id": "a-22",
   "mode": "assess",
   "chapter": 0,
   "name": "cross"
@@ -990,7 +1116,7 @@
     ]
    }
   ],
-  "id": "a-21",
+  "id": "a-23",
   "mode": "assess",
   "chapter": 0,
   "name": "loop"
@@ -1035,7 +1161,7 @@
    }
   ],
   "mirror": "y",
-  "id": "a-22",
+  "id": "a-24",
   "mode": "assess",
   "chapter": 0,
   "name": "mirror"
@@ -1096,7 +1222,7 @@
     5.6
    ]
   ],
-  "id": "a-23",
+  "id": "a-25",
   "mode": "assess",
   "chapter": 0,
   "name": "post"
@@ -1152,7 +1278,7 @@
     ]
    }
   ],
-  "id": "a-24",
+  "id": "a-26",
   "mode": "assess",
   "chapter": 0,
   "name": "loop"
@@ -1198,7 +1324,7 @@
    }
   ],
   "rotateTarget": 180,
-  "id": "a-25",
+  "id": "a-27",
   "mode": "assess",
   "chapter": 0,
   "name": "rotate"
@@ -1251,7 +1377,7 @@
     ]
    }
   ],
-  "id": "a-26",
+  "id": "a-28",
   "mode": "assess",
   "chapter": 0,
   "name": "loop"
@@ -1298,7 +1424,7 @@
   "gold": [
    1
   ],
-  "id": "a-27",
+  "id": "a-29",
   "mode": "assess",
   "chapter": 0,
   "name": "gold"
@@ -1349,7 +1475,7 @@
   "gold": [
    4
   ],
-  "id": "a-28",
+  "id": "a-30",
   "mode": "assess",
   "chapter": 0,
   "name": "gold"
@@ -1415,7 +1541,7 @@
     4.6
    ]
   ],
-  "id": "a-29",
+  "id": "a-31",
   "mode": "assess",
   "chapter": 0,
   "name": "post"
@@ -1481,7 +1607,7 @@
     ]
    }
   ],
-  "id": "a-30",
+  "id": "a-32",
   "mode": "assess",
   "chapter": 0,
   "name": "rail"
@@ -1533,7 +1659,7 @@
    }
   ],
   "budget": 197.6,
-  "id": "a-31",
+  "id": "a-33",
   "mode": "assess",
   "chapter": 0,
   "name": "budget"
@@ -1585,7 +1711,7 @@
    }
   ],
   "budget": 223.7,
-  "id": "a-32",
+  "id": "a-34",
   "mode": "assess",
   "chapter": 0,
   "name": "budget"
@@ -1637,7 +1763,7 @@
     ]
    }
   ],
-  "id": "a-33",
+  "id": "a-35",
   "mode": "assess",
   "chapter": 0,
   "name": "portal"
@@ -1689,7 +1815,7 @@
     ]
    }
   ],
-  "id": "a-34",
+  "id": "a-36",
   "mode": "assess",
   "chapter": 0,
   "name": "portal"
@@ -1750,67 +1876,7 @@
    }
   ],
   "apart": true,
-  "id": "a-35",
-  "mode": "assess",
-  "chapter": 0,
-  "name": "multi"
- },
- {
-  "pegs": [
-   [
-    41.4,
-    32.6
-   ],
-   [
-    48.5,
-    56.5
-   ],
-   [
-    24.6,
-    63.7
-   ],
-   [
-    17.5,
-    39.7
-   ],
-   [
-    79.8,
-    45.1
-   ],
-   [
-    80.8,
-    71.8
-   ],
-   [
-    54.2,
-    72.8
-   ],
-   [
-    53.2,
-    46.1
-   ]
-  ],
-  "threads": [
-   {
-    "color": "#7A4FBF",
-    "sol": [
-     0,
-     1,
-     2,
-     3
-    ]
-   },
-   {
-    "color": "#D98324",
-    "sol": [
-     4,
-     5,
-     6,
-     7
-    ]
-   }
-  ],
-  "id": "a-36",
+  "id": "a-37",
   "mode": "assess",
   "chapter": 0,
   "name": "multi"
@@ -1866,7 +1932,7 @@
    }
   ],
   "allowCross": true,
-  "id": "a-37",
+  "id": "a-38",
   "mode": "assess",
   "chapter": 0,
   "name": "cross"
@@ -1924,76 +1990,10 @@
    }
   ],
   "rotateTarget": 90,
-  "id": "a-38",
-  "mode": "assess",
-  "chapter": 0,
-  "name": "rotate"
- },
- {
-  "pegs": [
-   [
-    31.2,
-    29.1
-   ],
-   [
-    43.2,
-    48.3
-   ],
-   [
-    28.7,
-    65.7
-   ],
-   [
-    7.7,
-    57.2
-   ],
-   [
-    9.2,
-    34.6
-   ],
-   [
-    82,
-    32.8
-   ],
-   [
-    93.4,
-    56.3
-   ],
-   [
-    70,
-    67.7
-   ],
-   [
-    58.6,
-    44.2
-   ]
-  ],
-  "threads": [
-   {
-    "color": "#7A4FBF",
-    "sol": [
-     0,
-     1,
-     2,
-     3,
-     4
-    ]
-   },
-   {
-    "color": "#D98324",
-    "sol": [
-     5,
-     6,
-     7,
-     8
-    ]
-   }
-  ],
-  "apart": true,
   "id": "a-39",
   "mode": "assess",
   "chapter": 0,
-  "name": "multi"
+  "name": "rotate"
  },
  {
   "pegs": [

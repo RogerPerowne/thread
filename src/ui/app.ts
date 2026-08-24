@@ -4,7 +4,7 @@
  */
 
 import { h, clear } from './dom.js';
-import { toast } from './components.js';
+import { toast, clearToast, closeTopModal } from './components.js';
 import { load, save as persist, type Save } from '../game/storage.js';
 import { unlockedModes, type UnlockCtx } from '../game/progress.js';
 import { type Level, validateLevel } from '../core/level.js';
@@ -158,8 +158,11 @@ export class App {
 
   go(route: Route, opts: { replace?: boolean } = {}): void {
     // Every screen change cancels animation first, so nothing from the old
-    // screen can write into the new one.
+    // screen can write into the new one. Anything floating above the screen
+    // goes with it.
     ticker.cancelAll();
+    clearToast();
+    closeTopModal();
     this.cleanup?.();
     this.cleanup = null;
     this.route = route;

@@ -44,9 +44,20 @@ export function modal(content: (close: () => void) => Child[], opts: { dismissab
 
   const close = () => {
     scrim.classList.remove('in');
-    // The exit is a tween like everything else, so nothing here uses setTimeout.
-    ticker.after(230, () => scrim.remove());
-    ticker.requestFrame();
+    // Removal rides the CSS transition rather than the ticker: a screen change
+    // cancels every tween, and a modal that outlived its own dismissal would
+    // sit there blocking the new screen.
+    let removed = false;
+    const drop = () => {
+      if (removed) return;
+      removed = true;
+      scrim.remove();
+    };
+    sheet.addEventListener('transitionend', drop, { once: true });
+    // Belt and braces for the case where no transition runs at all.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (getComputedStyle(sheet).transitionDuration === '0s') drop();
+    }));
     if (openScrim === scrim) openScrim = null;
     document.removeEventListener('keydown', onKey);
   };
@@ -73,9 +84,13 @@ export function modal(content: (close: () => void) => Child[], opts: { dismissab
 }
 
 export function closeTopModal(): void {
-  openScrim?.querySelector('.sheet');
   openScrim?.remove();
   openScrim = null;
+}
+
+/** Drop any toast that is still on screen — called on every screen change. */
+export function clearToast(): void {
+  toastEl?.classList.remove('in');
 }
 
 // ---------------------------------------------------------------------------

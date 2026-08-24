@@ -9,7 +9,7 @@
 
 import type { Pt } from '../core/geometry.js';
 import { dist } from '../core/geometry.js';
-import { type Level, deriveTarget, parLength, mechanicsOf } from '../core/level.js';
+import { type Level, deriveTarget, parLength, mechanicsOf, effectiveLoop } from '../core/level.js';
 import {
   initialState, evaluate, canClose, normalizeClosedPath, threadPoints, lengthUsed,
   allCrossings, REJECT_TEXT, WIN_THRESHOLD,
@@ -260,8 +260,11 @@ export class Engine {
   /** Recompute crossings and redraw the breaks. Once per closed loop, not per frame. */
   private refreshWeave(): void {
     if (!this.level.weave) return;
-    const loops = this.state.threads
-      .map((t, i) => (t.closed && t.pegs.length >= 3 ? threadPoints(this.level, this.state, i) : []));
+    const loops = this.state.threads.map((t, i) => (
+      t.closed && t.pegs.length >= 3
+        ? effectiveLoop(this.level, threadPoints(this.level, this.state, i))
+        : []
+    ));
     if (loops.some((l) => l.length < 3)) {
       this.crossings = [];
       this.scene.clearWeave();

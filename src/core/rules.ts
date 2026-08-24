@@ -335,7 +335,9 @@ export function evaluate(
     return { win: false, similarity: sim, raster: evalRaster, fault: 'shape', lengthUsed: used };
   }
   if (level.weave) {
-    const solutionLoops = level.threads.map((t) => t.sol.map((i) => level.pegs[i] as Pt));
+    // The same board effect must be applied on both sides, or the crossings
+    // would be numbered differently for the target than for the player.
+    const solutionLoops = level.threads.map((t) => effectiveLoop(level, t.sol.map((i) => level.pegs[i] as Pt)));
     const want = weaveSignature(allCrossings(solutionLoops), solutionWeaveSet(level));
     const got = weaveSignature(allCrossings(loops), overSet);
     if (want !== got) {

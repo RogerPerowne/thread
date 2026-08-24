@@ -138,3 +138,38 @@ The New York Times Games visual system is the reference for layout and
 restraint. Their wordmarks, logos and the Franklin and Karnak typefaces are
 licensed and trademarked, so this uses free stand-ins — Libre Franklin for UI,
 Zilla Slab for display — and an original mark.
+
+## What is not here, and why
+
+Two things the design called for cannot be built behind a static site, and are
+absent rather than faked:
+
+- **A weekly leaderboard.** Ranking players against each other needs a server
+  to hold the scores. Blitz and One Life keep a personal best, and a seed link
+  lets you hand a friend the exact same ladder, which is a fair contest with
+  no account and no backend.
+- **A daily reminder notification.** Real push needs a service worker talking
+  to a push service. There is no switch in Settings pretending to do it.
+
+Two more are honest approximations, and the UI says so where a player can see
+it:
+
+- The Daily reports **how hard today's puzzle is**, from the static difficulty
+  estimator, rather than "% of players who solved it today" — that figure would
+  be invented.
+- The Thread Score's percentile is **where the ability model places you**, not
+  a count of real people.
+
+## Levels
+
+The 322 levels are built by per-chapter *designers* — parameterised families of
+shapes, one idea per chapter — and every candidate is vetted individually by
+the six-check gate before it is accepted, then vetted again as a set for
+repetition. `pnpm levels` regenerates them deterministically from a seed;
+`scripts/probe.ts` and `scripts/probew.ts` report a chapter's acceptance rate
+and why candidates are being rejected, which is how you tune one.
+
+This is not the same thing as 322 levels placed peg by peg by a person. It is,
+though, what the quality bar in the design actually asks for: every level earns
+its place by passing checks a human eye would not catch, and the anti-repetition
+audit is what stops a chapter becoming the same puzzle four times.
