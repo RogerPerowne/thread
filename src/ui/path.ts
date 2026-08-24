@@ -23,18 +23,26 @@ export const VIEW_W = 771;
 const HW = 72, HH = 44, EXT = 24;
 /** One turn of the meander, and where the four tiles of that turn sit. */
 const PERIOD = 1035;
-const TILE_SLOTS: [number, number][] = [[191, 0], [390, 274], [608, 517], [390, 766]];
 /** Corner list for one turn, offset from the turn's first tile. */
 const CORNERS: [number, number][] = [
   [191, 5], [-42, 156], [283, 350], [530, 198],
   [835, 394], [289, 721], [639, 927], [330, 1117],
 ];
+/** Where the four tiles of a turn sit, measured off the reference. */
+const TILE_SLOTS: [number, number][] = [[191, 0], [390, 274], [608, 517], [390, 766]];
+const PER_TURN = TILE_SLOTS.length;
 const PATH_W = 11.6;
+/**
+ * The ribbon is a slab, not a line: it is drawn twice, the lower copy in a
+ * darker shade, so it reads as something with a thickness lying on the ground
+ * rather than paint. RIBBON_D is how thick.
+ */
+const RIBBON_D = 9;
 /** Vertical room past the tile at each end of the run. */
 const HEAD = 196, TAIL = 216;
-/** Behind you, and ahead of you. */
-const PATH_WALKED = '#121212';
-const PATH_AHEAD = '#B3B3B3';
+/** Behind you, and ahead of you: top face, then the side of the slab. */
+const PATH_WALKED = '#121212', PATH_WALKED_SIDE = '#000000';
+const PATH_AHEAD = '#B3B3B3', PATH_AHEAD_SIDE = '#8C8C8C';
 
 export type TileState = 'done' | 'next' | 'locked';
 
@@ -57,11 +65,44 @@ export interface PathView {
   height: number;
 }
 
-/** The k-th slot down the meander, in reference units. */
+/*
+ * Tiles stand ON the ribbon rather than near it.
+ *
+ * The measured slot positions were taken off a photograph, so they sit a few
+ * units off the line. Each one is projected onto the meander to find where the
+ * ribbon's surface actually passes, and the tile is then dropped half an
+ * extrusion above that point — so the ribbon runs into the middle of the
+ * tile's side face and the two read as one solid object. Projecting rather
+ * than spacing by arc length keeps the reference's rhythm, which spreads the
+ * tiles across the board instead of bunching them at one edge.
+ */
+const TURN_PTS: [number, number][] = [...CORNERS, [CORNERS[0][0], CORNERS[0][1] + PERIOD]];
+
+/** The closest point to `p` on a polyline. */
+function projectOn(pts: [number, number][], p: [number, number]): [number, number] {
+  let best: [number, number] = pts[0];
+  let bestD = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i];
+    const [bx, by] = pts[i + 1];
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2));
+    const q: [number, number] = [ax + dx * t, ay + dy * t];
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (d < bestD) { bestD = d; best = q; }
+  }
+  return best;
+}
+
+/** Each slot's anchor on the ribbon, computed once. */
+const SLOT_ANCHORS: [number, number][] = TILE_SLOTS.map((slot) => projectOn(TURN_PTS, slot));
+
+/** The k-th tile's centre: half an extrusion above the ribbon. */
 function slotAt(k: number): [number, number] {
-  const turn = Math.floor(k / TILE_SLOTS.length);
-  const [x, dy] = TILE_SLOTS[k % TILE_SLOTS.length];
-  return [x, HEAD + turn * PERIOD + dy];
+  const turn = Math.floor(k / PER_TURN);
+  const [x, y] = SLOT_ANCHORS[k % PER_TURN];
+  return [x, HEAD + turn * PERIOD + y - EXT / 2];
 }
 
 /**
@@ -76,7 +117,7 @@ export function tileAt(i: number, count: number): [number, number] {
 }
 
 function meanderPoints(count: number): [number, number][] {
-  const turns = Math.ceil(count / TILE_SLOTS.length) + 1;
+  const turns = Math.ceil(count / PER_TURN) + 1;
   const pts: [number, number][] = [];
   for (let t = -1; t < turns; t++) {
     for (const [x, dy] of CORNERS) pts.push([x, HEAD + t * PERIOD + dy]);
@@ -286,7 +327,8 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
    * out beyond them, so the chapter has an end without having a hard edge.
    */
   const pts = meanderPoints(count);
-  const asStr = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const at = (dy: number) => pts.map((p) => `${p[0].toFixed(1)},${(p[1] + dy).toFixed(1)}`).join(' ');
+
   const topY = tileAt(count - 1, count)[1];
   const botY = tileAt(0, count)[1];
 
@@ -308,12 +350,32 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
   defs.appendChild(mask);
 
   const ribbon = svg('g', { mask: 'url(#pathends)' });
-  const stroke = (color2: string, clipId?: string) => svg('polyline', {
-    points: asStr, fill: 'none', stroke: color2, 'stroke-width': PATH_W,
+  /*
+   * A slab, not a line: the ribbon has a side as well as a top, so it reads as
+   * something lying on the ground rather than paint on it. Tiles are drawn
+   * over it with their side faces meeting its surface, which is what makes the
+   * two read as one object.
+   *
+   * The side is a genuine sweep — the run stroked at every step down to
+   * RIBBON_D — not one copy shifted to the bottom. A single shifted copy only
+   * covers the gap between the two where the outline happens to run across the
+   * offset; at a corner the two round joins bulge apart and leave a notch of
+   * background showing through the middle of the turn. Consecutive copies
+   * overlap by most of the stroke width, so the swept face is solid.
+   *
+   * Offsets go in the point list rather than a transform: a transform would
+   * carry the clip path with it and cut the walked/ahead boundary at a
+   * different height on every layer.
+   */
+  const SWEEP_STEP = 1.5;
+  const stroke = (color2: string, dy: number, clipId?: string) => svg('polyline', {
+    points: at(dy), fill: 'none', stroke: color2, 'stroke-width': PATH_W,
     'stroke-linejoin': 'round', 'stroke-linecap': 'round',
     ...(clipId ? { 'clip-path': `url(#${clipId})` } : {}),
   });
-  ribbon.appendChild(stroke(PATH_AHEAD));
+  const side = (color2: string, clipId?: string) => {
+    for (let dy = RIBBON_D; dy > 0; dy -= SWEEP_STEP) ribbon.appendChild(stroke(color2, dy, clipId));
+  };
 
   // Where you are: the level you are up to, or the top of the run once the
   // chapter is finished. You climb, so "walked" is everything below it.
@@ -324,7 +386,11 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
     x: -80, y: walkedFrom, width: VIEW_W + 200, height: height - walkedFrom + 60,
   }));
   defs.appendChild(clip);
-  ribbon.appendChild(stroke(PATH_WALKED, 'pathdone'));
+
+  side(PATH_AHEAD_SIDE);
+  ribbon.appendChild(stroke(PATH_AHEAD, 0));
+  side(PATH_WALKED_SIDE, 'pathdone');
+  ribbon.appendChild(stroke(PATH_WALKED, 0, 'pathdone'));
   root.appendChild(ribbon);
 
   let currentY = 0;
