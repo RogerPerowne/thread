@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "ci": "pnpm typecheck && pnpm test && pnpm validate && pnpm build",
     "verify:deploy": "node scripts/verify-deploy.mjs",
-    "compare:reference": "node scripts/compare-reference.mjs"
+    "compare:reference": "node scripts/compare-reference.mjs",
+    "verify:bytes": "node scripts/verify-deployed-bytes.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
