@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { checkLevel, auditRepetition, fingerprint, quickCheck, snaggablePeg, SNAG_RADIUS } from '../../src/core/gate.js';
 import { initialRailPos } from '../../src/core/level.js';
 import { validateLevel, type Level } from '../../src/core/level.js';
+import { latticeWires } from '../../src/core/objective.js';
 
 const ring = (n: number, r = 34, cx = 50, cy = 50): [number, number][] => {
   const out: [number, number][] = [];
@@ -221,5 +222,93 @@ describe('the snag radius', () => {
     expect(s2).not.toBeNull();
     expect(s2!.peg).toBe(4);
     expect(s2!.distance).toBeLessThan(SNAG_RADIUS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('check 6 — the objective is a real question', () => {
+  const SQUARE: [number, number][] = [[20, 20], [80, 20], [80, 80], [20, 80]];
+
+  it('rejects a silhouette whose obvious order gives the same shape', () => {
+    const level = validateLevel({
+      id: 'o1', mode: 'shadow', chapter: 1,
+      pegs: SQUARE,
+      threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
+      objective: { kind: 'silhouette' },
+    });
+    const r = checkLevel(level, { budgetMs: 200 });
+    const c = r.checks.find((x) => x.name === 'objective')!;
+    expect(c.pass).toBe(false);
+    expect(c.detail).toContain('telling you nothing');
+  });
+
+  it('accepts a silhouette whose obvious order gives a different shape', () => {
+    // A pentagram: joined by angle it is a pentagon instead.
+    const pegs: [number, number][] = [];
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + i * ((2 * Math.PI) / 5);
+      pegs.push([+(50 + 34 * Math.cos(a)).toFixed(1), +(50 + 34 * Math.sin(a)).toFixed(1)]);
+    }
+    const level = validateLevel({
+      id: 'o2', mode: 'shadow', chapter: 1,
+      pegs,
+      allowCross: true,
+      threads: [{ color: '#000', sol: [0, 2, 4, 1, 3] }],
+      objective: { kind: 'silhouette' },
+    });
+    const c = checkLevel(level, { budgetMs: 200 }).checks.find((x) => x.name === 'objective')!;
+    expect(c.pass).toBe(true);
+  });
+
+  it('rejects a par level with nothing to waste a move on', () => {
+    const level = validateLevel({
+      id: 'o3', mode: 'par', chapter: 1,
+      pegs: SQUARE,
+      threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
+      objective: { kind: 'par', segments: 4 },
+    });
+    const c = checkLevel(level, { budgetMs: 200 }).checks.find((x) => x.name === 'objective')!;
+    expect(c.pass).toBe(false);
+    expect(c.detail).toContain('no spare pegs');
+  });
+
+  it('rejects a corral the lazy fence already satisfies', () => {
+    // Everything inside: fencing the whole board in meets it by accident.
+    const level = validateLevel({
+      id: 'o4', mode: 'corral', chapter: 1,
+      pegs: [...SQUARE, [50, 50], [45, 55]] as [number, number][],
+      thorn: [4, 5],
+      threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
+      objective: { kind: 'enclose', inside: [4, 5], outside: [], maxSegments: 4 },
+    });
+    const c = checkLevel(level, { budgetMs: 200 }).checks.find((x) => x.name === 'objective')!;
+    expect(c.pass).toBe(false);
+    expect(c.detail).toContain('already satisfies it');
+  });
+
+  it('rejects a clue board with more than one answer', () => {
+    const cols = 3, rows = 3;
+    const pegs: [number, number][] = [];
+    for (let r = 0; r <= rows; r++) for (let c = 0; c <= cols; c++) pegs.push([20 + c * 20, 20 + r * 20]);
+    const level = validateLevel({
+      id: 'o5', mode: 'wire', chapter: 1,
+      pegs,
+      wires: latticeWires(cols, rows),
+      threads: [{ color: '#000', sol: [0, 1, 5, 4] }],
+      // The loop's true counts, with all but one taken away.
+      objective: { kind: 'clue', cols, rows, clues: [4, null, null, null, null, null, null, null, null] },
+    });
+    const c = checkLevel(level, { budgetMs: 200 }).checks.find((x) => x.name === 'objective')!;
+    // A 4 pins its own cell down completely, so this one IS unique.
+    expect(c.pass).toBe(true);
+
+    const loose = validateLevel({
+      ...level, id: 'o6',
+      objective: { kind: 'clue', cols, rows, clues: new Array(9).fill(null) },
+    });
+    const c2 = checkLevel(loose, { budgetMs: 200 }).checks.find((x) => x.name === 'objective')!;
+    expect(c2.pass).toBe(false);
+    expect(c2.detail).toContain('more than one loop');
   });
 });

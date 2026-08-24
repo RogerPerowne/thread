@@ -14,6 +14,7 @@ const VIEWPORTS = [
 ];
 const ROUTES = [
   ['home', '#/home'], ['chapters', '#/chapters/classic'], ['path', '#/levels/classic/1'],
+  ['wire-path', '#/levels/wire/1'], ['corral', '#/play/corral/k-1-1'], ['wire', '#/play/wire/q-1-1'],
   ['play', '#/play/classic/c-1-1'], ['weave', '#/play/weave/w-1-1'],
   ['gallery', '#/gallery'], ['stats', '#/stats'], ['settings', '#/settings'],
   ['assess', '#/assess'], ['workshop', '#/workshop'], ['daily', '#/play/daily'],

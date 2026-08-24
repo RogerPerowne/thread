@@ -10,7 +10,8 @@
  */
 
 import type { Pt } from '../core/geometry.js';
-import { type Level, isPortalEdge, portalTwin } from '../core/level.js';
+import { type Level, isPortalEdge, portalTwin, objectiveOf } from '../core/level.js';
+import { showsOutline, showsRegion, cellWires, usedWires } from '../core/objective.js';
 import type { PlayState } from '../core/rules.js';
 import { pegPos } from '../core/rules.js';
 import { GRID, type Raster } from '../core/region.js';
@@ -79,6 +80,15 @@ export class BoardScene {
   threadFill: SVGPathElement[] = [];
   private portalGhost: SVGPathElement[] = [];
   private targetFill: SVGPathElement[] = [];
+  /*
+   * The ghost's opacity at full reveal. Held as state because the reveal tween
+   * scales it: a silhouette or corral level must not get the classic outline
+   * back the moment the level fades in — that dashed edge IS the answer.
+   */
+  private ghostFillMax = 0.1;
+  private ghostStrokeMax = 0.42;
+  /** One per cell, null where the cell says nothing. */
+  private clueNodes: (SVGTextElement | null)[] = [];
   /** One break mark per crossing, for the over/under weave. */
   private weaveMarks: SVGLineElement[] = [];
   private weaveHits: SVGCircleElement[] = [];
@@ -131,10 +141,59 @@ export class BoardScene {
 
     this.weaveMarks = [];
     this.weaveHits = [];
-    for (const name of ['target', 'rails', 'fills', 'posts', 'ghost', 'threads', 'weave', 'cursor', 'pegs']) {
+    for (const name of ['target', 'wires', 'clues', 'rails', 'fills', 'posts', 'ghost', 'threads', 'weave', 'cursor', 'pegs']) {
       const g = el('g', { class: `layer-${name}` });
       this.layers[name] = g;
       this.svg.appendChild(g);
+    }
+
+    // --- wires and clues ----------------------------------------------------
+    /*
+     * A wired board is a graph, not an open field: the string may only run
+     * along these, so they are drawn as the ground the loop is laid on rather
+     * than as decoration. The numbers sit in the cells and say how many of
+     * that cell's four sides the loop uses.
+     */
+    if (level.wires) {
+      for (const [a, b] of level.wires) {
+        const p = level.pegs[a], q = level.pegs[b];
+        this.layers.wires.appendChild(el('line', {
+          x1: p[0], y1: p[1], x2: q[0], y2: q[1],
+          stroke: opts.theme.peg,
+          'stroke-width': 0.35,
+          'stroke-linecap': 'round',
+          opacity: 0.5,
+          class: 'wire',
+        }));
+      }
+    }
+    this.clueNodes = [];
+    const objective = objectiveOf(level);
+    if (objective.kind === 'clue') {
+      for (let r = 0; r < objective.rows; r++) {
+        for (let c = 0; c < objective.cols; c++) {
+          const want = objective.clues[r * objective.cols + c];
+          if (want === null || want === undefined) {
+            this.clueNodes.push(null);
+            continue;
+          }
+          const tl = level.pegs[r * (objective.cols + 1) + c];
+          const br = level.pegs[(r + 1) * (objective.cols + 1) + c + 1];
+          const t = el('text', {
+            x: (tl[0] + br[0]) / 2,
+            y: (tl[1] + br[1]) / 2,
+            'text-anchor': 'middle',
+            'dominant-baseline': 'central',
+            'font-size': 5.4,
+            'font-weight': 700,
+            fill: opts.theme.pegLive,
+            class: 'clue',
+          });
+          t.textContent = String(want);
+          this.layers.clues.appendChild(t);
+          this.clueNodes.push(t);
+        }
+      }
     }
 
     // --- target ghost -------------------------------------------------------
@@ -142,12 +201,20 @@ export class BoardScene {
       // The ghost is drawn in the thread's own colour: it is the shape you are
       // about to make, not a neutral annotation beside it.
       const ghostInk = level.threads[t].color || opts.theme.target;
+      /*
+       * A silhouette shows the region and nothing else: the dashed outline
+       * names the pegs and the order, which is the answer. Its fill is a
+       * little stronger to make up for having no edge to read. A corral or a
+       * clue board shows neither — there the region IS the answer.
+       */
+      this.ghostFillMax = showsRegion(objective) ? (showsOutline(objective) ? 0.1 : 0.2) : 0;
+      this.ghostStrokeMax = showsOutline(objective) ? 0.42 : 0;
       const p = el('path', {
         'fill-rule': 'evenodd',
         fill: ghostInk,
-        'fill-opacity': opts.showTarget ? 0.1 : 0,
+        'fill-opacity': opts.showTarget ? this.ghostFillMax : 0,
         stroke: ghostInk,
-        'stroke-opacity': opts.showTarget ? 0.42 : 0,
+        'stroke-opacity': opts.showTarget ? this.ghostStrokeMax : 0,
         'stroke-width': 0.6,
         'stroke-dasharray': '2.2 1.8',
         'stroke-linecap': 'round',
@@ -253,7 +320,30 @@ export class BoardScene {
         g.appendChild(el('circle', { r: 2.5, fill: 'none', stroke: '#C8A020', 'stroke-width': 0.5, class: 'peg-gold' }));
         dot.setAttribute('fill', '#C8A020');
       }
-      if (level.thorn?.includes(i)) {
+      /*
+       * On a corral board the marks are what the fence is about, not part of
+       * it: filled for "keep this in", hollow and struck through for "leave
+       * this out". They are thorns underneath, because the string must not
+       * touch them, but a spiked thorn would read as a hazard rather than as
+       * the thing being asked about.
+       */
+      const inMark = objective.kind === 'enclose' && objective.inside.includes(i);
+      const outMark = objective.kind === 'enclose' && objective.outside.includes(i);
+      if (inMark || outMark) {
+        const hue = inMark ? '#1F8A8A' : '#C0392B';
+        dot.setAttribute('r', '1.1');
+        dot.setAttribute('fill', inMark ? hue : 'none');
+        g.appendChild(el('circle', {
+          r: 2.7, fill: 'none', stroke: hue, 'stroke-width': 0.6, class: 'peg-mark',
+        }));
+        if (outMark) {
+          g.appendChild(el('path', {
+            d: 'M-1.9 -1.9 L1.9 1.9 M-1.9 1.9 L1.9 -1.9',
+            stroke: hue, 'stroke-width': 0.6, 'stroke-linecap': 'round', fill: 'none',
+            class: 'peg-mark',
+          }));
+        }
+      } else if (level.thorn?.includes(i)) {
         const spikes = el('path', {
           d: thornPath(2.6), fill: 'none', stroke: '#C0392B',
           'stroke-width': 0.45, 'stroke-linecap': 'round', class: 'peg-thorn',
@@ -279,6 +369,36 @@ export class BoardScene {
     this.fillOpacity = 0;
   }
 
+  /**
+   * A clue that is already satisfied steps back; one the loop has overshot
+   * goes red. Without this the player is counting sides by eye on every move,
+   * which is arithmetic rather than deduction.
+   */
+  private updateClues(state: PlayState): void {
+    if (!this.clueNodes.length) return;
+    const objective = objectiveOf(this.level);
+    if (objective.kind !== 'clue') return;
+    const used = usedWires(state.threads[0].pegs, state.threads[0].closed);
+    for (let r = 0; r < objective.rows; r++) {
+      for (let c = 0; c < objective.cols; c++) {
+        const cell = r * objective.cols + c;
+        const node = this.clueNodes[cell];
+        if (!node) continue;
+        const want = objective.clues[cell]!;
+        let got = 0;
+        for (const [a, b] of cellWires(objective.cols, r, c)) {
+          if (used.has(a < b ? `${a},${b}` : `${b},${a}`)) got++;
+        }
+        const mood = got === want ? 'met' : got > want ? 'over' : 'open';
+        if (node.dataset.mood !== mood) {
+          node.dataset.mood = mood;
+          node.setAttribute('opacity', mood === 'met' ? '0.3' : '1');
+          node.setAttribute('fill', mood === 'over' ? '#C0392B' : this.opts.theme.pegLive);
+        }
+      }
+    }
+  }
+
   /** Draw the derived target region. Called on mount and when fog lifts. */
   setTarget(level: Level, loops?: Pt[][]): void {
     const shown = loops ?? [];
@@ -296,8 +416,8 @@ export class BoardScene {
 
   setTargetVisible(v: number): void {
     for (const p of this.targetFill) {
-      p.setAttribute('fill-opacity', String(0.1 * v));
-      p.setAttribute('stroke-opacity', String(0.42 * v));
+      p.setAttribute('fill-opacity', String(this.ghostFillMax * v));
+      p.setAttribute('stroke-opacity', String(this.ghostStrokeMax * v));
     }
   }
 
@@ -307,6 +427,7 @@ export class BoardScene {
    */
   update(state: PlayState): void {
     const level = this.level;
+    this.updateClues(state);
     for (let t = 0; t < level.threads.length; t++) {
       const st = state.threads[t];
       const pegs = st.pegs;

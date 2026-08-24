@@ -1,5 +1,5 @@
 /**
- * The level quality gate. Six checks; no level ships without passing all of
+ * The level quality gate. Seven checks; no level ships without passing all of
  * them. This is the machinery that stops the content being repetitive or
  * broken, and it runs both in CI and client-side in the Workshop, so a shared
  * level is guaranteed solvable.
@@ -9,8 +9,10 @@ import type { Pt } from './geometry.js';
 import { selfCrossings, mutualCrossings, segmentHitsDisc, pointSegmentDistance } from './geometry.js';
 import {
   type Level, type Mechanic, deriveTarget, mechanicsOf, parLength, cycleLength,
-  isPortalEdge, validateLevel, effectiveLoop, initialRailPos,
+  isPortalEdge, validateLevel, effectiveLoop, initialRailPos, objectiveOf,
 } from './level.js';
+import { checkEnclose, checkClues, clueCountsOf } from './objective.js';
+import { lattice, countSolutions } from './clue.js';
 import {
   makeRaster, rasterizeLoop, similarity, topology, symmetryGroup, signature,
   signatureDistance, coverage, isHairlineDifference, type Raster,
@@ -24,7 +26,8 @@ import {
 import { estimateDifficulty } from './difficulty.js';
 
 export type CheckName =
-  | 'solvable' | 'derived-target' | 'uniqueness' | 'threshold' | 'mechanics' | 'repetition';
+  | 'solvable' | 'derived-target' | 'uniqueness' | 'threshold' | 'mechanics'
+  | 'objective' | 'repetition';
 
 export type CheckResult = { name: CheckName; pass: boolean; detail: string };
 
@@ -138,7 +141,11 @@ function checkSolvable(level: Level): CheckResult {
 function checkDerivedTarget(level: Level): CheckResult {
   const d = deriveTarget(level);
   const cov = coverage(d.raster);
-  if (cov < 0.02) {
+  // A clue or corral level's loop is not a picture anyone is asked to match,
+  // so it is free to be small. The floor there is only "it enclosed
+  // something at all".
+  const floor = objectiveOf(level).kind === 'clue' || objectiveOf(level).kind === 'enclose' ? 0.004 : 0.02;
+  if (cov < floor) {
     return { name: 'derived-target', pass: false, detail: `target covers only ${(cov * 100).toFixed(1)}% of the board` };
   }
   if (cov > 0.72) {
@@ -236,7 +243,14 @@ function checkThreshold(level: Level): { result: CheckResult; worst: number } {
   // level it can fail outright. Either way the board is lying about what the
   // obvious move does, so no level ships with one. This runs BEFORE the
   // multi-thread shortcut below, because a weave is exactly where it bites.
-  const snag = snaggablePeg(level);
+  /*
+   * Par levels are the one place a peg on a solution edge is deliberate: the
+   * spare pegs are what make the same region reachable in more moves than it
+   * needs, and finding the corners is the level. The board is not lying about
+   * what the obvious move does — the move counter is on screen and undo is one
+   * tap — so the check that exists to catch that lie does not apply here.
+   */
+  const snag = objectiveOf(level).kind === 'par' ? null : snaggablePeg(level);
   if (snag) {
     return {
       result: {
@@ -251,6 +265,21 @@ function checkThreshold(level: Level): { result: CheckResult; worst: number } {
   if (level.threads.length > 1) {
     return {
       result: { name: 'threshold', pass: true, detail: 'no snaggable peg; shape checked per thread' },
+      worst: 0,
+    };
+  }
+
+  /*
+   * The rest of this check asks a shape question: does any wrong loop land
+   * close enough to the target to be waved through? A corral has many right
+   * answers on purpose and a clue board is judged against its numbers, not
+   * against a picture — on either, "this other loop makes almost the same
+   * region" is not a fault, it is the mode. Their own check does the work.
+   */
+  const kind = objectiveOf(level).kind;
+  if (kind === 'enclose' || kind === 'clue') {
+    return {
+      result: { name: 'threshold', pass: true, detail: 'not judged on shape' },
       worst: 0,
     };
   }
@@ -340,6 +369,13 @@ function checkMechanics(level: Level): CheckResult {
       }
 
       case 'thorn': {
+        /*
+         * On a corral board the marks are thorns because the string must not
+         * touch them, but they are not there to block a route — they are the
+         * question. Asking them to close off a chord would be asking the wrong
+         * thing of them.
+         */
+        if (objectiveOf(level).kind === 'enclose') break;
         let blocked = 0;
         const used = [...new Set(level.threads.flatMap((t) => t.sol))];
         for (let i = 0; i < used.length; i++) {
@@ -598,6 +634,132 @@ export function auditRepetition(prints: Fingerprint[]): RepetitionIssue[] {
 // ---------------------------------------------------------------------------
 
 /** Checks 1-5 for a single level. Repetition is a set-level property. */
+
+// ---------------------------------------------------------------------------
+// 6. The objective is a real question
+// ---------------------------------------------------------------------------
+
+/**
+ * Every objective can be stated on a board where it asks nothing. A
+ * silhouette whose obvious order gives the same region hides no information; a
+ * par a careless player meets anyway is not a constraint; a corral the lazy
+ * fence already satisfies is not a puzzle; a clue board with two answers is
+ * not solvable by reasoning at all.
+ *
+ * This is the check that says the level means it.
+ */
+function checkObjective(level: Level): CheckResult {
+  const objective = objectiveOf(level);
+  const name: CheckName = 'objective';
+  const sol = level.threads[0].sol;
+  const pts = (i: number) => level.pegs[i] as Pt;
+
+  switch (objective.kind) {
+    case 'shape':
+      return { name, pass: true, detail: 'the outline is shown' };
+
+    case 'silhouette': {
+      // Joining the same pegs the obvious way round — convex order — must give
+      // a different region, or hiding the order costs the player nothing.
+      const used = [...new Set(sol)];
+      if (used.length !== sol.length) {
+        return { name, pass: true, detail: 'revisits a peg, so the order cannot be read off' };
+      }
+      const hull = hullOrder(used.map(pts));
+      const mine = rasterOf(level, sol);
+      const theirs = makeRaster();
+      rasterizeLoop(effectiveLoop(level, hull.map((k) => pts(used[k]))), 1, theirs);
+      const same = similarity(mine, theirs);
+      if (same >= WIN_THRESHOLD) {
+        return { name, pass: false, detail: 'the obvious order gives the same region, so the outline was telling you nothing' };
+      }
+      return { name, pass: true, detail: `the obvious order scores ${same.toFixed(3)} — a different shape` };
+    }
+
+    case 'par': {
+      // There has to be a longer way to the same region, or the cap is idle.
+      const spare = level.pegs.length - new Set(sol).size;
+      if (spare < 1) {
+        return { name, pass: false, detail: 'no spare pegs, so the move cap can never bite' };
+      }
+      let onEdge = 0;
+      for (let i = 0; i < level.pegs.length; i++) {
+        if (sol.includes(i)) continue;
+        for (let k = 0; k < sol.length; k++) {
+          const a = pts(sol[k]), b = pts(sol[(k + 1) % sol.length]);
+          if (pointSegmentDistance(pts(i), a, b) < 0.35) { onEdge++; break; }
+        }
+      }
+      if (onEdge < 1) {
+        return { name, pass: false, detail: 'no spare peg lies on the shape, so stopping at one would change it' };
+      }
+      if (objective.segments >= sol.length + onEdge) {
+        return { name, pass: false, detail: `par ${objective.segments} allows every spare peg` };
+      }
+      return { name, pass: true, detail: `${onEdge} spare peg(s) on the outline, par ${objective.segments} for ${sol.length} corners` };
+    }
+
+    case 'enclose': {
+      // The lazy fence — every peg the loop could use, in convex order — must
+      // fail, or the level answers itself.
+      const fencePegs: number[] = [];
+      for (let i = 0; i < level.pegs.length; i++) {
+        if (!objective.inside.includes(i) && !objective.outside.includes(i)) fencePegs.push(i);
+      }
+      const hull = hullOrder(fencePegs.map(pts)).map((k) => fencePegs[k]);
+      if (hull.length >= 3) {
+        const lazy = checkEnclose(objective, level.pegs as Pt[], hull.map(pts), hull.length);
+        if (lazy.ok) {
+          return { name, pass: false, detail: 'fencing everything in already satisfies it' };
+        }
+      }
+      // And the marks must be clear of the authored fence, so "inside or out"
+      // is never a question about a peg sitting on a line.
+      const loop = sol.map(pts);
+      for (const i of [...objective.inside, ...objective.outside]) {
+        let near = Infinity;
+        for (let k = 0; k < loop.length; k++) {
+          near = Math.min(near, pointSegmentDistance(pts(i), loop[k], loop[(k + 1) % loop.length]));
+        }
+        if (near < 3) {
+          return { name, pass: false, detail: `mark ${i} sits ${near.toFixed(1)} from the fence` };
+        }
+      }
+      return { name, pass: true, detail: `${objective.inside.length} in, ${objective.outside.length} out, ${objective.maxSegments} segments` };
+    }
+
+    case 'clue': {
+      const lat = lattice(objective.cols, objective.rows);
+      const { count } = countSolutions(lat, [...objective.clues], 2);
+      if (count !== 1) {
+        return { name, pass: false, detail: count === 0 ? 'no loop fits these clues' : 'more than one loop fits these clues' };
+      }
+      // And the clues must be true of the level's own answer.
+      const verdict = checkClues(objective, sol);
+      if (!verdict.ok) {
+        return { name, pass: false, detail: `the level's own loop breaks ${verdict.wrong.length} of its clues` };
+      }
+      const full = clueCountsOf(objective.cols, objective.rows, sol);
+      const showing = objective.clues.filter((c) => c !== null).length;
+      if (showing === full.length) {
+        return { name, pass: false, detail: 'every cell is numbered, which leaves nothing to work out' };
+      }
+      return { name, pass: true, detail: `${showing} of ${full.length} cells numbered, exactly one loop fits` };
+    }
+
+    default:
+      return { name, pass: true, detail: '' };
+  }
+}
+
+/** Indices of `pts` in convex-hull order. The obvious way to join a set up. */
+function hullOrder(pts: readonly Pt[]): number[] {
+  const idx = pts.map((_, i) => i);
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  return idx.sort((a, b) => Math.atan2(pts[a][1] - cy, pts[a][0] - cx) - Math.atan2(pts[b][1] - cy, pts[b][0] - cx));
+}
+
 export function checkLevel(level: Level, opts: GateOpts = {}): LevelReport {
   validateLevel(level);
   const checks: CheckResult[] = [];
@@ -625,7 +787,19 @@ export function checkLevel(level: Level, opts: GateOpts = {}): LevelReport {
       thr = checkThreshold(level);
       return run(thr.result);
     })() &&
+    run(checkObjective(level)) &&
     (() => {
+      // A corral has many right answers and a clue board has exactly one that
+      // its own numbers prove, so the cycle search for "is there a shorter way
+      // to this shape" is not a question either of them is asking.
+      const kind = objectiveOf(level).kind;
+      if (kind === 'enclose' || kind === 'clue') {
+        uniq = {
+          result: { name: 'uniqueness', pass: true, detail: 'not a shape objective' },
+          matches: 0,
+        };
+        return run(uniq.result);
+      }
       uniq = checkUniqueness(level, opts);
       return run(uniq.result);
     })();

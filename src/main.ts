@@ -37,6 +37,10 @@ window.__thread = {
   levelIds: () => ({
     classic: app.classic.map((l) => l.id),
     weave: app.weave.map((l) => l.id),
+    shadow: app.shadow.map((l) => l.id),
+    par: app.par.map((l) => l.id),
+    corral: app.corral.map((l) => l.id),
+    wire: app.wire.map((l) => l.id),
     assess: app.assess.map((l) => l.id),
   }),
   frameTimes: () => ticker.frameTimes.slice(),

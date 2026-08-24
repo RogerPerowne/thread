@@ -13,6 +13,8 @@ export type Current = {
   pegs: [number, number][];
   threads: { sol: number[]; over: number[] }[];
   rails: { peg: number; a: [number, number]; b: [number, number] }[];
+  /** Legal segments on a wire board; empty when any pair may be joined. */
+  wires: [number, number][];
   weave: boolean;
   solved: boolean;
   lastMiss?: number;
@@ -42,14 +44,23 @@ export async function waitForBoard(page: Page): Promise<void> {
 }
 
 export async function openLevel(page: Page, mode: string, id: string): Promise<Current> {
+  // A test may open a level as its very first action, with nothing loaded yet.
+  // Load the app once so the intro sheet is out of the way and the read-only
+  // hook exists to be cleared.
+  if (!/^https?:/.test(page.url())) await gotoApp(page);
   await page.evaluate(() => {
-    const w = window as never as { __thread: { current: unknown } };
-    w.__thread.current = null;
+    const w = window as never as { __thread?: { current: unknown } };
+    if (w.__thread) w.__thread.current = null;
   });
-  await page.goto(`/#/play/${mode}/${id}`);
+  // Going to the hash we are already on is a same-document navigation: the
+  // app would never re-initialise and the wait below would hang. Re-opening
+  // the same level (to try a second answer) therefore needs a real reload.
+  const want = `#/play/${mode}/${id}`;
+  if (page.url().endsWith(want)) await page.reload();
+  else await page.goto(`/${want}`);
   await page.waitForFunction(
     (want) => {
-      const c = (window as never as { __thread: { current: { id: string } | null } }).__thread.current;
+      const c = (window as never as { __thread?: { current: { id: string } | null } }).__thread?.current;
       return Boolean(c && c.id === want);
     },
     id,

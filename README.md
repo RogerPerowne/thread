@@ -14,7 +14,7 @@ portals — is a lens on that one idea.
 pnpm install
 pnpm dev        # play it
 pnpm test       # unit tests
-pnpm validate   # the six-check level gate, with a table
+pnpm validate   # the seven-check level gate, with a table
 pnpm levels     # regenerate levels/*.json from the designers
 pnpm e2e        # solve every level through real pointer events
 pnpm ci         # everything CI runs
@@ -77,8 +77,8 @@ re-opens it without costing an undo.
 
 ## The level gate
 
-No level ships without passing all six checks. `pnpm validate` runs them over
-every level and prints a table.
+No level ships without passing all seven checks. `pnpm validate` runs them
+over every level and prints a table.
 
 1. **Solvable** — the authored solution is legal under every rule of its level,
    and playing it through really wins.
@@ -107,11 +107,62 @@ every level and prints a table.
    exceeded by a loop that looks like the answer; a gold peg must be skippable
    without changing the shape; a rail peg must not already sit where the answer
    needs it. An inert mechanic fails the build.
-6. **Anti-repetition** — every level is compared with every other by target
+6. **The objective is a real question** — every objective can be stated on a
+   board where it asks nothing, and this is the check that says the level
+   means it. A silhouette whose pegs joined the obvious way round give the
+   same region hides no information. A move cap a careless player meets anyway
+   is not a constraint. A corral the lazy fence — everything in — already
+   satisfies is not a puzzle. A clue board with two answers cannot be reasoned
+   out at all, and one with every cell numbered leaves nothing to work out.
+
+   Two of the checks are asking a shape question and do not apply to the
+   objectives that are not about a shape. A corral has many right answers on
+   purpose, and a clue board is judged against its numbers; on either, "another
+   loop makes almost the same region" is the mode rather than a fault. Those
+   levels are proved by this check instead.
+7. **Anti-repetition** — every level is compared with every other by target
    region similarity, mechanic tuple, and a topology signature (peg count,
    holes, crossings, symmetry group, loop shape). Any pair matching on all
    three fails, and no two levels sharing a signature may sit within five
    levels of each other.
+
+## What a level asks
+
+For a long time every level asked the same question — reproduce this shape —
+and drew the answer on the board as a dashed outline through the exact pegs, in
+order. Tracing was the whole skill, and it wasted the one genuinely interesting
+thing about the mechanic: under the even-odd rule the same five pegs make a
+pentagon or a pentagram depending only on the order you visit them in.
+
+A level now states an **objective**, and the shape objective is only the first
+of five. Four modes are built on the others:
+
+| Mode | What it asks | Why it is different |
+| --- | --- | --- |
+| **Shadow** | The region, with no outline | You are shown the shape and not the order, on boards where the obvious order gives a different shape |
+| **Par** | The region, in a fixed number of pegs | Spare pegs lie along the edges, so the shape is easy and finding its corners is the puzzle |
+| **Corral** | Fence these in, leave those out | No target at all. You invent the loop, and more than one answer is right |
+| **Wire** | Numbers count the sides each cell uses | No target at all. The string runs along the board's wires and exactly one loop fits |
+
+Two mechanics sit underneath them. **Wires** make a board a graph rather than
+an open field, which is what turns "how many of this cell's four sides does the
+loop use" into a question with an answer. **Marks** are judged by ray casting
+rather than by sampling the raster — a peg one cell from an edge should not be
+at the mercy of where the grid happened to fall when the answer decides whether
+a level is won.
+
+`src/core/clue.ts` both makes clue levels and proves them. It does not invent
+clues: it draws a loop, reads the true count off every cell, then takes clues
+away one at a time for as long as exactly one loop still fits. Counting
+"exactly one" means counting loops rather than peg orders, so the search starts
+at the loop's lowest peg and keeps only the direction whose second peg is the
+smaller of that peg's neighbours — otherwise every loop is found once per
+rotation and once per direction.
+
+On the rule-based objectives there is no target to be near, so "how close was
+I" is the fraction of the rule satisfied — the honest answer for a level that
+never had one right picture. A corral that catches three of four marks says
+"3 of 4", not "75%".
 
 ## The Thread Score
 
@@ -222,7 +273,7 @@ it:
 
 The 322 levels are built by per-chapter *designers* — parameterised families of
 shapes, one idea per chapter — and every candidate is vetted individually by
-the six-check gate before it is accepted, then vetted again as a set for
+the seven-check gate before it is accepted, then vetted again as a set for
 repetition. `pnpm levels` regenerates them deterministically from a seed;
 `scripts/probe.ts` and `scripts/probew.ts` report a chapter's acceptance rate
 and why candidates are being rejected, which is how you tune one.

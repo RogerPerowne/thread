@@ -7,8 +7,18 @@
 import type { Pt } from './geometry.js';
 import { rotateAboutCentre, mirrorPoint, selfCrossings } from './geometry.js';
 import { makeRaster, rasterizeLoop, type Raster, topology, symmetryGroup, signature } from './region.js';
+import { type Objective, DEFAULT_OBJECTIVE, judgesShape } from './objective.js';
 
-export type Mode = 'classic' | 'weave' | 'daily' | 'blitz' | 'onelife' | 'zen' | 'assess';
+export { type Objective, DEFAULT_OBJECTIVE, judgesShape };
+
+/** A level's objective, defaulted. */
+export function objectiveOf(level: Level): Objective {
+  return level.objective ?? DEFAULT_OBJECTIVE;
+}
+
+export type Mode =
+  | 'classic' | 'weave' | 'daily' | 'blitz' | 'onelife' | 'zen' | 'assess'
+  | 'shadow' | 'par' | 'corral' | 'wire';
 
 export type ThreadSpec = {
   color: string;
@@ -36,6 +46,15 @@ export type Level = {
   mirror?: 'x' | 'y' | null;
   rotateTarget?: 0 | 90 | 180 | 270;
   budget?: number;
+  /**
+   * When present, the string may only run along these peg pairs. A board with
+   * wires is a graph rather than an open field — which is what makes a clue
+   * level's "how many of this cell's four sides does the loop use" a question
+   * with an answer.
+   */
+  wires?: [number, number][];
+  /** What the level asks. Absent means the original: reproduce the shape. */
+  objective?: Objective;
   threads: ThreadSpec[];
   /** Marks a level as an unusually beautiful shape — roughly 1 in 15. */
   gem?: boolean;
@@ -44,6 +63,7 @@ export type Level = {
 export const MECHANICS = [
   'loop', 'budget', 'cross', 'keyhole', 'post', 'gold', 'thorn',
   'multi', 'weave', 'blend', 'portal', 'rail', 'fog', 'mirror', 'rotate',
+  'silhouette', 'par', 'enclose', 'clue', 'wire',
 ] as const;
 export type Mechanic = (typeof MECHANICS)[number];
 
@@ -68,6 +88,12 @@ export function mechanicsOf(level: Level): Mechanic[] {
   if (level.threads.length > 1) m.add('multi');
   if (level.weave) m.add('weave');
   if (level.threads.length > 1 && blendPossible(level)) m.add('blend');
+  if (level.wires?.length) m.add('wire');
+  const obj = objectiveOf(level);
+  if (obj.kind === 'silhouette') m.add('silhouette');
+  if (obj.kind === 'par') m.add('par');
+  if (obj.kind === 'enclose') m.add('enclose');
+  if (obj.kind === 'clue') m.add('clue');
   for (const t of level.threads) if (hasRepeatedPeg(t.sol)) m.add('keyhole');
   return [...m];
 }
@@ -274,6 +300,54 @@ export function validateLevel(level: unknown): Level {
   if (l.rails) {
     for (const r of l.rails) {
       if (!Number.isInteger(r.peg) || r.peg < 0 || r.peg >= l.pegs.length) fail(`rail references peg ${r.peg}`);
+    }
+  }
+  if (l.wires) {
+    if (!Array.isArray(l.wires)) fail('wires must be an array');
+    for (const w of l.wires) {
+      if (!Array.isArray(w) || w.length !== 2) fail('wire malformed');
+      for (const p of w) if (!Number.isInteger(p) || p < 0 || p >= l.pegs.length) fail(`wire references peg ${p}`);
+    }
+    // A solution that cannot be threaded is not a solution.
+    const ok = new Set(l.wires.map(([a, b]) => (a < b ? `${a},${b}` : `${b},${a}`)));
+    for (const t of l.threads) {
+      for (let i = 0; i < t.sol.length; i++) {
+        const a = t.sol[i], b = t.sol[(i + 1) % t.sol.length];
+        if (!ok.has(a < b ? `${a},${b}` : `${b},${a}`)) fail(`solution uses ${a}-${b}, which is not a wire`);
+      }
+    }
+  }
+  const objective = l.objective;
+  if (objective) {
+    if (objective.kind === 'par') {
+      if (!Number.isInteger(objective.segments) || objective.segments < 3) {
+        fail('par needs a segment count of 3 or more');
+      }
+      const longest = Math.max(...l.threads.map((t) => t.sol.length));
+      if (longest > objective.segments) {
+        fail(`par ${objective.segments} is fewer segments than its own solution uses`);
+      }
+    }
+    if (objective.kind === 'enclose') {
+      const marks = [...objective.inside, ...objective.outside];
+      for (const p of marks) {
+        if (!Number.isInteger(p) || p < 0 || p >= l.pegs.length) fail(`enclose references peg ${p}`);
+      }
+      if (new Set(marks).size !== marks.length) fail('a peg is both inside and outside');
+      if (!Number.isInteger(objective.maxSegments) || objective.maxSegments < 3) {
+        fail('enclose needs a segment budget of 3 or more');
+      }
+      const used = new Set(l.threads.flatMap((t) => t.sol));
+      for (const p of marks) if (used.has(p)) fail(`marked peg ${p} is on the solution loop`);
+    }
+    if (objective.kind === 'clue') {
+      const cells = objective.cols * objective.rows;
+      if (cells <= 0) fail('clue grid is empty');
+      if (objective.clues.length !== cells) fail('clue list does not match the grid');
+      if (l.pegs.length !== (objective.cols + 1) * (objective.rows + 1)) {
+        fail('clue level pegs do not form its lattice');
+      }
+      if (!l.wires?.length) fail('clue level has no wires');
     }
   }
   if (l.budget !== undefined && (!Number.isFinite(l.budget) || l.budget <= 0)) fail('budget must be positive');

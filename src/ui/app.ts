@@ -15,15 +15,27 @@ import { audio } from '../render/audio.js';
 import { ticker } from '../render/tween.js';
 import classicRaw from '../../levels/classic.json';
 import weaveRaw from '../../levels/weave.json';
+import shadowRaw from '../../levels/shadow.json';
+import parRaw from '../../levels/par.json';
+import corralRaw from '../../levels/corral.json';
+import wireRaw from '../../levels/wire.json';
 import assessRaw from '../../levels/assess.json';
+
+/** The modes laid out as chapters of levels, rather than as endless runs. */
+export const CHAPTER_MODES = ['classic', 'weave', 'shadow', 'par', 'corral', 'wire'] as const;
+export type ChapterMode = (typeof CHAPTER_MODES)[number];
+
+export function isChapterMode(v: string): v is ChapterMode {
+  return (CHAPTER_MODES as readonly string[]).includes(v);
+}
 
 export type Route =
   | { name: 'home' }
   | { name: 'gallery' }
   | { name: 'stats' }
   | { name: 'settings' }
-  | { name: 'chapters'; mode: 'classic' | 'weave' }
-  | { name: 'levels'; mode: 'classic' | 'weave'; chapter: number }
+  | { name: 'chapters'; mode: ChapterMode }
+  | { name: 'levels'; mode: ChapterMode; chapter: number }
   | { name: 'play'; mode: string; levelId?: string; index?: number; seed?: string }
   | { name: 'assess' }
   | { name: 'workshop' };
@@ -31,6 +43,10 @@ export type Route =
 export const MODE_ACCENT: Record<string, string> = {
   classic: 'var(--classic)',
   weave: 'var(--weave)',
+  shadow: 'var(--onelife)',
+  par: 'var(--zen)',
+  corral: 'var(--daily)',
+  wire: 'var(--assess)',
   daily: 'var(--daily)',
   blitz: 'var(--blitz)',
   assess: 'var(--assess)',
@@ -38,6 +54,15 @@ export const MODE_ACCENT: Record<string, string> = {
   onelife: 'var(--onelife)',
   workshop: 'var(--workshop)',
   shared: 'var(--workshop)',
+};
+
+export const MODE_TITLE: Record<string, string> = {
+  classic: 'Classic',
+  weave: 'Weave',
+  shadow: 'Shadow',
+  par: 'Par',
+  corral: 'Corral',
+  wire: 'Wire',
 };
 
 export const MODE_BLURB: Record<string, string> = {
@@ -49,12 +74,20 @@ export const MODE_BLURB: Record<string, string> = {
   zen: 'No timer, no spool. Play to think.',
   assess: 'Twelve adaptive puzzles. Your Thread Score.',
   workshop: 'Build a level. Share it as a code.',
+  shadow: 'The shape, never the order. Work it out.',
+  par: 'The same shape, in as few pegs as it takes.',
+  corral: 'No target. Fence some in, leave the rest out.',
+  wire: 'No target. Numbers count the sides a loop uses.',
 };
 
 export class App {
   save: Save;
   readonly classic: Level[];
   readonly weave: Level[];
+  readonly shadow: Level[];
+  readonly par: Level[];
+  readonly corral: Level[];
+  readonly wire: Level[];
   readonly assess: Level[];
   private screenEl: HTMLElement;
   private tabs: HTMLElement;
@@ -65,6 +98,10 @@ export class App {
     this.save = load();
     this.classic = (classicRaw as unknown[]).map((l) => validateLevel(l));
     this.weave = (weaveRaw as unknown[]).map((l) => validateLevel(l));
+    this.shadow = (shadowRaw as unknown[]).map((l) => validateLevel(l));
+    this.par = (parRaw as unknown[]).map((l) => validateLevel(l));
+    this.corral = (corralRaw as unknown[]).map((l) => validateLevel(l));
+    this.wire = (wireRaw as unknown[]).map((l) => validateLevel(l));
     this.assess = (assessRaw as unknown[]).map((l) => validateLevel(l));
 
     this.screenEl = h('div', { class: 'screen' });
@@ -115,20 +152,29 @@ export class App {
 
   // -- level registry ------------------------------------------------------
 
-  levelsFor(mode: 'classic' | 'weave'): Level[] {
-    return mode === 'classic' ? this.classic : this.weave;
+  levelsFor(mode: ChapterMode): Level[] {
+    return this[mode];
   }
 
-  chapterLevels(mode: 'classic' | 'weave', chapter: number): Level[] {
+  chapterLevels(mode: ChapterMode, chapter: number): Level[] {
     return this.levelsFor(mode).filter((l) => l.chapter === chapter);
   }
 
-  chapters(mode: 'classic' | 'weave'): number[] {
+  chapters(mode: ChapterMode): number[] {
     return [...new Set(this.levelsFor(mode).map((l) => l.chapter))].sort((a, b) => a - b);
   }
 
+  /** Every level laid out as a chapter — the Gallery's and Stats' universe. */
+  get campaignLevels(): Level[] {
+    return CHAPTER_MODES.flatMap((m) => this[m]);
+  }
+
+  get everyLevel(): Level[] {
+    return [...this.campaignLevels, ...this.assess];
+  }
+
   levelById(id: string): Level | null {
-    return [...this.classic, ...this.weave, ...this.assess].find((l) => l.id === id) ?? null;
+    return this.everyLevel.find((l) => l.id === id) ?? null;
   }
 
   get unlockCtx(): UnlockCtx {
@@ -144,7 +190,7 @@ export class App {
   }
 
   /** The next unsolved level in a mode — what Continue resumes. */
-  nextLevel(mode: 'classic' | 'weave'): Level {
+  nextLevel(mode: ChapterMode): Level {
     const all = this.levelsFor(mode);
     return all.find((l) => !(this.save.levels[l.id]?.stars > 0)) ?? all[all.length - 1];
   }
@@ -233,10 +279,10 @@ export class App {
         this.go({ name } as Route, { replace: true });
         break;
       case 'chapters':
-        if (a === 'classic' || a === 'weave') this.go({ name: 'chapters', mode: a }, { replace: true });
+        if (a && isChapterMode(a)) this.go({ name: 'chapters', mode: a }, { replace: true });
         break;
       case 'levels':
-        if ((a === 'classic' || a === 'weave') && b) {
+        if (a && isChapterMode(a) && b) {
           this.go({ name: 'levels', mode: a, chapter: Number(b) }, { replace: true });
         }
         break;

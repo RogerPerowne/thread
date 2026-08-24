@@ -9,7 +9,7 @@
 
 import type { Pt } from '../core/geometry.js';
 import { dist } from '../core/geometry.js';
-import { type Level, deriveTarget, parLength, mechanicsOf, effectiveLoop, initialRailPos } from '../core/level.js';
+import { type Level, deriveTarget, parLength, mechanicsOf, effectiveLoop, initialRailPos, objectiveOf } from '../core/level.js';
 import {
   initialState, evaluate, canClose, normalizeClosedPath, threadPoints, lengthUsed,
   allCrossings, REJECT_TEXT, WIN_THRESHOLD,
@@ -38,6 +38,12 @@ export type PlayResult = {
   executionMs: number;
   searchOps: number;
   raster: Raster;
+  /** Why it was not a win. Different objectives fail for different reasons. */
+  fault: Evaluation['fault'];
+  /** Marked pegs on the wrong side, on a corral level. */
+  wrongPegs?: number[];
+  /** Cells whose count is wrong, on a clue level. */
+  wrongCells?: number[];
 };
 
 export type EngineHooks = {
@@ -437,7 +443,12 @@ export class Engine {
         break;
       }
       case 'reject': {
-        const msg = REJECT_TEXT[a.reason];
+        // On a corral the marks are thorns underneath, but "thorns pop the
+        // string" is a rule from another mode. What the player needs to hear
+        // is that the fence goes round them.
+        const marked = objectiveOf(this.level).kind === 'enclose'
+          && (a.reason === 'thorn-peg' || a.reason === 'thorn-contact');
+        const msg = marked ? 'The fence goes around a mark, not through it' : REJECT_TEXT[a.reason];
         if (msg) this.hooks.onToast?.(msg);
         haptics.bump();
         this.nudgePeg(a.peg);
@@ -573,6 +584,9 @@ export class Engine {
       executionMs: this.firstPegAt < 0 ? 0 : now - this.firstPegAt,
       searchOps: this.searchOps,
       raster: e.raster,
+      fault: e.fault,
+      wrongPegs: e.wrongPegs,
+      wrongCells: e.wrongCells,
     };
   }
 
@@ -703,6 +717,11 @@ export class Engine {
     if (!this.level || this.level.budget === undefined) return null;
     const used = lengthUsed(this.level, this.state);
     return { used, budget: this.level.budget, fraction: Math.max(0, 1 - used / this.level.budget) };
+  }
+
+  /** Pegs threaded so far, across every thread — what par and corral count. */
+  get movesUsed(): number {
+    return this.state.threads.reduce((n, t) => n + t.pegs.length, 0);
   }
 
   get mechanics(): string[] {

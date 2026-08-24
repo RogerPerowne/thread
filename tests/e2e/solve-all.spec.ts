@@ -7,7 +7,10 @@ import { gotoApp, openLevel, solveByTapping, solveByDragging, isSolved, readCurr
  * interaction bugs are the ones that make a level feel impossible.
  */
 
-type Ids = { classic: string[]; weave: string[]; assess: string[] };
+type Ids = {
+  classic: string[]; weave: string[]; assess: string[];
+  shadow: string[]; par: string[]; corral: string[]; wire: string[];
+};
 
 async function allIds(page: import('@playwright/test').Page): Promise<Ids> {
   await gotoApp(page);
@@ -53,6 +56,24 @@ test('every assessment item is solvable by hand', async ({ page }) => {
     expect(await isSolved(page), `${id} was not solved`).toBe(true);
   }
 });
+
+/*
+ * The four modes that ask something other than "copy this shape" are solved
+ * the same way: by threading their authored answer through real taps. A
+ * corral has more than one right answer, so this proves the authored one is
+ * among them; a clue board has exactly one, so this proves it is reachable.
+ */
+for (const mode of ['shadow', 'par', 'corral', 'wire'] as const) {
+  test(`every ${mode} level is solvable by hand`, async ({ page }) => {
+    const ids = await allIds(page);
+    expect(ids[mode].length).toBeGreaterThan(10);
+    for (const id of ids[mode]) {
+      const level = await openLevel(page, mode, id);
+      await solveByTapping(page, level);
+      expect(await isSolved(page), `${id} was not solved`).toBe(true);
+    }
+  });
+}
 
 test('the first level of every classic chapter is solvable by DRAGGING', async ({ page }) => {
   const ids = await allIds(page);

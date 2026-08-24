@@ -81,6 +81,28 @@ const MARKS: Record<string, Draw> = {
   ],
   // A keyhole: the shape with a hole in it.
   workshop: (ink) => [poly(ring(4, 30), ink), poly(ring(4, 13), ink, 'none', 4.5)],
+  // A filled shape with no outline: the region, and nothing about the order.
+  shadow: (ink) => [poly(ring(5, 30), ink, ink, 0)],
+  // Four corners found among the pegs along the edges.
+  par: (ink) => {
+    const p = ring(4, 30);
+    const mids = p.map((a, i) => {
+      const b = p[(i + 1) % 4];
+      return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as [number, number];
+    });
+    return [poly(p, ink), ...mids.map(([x, y]) => dot(x, y, ink, 2.6))];
+  },
+  // A fence, with what it keeps in and what it keeps out.
+  corral: (ink) => [
+    poly(ring(6, 28), ink),
+    dot(50, 44, ink, 4),
+    path('M78 22 L88 32 M88 22 L78 32', ink, 'none', 4),
+  ],
+  // A grid with a number in it.
+  wire: (ink) => [
+    path('M22 22 H78 M22 50 H78 M22 78 H78 M22 22 V78 M50 22 V78 M78 22 V78', ink, 'none', 4),
+    path('M36 40 L36 60', ink, 'none', 6),
+  ],
 };
 
 const SOFT: Record<string, string> = {
@@ -198,6 +220,16 @@ export function download(size = 20): SVGSVGElement {
 export function codeMark(size = 20): SVGSVGElement {
   return markSvg(size, line('M9.5 7.5 L5 12 L9.5 16.5', 2.1),
     line('M14.5 7.5 L19 12 L14.5 16.5', 2.1));
+}
+
+/** Take me back to where I am — a locator, so it does not have to know
+ *  whether the thing it is finding is above or below. */
+export function locate(size = 18): SVGSVGElement {
+  return markSvg(size,
+    svg('circle', { cx: 12, cy: 12, r: 5.4, fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2 }),
+    svg('circle', { cx: 12, cy: 12, r: 1.7, fill: 'currentColor' }),
+    line('M12 2.6 V5.4 M12 18.6 V21.4 M2.6 12 H5.4 M18.6 12 H21.4', 2.2),
+  );
 }
 
 /** A star, filled or hollow, for a level's three-star rating. */

@@ -529,6 +529,14 @@ button { font: inherit; color: inherit; }
   color: var(--mute);
 }
 .hud .meta .stars { color: var(--gold); letter-spacing: 1.5px; }
+/* What the level is asking for, on the levels that ask something. A rule you
+   have to infer is not a puzzle, it is a trick. */
+.hud .ask {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-2);
+  font-weight: 500;
+}
 .spool {
   flex: 1;
   height: 6px;
@@ -1183,8 +1191,10 @@ pre.share {
   color: var(--card-ink);
   margin-top: 2px;
 }
+.chapterhead .iconbtn:last-of-type { justify-self: end; }
 .headtext {
   grid-column: 2;
+  grid-row: 1;
   text-align: center;
   min-width: 0;
 }
@@ -1252,32 +1262,70 @@ pre.share {
 }
 .ptile.next { animation: ptile-pulse 3.4s var(--ease) infinite; }
 
-/* Fixed, not absolute: on a long chapter the document is what scrolls, so an
-   absolutely-positioned button would sit at the very bottom of the path rather
-   than floating over it. */
-.jumpbtn {
-  position: fixed;
-  left: 50%;
-  bottom: calc(20px + var(--safe-b));
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 0 20px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
-  font-family: var(--ui);
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: var(--shadow-2);
-  z-index: 3;
+
+/* --- going into a level --------------------------------------------------- */
+/*
+ * The tile you press becomes the card, and the card becomes the board. While
+ * the camera rises, everything that is not that tile gets out of the way.
+ */
+.pathsvg.flying .ptile:not(.takeoff),
+.pathsvg.flying .ptext { opacity: 0; transition: opacity 220ms var(--ease); }
+.pathsvg.flying g[mask] { opacity: 0; transition: opacity 300ms var(--ease); }
+.pathsvg.flying .ptile.takeoff .ptext { opacity: 0; }
+.pathsvg.flying .ptile.next { animation: none; }
+.chapterscreen:has(.pathsvg.flying) .chapterhead {
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+  pointer-events: none;
 }
-.jumpbtn:active { transform: translateX(-50%) scale(0.96); }
-.jumpbtn .arrow { font-size: 17px; line-height: 1; }
+
+.entercard {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 70;
+  transform-origin: top left;
+  background: var(--paper);
+  border-radius: var(--r-xl);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  will-change: transform, width, height;
+}
+.entercard.landing { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14); }
+.cardbody {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  padding: 8%;
+  text-align: center;
+  color: var(--ink);
+}
+.entercard .cardart {
+  width: 74%;
+  aspect-ratio: 1;
+  color: var(--card);
+  margin-bottom: 6%;
+}
+.entercard .cardart svg { width: 100%; height: 100%; display: block; }
+.cardeyebrow {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.cardtitle {
+  font-size: clamp(19px, 5.4vw, 26px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+/* The board arrives under the card rather than cutting in over it. */
+.playwrap.arriving { opacity: 0; }
 
 /* --- accessibility ------------------------------------------------------- */
 
