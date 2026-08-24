@@ -11,7 +11,7 @@
 
 import type { Pt } from '../core/geometry.js';
 import { type Level, isPortalEdge, portalTwin, objectiveOf } from '../core/level.js';
-import { showsOutline, cellWires, usedWires } from '../core/objective.js';
+import { showsOutline, showsRegion, cellWires, usedWires } from '../core/objective.js';
 import type { PlayState } from '../core/rules.js';
 import { pegPos } from '../core/rules.js';
 import { GRID, type Raster } from '../core/region.js';
@@ -80,6 +80,13 @@ export class BoardScene {
   threadFill: SVGPathElement[] = [];
   private portalGhost: SVGPathElement[] = [];
   private targetFill: SVGPathElement[] = [];
+  /*
+   * The ghost's opacity at full reveal. Held as state because the reveal tween
+   * scales it: a silhouette or corral level must not get the classic outline
+   * back the moment the level fades in — that dashed edge IS the answer.
+   */
+  private ghostFillMax = 0.1;
+  private ghostStrokeMax = 0.42;
   /** One per cell, null where the cell says nothing. */
   private clueNodes: (SVGTextElement | null)[] = [];
   /** One break mark per crossing, for the over/under weave. */
@@ -194,17 +201,20 @@ export class BoardScene {
       // The ghost is drawn in the thread's own colour: it is the shape you are
       // about to make, not a neutral annotation beside it.
       const ghostInk = level.threads[t].color || opts.theme.target;
+      /*
+       * A silhouette shows the region and nothing else: the dashed outline
+       * names the pegs and the order, which is the answer. Its fill is a
+       * little stronger to make up for having no edge to read. A corral or a
+       * clue board shows neither — there the region IS the answer.
+       */
+      this.ghostFillMax = showsRegion(objective) ? (showsOutline(objective) ? 0.1 : 0.2) : 0;
+      this.ghostStrokeMax = showsOutline(objective) ? 0.42 : 0;
       const p = el('path', {
         'fill-rule': 'evenodd',
         fill: ghostInk,
-        /*
-         * A silhouette level shows the region and nothing else: the dashed
-         * outline names the pegs and the order, which is the answer. The fill
-         * is a little stronger to make up for having no edge.
-         */
-        'fill-opacity': opts.showTarget ? (showsOutline(objective) ? 0.1 : 0.16) : 0,
+        'fill-opacity': opts.showTarget ? this.ghostFillMax : 0,
         stroke: ghostInk,
-        'stroke-opacity': opts.showTarget && showsOutline(objective) ? 0.42 : 0,
+        'stroke-opacity': opts.showTarget ? this.ghostStrokeMax : 0,
         'stroke-width': 0.6,
         'stroke-dasharray': '2.2 1.8',
         'stroke-linecap': 'round',
@@ -406,8 +416,8 @@ export class BoardScene {
 
   setTargetVisible(v: number): void {
     for (const p of this.targetFill) {
-      p.setAttribute('fill-opacity', String(0.1 * v));
-      p.setAttribute('stroke-opacity', String(0.42 * v));
+      p.setAttribute('fill-opacity', String(this.ghostFillMax * v));
+      p.setAttribute('stroke-opacity', String(this.ghostStrokeMax * v));
     }
   }
 

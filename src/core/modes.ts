@@ -98,25 +98,32 @@ function shadowOutline(from: number, to: number): Maker {
  * them. Stopping at a spare peg changes nothing about the region and costs a
  * move, so the level is "which of these are the corners".
  */
-function parMaker(corners: number[], spareMax: number): Maker {
+function parMaker(corners: number[], extra: number): Maker {
   return (rng, i) => {
-    // Corner count and spare pattern both step with the level index. A chapter
-    // may only hold two levels of one topology, and topology here is mostly
-    // "how many pegs and how many corners" — so a maker that varies only the
-    // radius fills two slots and then spends the rest of the chapter's budget
-    // proposing levels that are refused for being the same again.
+    /*
+     * Corner count steps with the level index, and so does the number of spare
+     * pegs, which are spread round-robin over the edges. The peg total is
+     * therefore n + n + i*extra and moves on every level.
+     *
+     * That total is most of a level's topology signature, and two levels with
+     * the same signature within five of each other are refused as repetition.
+     * A maker that varies only the radius fills a few slots and then spends the
+     * rest of the chapter's budget proposing shapes that are turned away for
+     * being the same again: six of ten, and then four minutes of nothing.
+     */
     const n = corners[i % corners.length];
-    const bump = Math.floor(i / corners.length) % spareMax;
     const r = 33 + rng.range(-3, 5);
     const rot = rng.range(0, Math.PI * 2);
     const hull = ringPoints(n, r, rot);
     const pegs: [number, number][] = hull.map(([x, y]) => [round1(x), round1(y)]);
     const sol = hull.map((_, k) => k);
+
+    const perEdge = new Array<number>(n).fill(0);
+    for (let k = 0; k < n + i * extra; k++) perEdge[k % n]++;
     for (let e = 0; e < n; e++) {
       const a = hull[e], b = hull[(e + 1) % n];
-      const spares = 1 + ((e + bump) % spareMax);
-      for (let s = 1; s <= spares; s++) {
-        const t = s / (spares + 1);
+      for (let k = 1; k <= perEdge[e]; k++) {
+        const t = k / (perEdge[e] + 1);
         pegs.push([round1(a[0] + (b[0] - a[0]) * t), round1(a[1] + (b[1] - a[1]) * t)]);
       }
     }
@@ -274,7 +281,7 @@ export const CORRAL_CHAPTERS: ChapterSpec[] = [
 ];
 
 export const WIRE_CHAPTERS: ChapterSpec[] = [
-  { chapter: 1, name: 'Wire', idea: 'Each number counts the sides of its cell the loop uses', count: 10, make: wireMaker(3, 3, [2, 4], 4) },
+  { chapter: 1, name: 'Wire', idea: 'Each number is how many of its cell’s four sides the loop uses', count: 10, make: wireMaker(3, 3, [2, 4], 4) },
   { chapter: 2, name: 'Grid', idea: 'A bigger board, and fewer numbers', count: 10, make: wireMaker(4, 4, [3, 7], 3) },
   { chapter: 3, name: 'Sparse', idea: 'Only what is needed to pin it down', count: 12, make: wireMaker(5, 5, [5, 11], 0) },
 ];

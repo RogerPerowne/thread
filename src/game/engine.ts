@@ -9,7 +9,7 @@
 
 import type { Pt } from '../core/geometry.js';
 import { dist } from '../core/geometry.js';
-import { type Level, deriveTarget, parLength, mechanicsOf, effectiveLoop, initialRailPos } from '../core/level.js';
+import { type Level, deriveTarget, parLength, mechanicsOf, effectiveLoop, initialRailPos, objectiveOf } from '../core/level.js';
 import {
   initialState, evaluate, canClose, normalizeClosedPath, threadPoints, lengthUsed,
   allCrossings, REJECT_TEXT, WIN_THRESHOLD,
@@ -443,7 +443,12 @@ export class Engine {
         break;
       }
       case 'reject': {
-        const msg = REJECT_TEXT[a.reason];
+        // On a corral the marks are thorns underneath, but "thorns pop the
+        // string" is a rule from another mode. What the player needs to hear
+        // is that the fence goes round them.
+        const marked = objectiveOf(this.level).kind === 'enclose'
+          && (a.reason === 'thorn-peg' || a.reason === 'thorn-contact');
+        const msg = marked ? 'The fence goes around a mark, not through it' : REJECT_TEXT[a.reason];
         if (msg) this.hooks.onToast?.(msg);
         haptics.bump();
         this.nudgePeg(a.peg);

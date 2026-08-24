@@ -146,7 +146,8 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     }
     // The ask is live where it counts down — a corral's remaining segments and
     // a par level's remaining moves both change with every peg.
-    const askText = describeAsk(current, engine.movesUsed);
+    // refreshHud can fire from the engine before the first level is in place.
+    const askText = current ? describeAsk(current, engine.movesUsed) : '';
     if (askLine.textContent !== askText) askLine.textContent = askText;
     askLine.style.display = askText ? '' : 'none';
 
@@ -212,6 +213,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
       pegs: level.pegs,
       threads: level.threads.map((t) => ({ sol: t.sol, over: t.over ?? [] })),
       rails: level.rails ?? [],
+      wires: level.wires ?? [],
       weave: !!level.weave,
       solved: false,
     };
@@ -662,7 +664,7 @@ function describeAsk(level: Level, moves: number): string {
         + ` \u00b7 ${left >= 0 ? `${left} pegs left` : `${-left} over`}`;
     }
     case 'clue':
-      return 'Each number counts the sides of its cell the loop uses';
+      return 'Each number is how many of its cell’s four sides the loop uses';
     default:
       return '';
   }

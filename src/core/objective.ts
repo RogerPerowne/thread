@@ -51,6 +51,22 @@ export function showsOutline(o: Objective): boolean {
   return o.kind === 'shape' || o.kind === 'par';
 }
 
+/**
+ * Whether the target region may be drawn on the board at all.
+ *
+ * A corral and a clue board ask a rule, not a picture: shading the region the
+ * answer encloses would BE the answer, and there would be nothing left to
+ * work out. A silhouette is the opposite case — the region is the whole
+ * puzzle and only the order is withheld.
+ *
+ * This happens to name the same set as `judgesShape`, but it answers a
+ * different question: one is what the game checks, the other is what the
+ * player is allowed to see.
+ */
+export function showsRegion(o: Objective): boolean {
+  return o.kind === 'shape' || o.kind === 'silhouette' || o.kind === 'par';
+}
+
 // ---------------------------------------------------------------------------
 // Enclosure
 // ---------------------------------------------------------------------------

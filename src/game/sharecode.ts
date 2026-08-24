@@ -27,11 +27,24 @@ const T_RAILS = 5;
 const T_ROTATE = 6;
 const T_THREADS = 7;
 
+export class ShareCodeError extends Error {}
+
 /** Board coordinates are stored at half-unit precision: 0..100 -> 0..200. */
 const enc = (v: number) => Math.max(0, Math.min(200, Math.round(v * 2)));
 const dec = (b: number) => b / 2;
 
 export function encodeLevel(level: Level): string {
+  /*
+   * The format carries a board and a solution, which is everything a shape
+   * level is. It has no room for an objective or for wires, and the Workshop
+   * cannot author either — so rather than let a corral quietly decode as a
+   * shape level with a target derived from its fence, refuse outright.
+   */
+  if (level.objective && level.objective.kind !== 'shape') {
+    throw new ShareCodeError(`a ${level.objective.kind} level cannot be shared as a code`);
+  }
+  if (level.wires?.length) throw new ShareCodeError('a wired board cannot be shared as a code');
+
   const out: number[] = [];
   out.push(VERSION);
 
@@ -97,7 +110,6 @@ export function encodeLevel(level: Level): string {
   return toBase64Url(Uint8Array.from(out));
 }
 
-export class ShareCodeError extends Error {}
 
 export function decodeLevel(code: string, id = 'shared', mode: Mode = 'classic'): Level {
   let bytes: Uint8Array;

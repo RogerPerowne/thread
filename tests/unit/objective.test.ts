@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   pointInLoop, distanceToLoop, checkEnclose, checkClues, clueCountsOf,
-  latticeWires, latticeIndex, cellWires, usedWires,
+  latticeWires, latticeIndex, cellWires, usedWires, showsOutline, showsRegion,
 } from '../../src/core/objective.js';
 import { validateLevel, objectiveOf, mechanicsOf, type Level } from '../../src/core/level.js';
 import { evaluate, initialState, canAdd, hasWire } from '../../src/core/rules.js';
@@ -210,5 +210,22 @@ describe('wires', () => {
   it('declares its mechanics', () => {
     expect(mechanicsOf(level)).toContain('clue');
     expect(mechanicsOf(level)).toContain('wire');
+  });
+});
+
+describe('what the board is allowed to show', () => {
+  it('draws the region for the modes that ask for a shape, and hides it for the rules', () => {
+    expect(showsRegion({ kind: 'shape' })).toBe(true);
+    expect(showsRegion({ kind: 'silhouette' })).toBe(true);
+    expect(showsRegion({ kind: 'par', segments: 5 })).toBe(true);
+    // Shading the region a corral fences, or the one a clue board's loop
+    // encloses, would BE the answer.
+    expect(showsRegion({ kind: 'enclose', inside: [0], outside: [1], maxSegments: 6 })).toBe(false);
+    expect(showsRegion({ kind: 'clue', cols: 2, rows: 2, clues: [null, null, null, null] })).toBe(false);
+  });
+
+  it('keeps the order to itself on a silhouette, which still shows its region', () => {
+    expect(showsOutline({ kind: 'silhouette' })).toBe(false);
+    expect(showsRegion({ kind: 'silhouette' })).toBe(true);
   });
 });
