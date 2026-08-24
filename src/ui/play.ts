@@ -9,6 +9,7 @@
 
 import { h, clear, copy } from './dom.js';
 import { topBar, pill, modal, toast, miniature, stars, shareSheet } from './components.js';
+import { starRow as starMarks } from './icons.js';
 import type { App, Route } from './app.js';
 import { MODE_ACCENT } from './app.js';
 import { Engine, type PlayResult } from '../game/engine.js';
@@ -156,7 +157,8 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     label.textContent = session.title2(level);
     sub.textContent = session.label(level);
     const got = app.save.levels[level.id]?.stars ?? 0;
-    starRow.textContent = got ? '★'.repeat(got) + '☆'.repeat(3 - got) : '';
+    clear(starRow);
+    if (got) for (const st of starMarks(got)) starRow.appendChild(st);
     refreshPips(level);
   }
 

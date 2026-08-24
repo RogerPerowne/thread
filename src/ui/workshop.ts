@@ -6,6 +6,7 @@
  * time is the cheapest infinite content there is.
  */
 
+import { codeMark } from './icons.js';
 import { h, clear, copy } from './dom.js';
 import { topBar, pill, modal, toast } from './components.js';
 import { type App, MODE_ACCENT } from './app.js';
@@ -41,7 +42,9 @@ export function workshopScreen(app: App): { el: HTMLElement; dispose?: () => voi
   el.append(
     topBar('Workshop', {
       onBack: () => app.go({ name: 'home' }),
-      right: [h('button', { class: 'iconbtn', title: 'Open a code', onclick: openCode }, '⌘')],
+      right: [h('button', {
+        class: 'iconbtn', title: 'Open a code', 'aria-label': 'Open a code', onclick: openCode,
+      }, codeMark())],
     }),
     toolbar, boardEl, h('div', { class: 'spacer below' }), controls, primary,
   );

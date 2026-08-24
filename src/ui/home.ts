@@ -9,9 +9,10 @@
  */
 
 import { h, svg } from './dom.js';
-import { miniature, sectionHeader, toast, themeSwatch, threadSwatch } from './components.js';
-import { modeIcon, padlock } from './icons.js';
-import { type App, MODE_ACCENT, MODE_BLURB, type Route } from './app.js';
+import { miniature, sectionHeader, toast, themeSwatch, threadSwatch, gameCard } from './components.js';
+import { modeMark } from './icons.js';
+import { type App, MODE_BLURB, type Route } from './app.js';
+import { modeColor, chapterColor } from './palette.js';
 import { MODE_UNLOCKS, solvedCount, collectionCount } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
 import { themeUnlocked, skinUnlocked } from '../game/progress.js';
@@ -29,10 +30,8 @@ export function homeScreen(app: App): { el: HTMLElement; dispose?: () => void } 
 
   scroll.append(
     masthead(),
-    continueCard(app),
-    sectionHeader('Every day'),
-    dailyRow(app),
-    sectionHeader('Modes'),
+    h('div', { class: 'cardlist' }, continueCard(app), dailyCard(app)),
+    sectionHeader('Ways to play'),
     modeList(app),
     sectionHeader('Collection', { text: 'Stats', onClick: () => app.go({ name: 'stats' }) }),
     collectionRow(app),
@@ -138,55 +137,43 @@ function continueCard(app: App): HTMLElement {
   const name = level.name ?? `Chapter ${level.chapter}`;
   const started = app.save.stats.solved > 0;
 
-  return h('button', {
-    class: 'continue',
-    style: `--accent:${MODE_ACCENT[lastMode]}`,
-    onclick: () => app.go({ name: 'play', mode: lastMode, levelId: level.id }),
-  },
-    h('div', { class: 'tile lg', style: 'background:var(--panel)' }, miniature(level, { showPegs: true })),
-    h('div', { class: 'grow' },
-      h('h3', { class: 'display', text: started ? 'Keep going' : 'Start playing' }),
-      h('p', { text: `${lastMode === 'weave' ? 'Weave' : 'Classic'} · ${name}` }),
-      h('p', { class: 'num', text: `Level ${idx} of ${chapterLevels.length}` }),
-    ),
-    h('span', { class: 'go', text: started ? 'Play' : 'Play' }),
-  );
+  return gameCard({
+    id: 'continue',
+    color: chapterColor(lastMode, level.chapter),
+    title: started ? 'Keep going' : 'Start playing',
+    blurb: `${lastMode === 'weave' ? 'Weave' : 'Classic'} \u00b7 ${name}`,
+    foot: `Level ${idx} of ${chapterLevels.length}`,
+    note: started ? `${app.save.stats.solved} solved` : 'From the beginning',
+    art: miniature(level, { ink: 'var(--card-ink)', mono: true }),
+    onOpen: () => app.go({ name: 'play', mode: lastMode, levelId: level.id }),
+  });
 }
 
 // ---------------------------------------------------------------------------
 // 3. Daily
 // ---------------------------------------------------------------------------
 
-function dailyRow(app: App): HTMLElement {
+function dailyCard(app: App): HTMLElement {
   const key = dateKey();
   const level = dailyLevel(key);
   const rec = app.save.daily.history[key];
   const solved = rec?.solved ?? false;
 
-  const tile = h('div', { class: 'tile', style: 'background:var(--daily-soft)' },
-    solved ? miniature(level, { ink: 'var(--daily)' }) : modeIcon('daily'));
-
   // No server means no honest "% of players who solved it today", and inventing
   // one would be presenting a fabricated statistic as fact. How hard today's
   // puzzle is can be said truthfully, from the same estimator used everywhere.
-  const band = difficultyBand(level);
+  const streak = app.save.daily.streak;
 
-  return h('button', {
-    class: 'gamerow strip',
-    onclick: () => app.go({ name: 'play', mode: 'daily' }),
-  },
-    tile,
-    h('div', { class: 'grow' },
-      h('h4', { class: 'display', text: 'Daily Thread' }),
-      h('p', { text: solved ? `Solved · ${band}` : band }),
-    ),
-    h('span', { class: 'meta' },
-      app.save.daily.streak > 0
-        ? h('span', { class: 'streakpill' }, '◆', h('span', { class: 'num', text: String(app.save.daily.streak) }))
-        : h('span', { text: solved ? 'Done' : 'New' }),
-      h('span', { class: 'chev', text: '›' }),
-    ),
-  );
+  return gameCard({
+    id: 'daily',
+    color: modeColor('daily'),
+    title: 'Daily Thread',
+    blurb: solved ? `Solved. ${difficultyBand(level)}.` : `${difficultyBand(level)}.`,
+    foot: today(),
+    note: streak > 0 ? `${streak} day streak` : solved ? 'Done' : 'Same for everyone',
+    art: solved ? miniature(level, { ink: 'var(--card-ink)', mono: true }) : modeMark('daily', 'var(--card-ink)'),
+    onOpen: () => app.go({ name: 'play', mode: 'daily' }),
+  });
 }
 
 /** An honest read on today's puzzle, from the static difficulty estimator. */
@@ -208,37 +195,35 @@ const HOME_ORDER = ['classic', 'weave', 'blitz', 'onelife', 'zen', 'assess', 'wo
 
 function modeList(app: App): HTMLElement {
   const unlocked = app.modes;
-  const list = h('div', { class: 'list' });
+  const list = h('div', { class: 'cardlist' });
   const rules = [...MODE_UNLOCKS].sort(
     (a, b) => HOME_ORDER.indexOf(a.id) - HOME_ORDER.indexOf(b.id),
   );
 
   for (const rule of rules) {
     const id = rule.id;
-    if (id === 'daily') continue; // it has its own row
+    if (id === 'daily') continue; // it has a card of its own
     const open = unlocked.has(id);
     const progress = progressFor(app, id);
 
-    list.appendChild(h('button', {
-      class: `gamerow modecard${open ? '' : ' locked'}`,
-      onclick: () => {
+    list.appendChild(gameCard({
+      id,
+      color: modeColor(id),
+      title: rule.label,
+      // Locked modes still say what they are and what opens them. A visible
+      // goal is worth more than a mystery.
+      blurb: open ? MODE_BLURB[id] ?? '' : rule.condition,
+      foot: open ? progress.text : 'Locked',
+      art: modeMark(id, 'var(--card-ink)'),
+      locked: !open,
+      onOpen: () => {
         if (!open) {
           toast(rule.condition);
           return;
         }
         app.go(routeFor(id));
       },
-    },
-      h('div', { class: 'tile' }, modeIcon(id)),
-      h('div', { class: 'grow' },
-        h('h4', { class: 'display', text: rule.label }),
-        h('p', { class: open ? '' : 'lockline', text: open ? MODE_BLURB[id] ?? '' : rule.condition }),
-      ),
-      h('span', { class: 'meta' },
-        open ? h('span', { class: 'num', text: progress.text }) : padlock(),
-        h('span', { class: 'chev', text: '›' }),
-      ),
-    ));
+    }));
   }
   return list;
 }

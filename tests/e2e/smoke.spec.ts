@@ -4,10 +4,20 @@ import { gotoApp, openLevel, solveByTapping, isSolved, waitForBoard } from './he
 test('the home screen shows the wordmark, continue card, daily and modes', async ({ page }) => {
   await gotoApp(page);
   await expect(page.locator('.wordmark')).toHaveText('THREAD');
-  await expect(page.locator('.continue')).toBeVisible();
-  await expect(page.locator('.strip')).toContainText('Daily Thread');
-  await expect(page.locator('.modecard').first()).toBeVisible();
+  await expect(page.locator('[data-card="continue"]')).toBeVisible();
+  await expect(page.locator('[data-card="daily"]')).toContainText('Daily Thread');
+  await expect(page.locator('[data-card="classic"]')).toBeVisible();
   await expect(page.locator('.tabbar .tab')).toHaveCount(4);
+});
+
+test('every card on the home screen carries its colour and reads in black', async ({ page }) => {
+  await gotoApp(page);
+  const cards = page.locator('.gamecard');
+  expect(await cards.count()).toBeGreaterThan(6);
+  for (const card of await cards.all()) {
+    const bg = await card.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+  }
 });
 
 test('the ambient header animates without rebuilding itself', async ({ page }) => {
@@ -21,9 +31,10 @@ test('the ambient header animates without rebuilding itself', async ({ page }) =
 
 test('locked modes state their unlock condition plainly', async ({ page }) => {
   await gotoApp(page);
-  const locked = page.locator('.modecard.locked').first();
+  const locked = page.locator('.gamecard.locked').first();
   await expect(locked).toBeVisible();
   await expect(locked.locator('.lockline')).toContainText(/Solve|Perfect|Finish/);
+  await expect(locked.locator('.lockbadge')).toBeVisible();
 });
 
 test('the tabs move between home, gallery, stats and settings', async ({ page }) => {
