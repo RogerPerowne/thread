@@ -395,9 +395,14 @@ export function evaluate(
   if (sim < WIN_THRESHOLD) {
     return { win: false, similarity: sim, raster: evalRaster, fault: 'shape', lengthUsed: used };
   }
-  // The shape is right; on a par level it also has to be the short way round.
-  if (objective.kind === 'par' && used > objective.par + 1e-6) {
-    return { win: false, similarity: sim, raster: evalRaster, fault: 'par', lengthUsed: used };
+  // The shape is right; on a par level it also has to be done in the moves
+  // allowed. The spare pegs make the same region reachable many ways, so what
+  // is being asked for is the corners rather than the outline.
+  if (objective.kind === 'par') {
+    const moves = state.threads.reduce((n, t) => n + t.pegs.length, 0);
+    if (moves > objective.segments) {
+      return { win: false, similarity: sim, raster: evalRaster, fault: 'par', lengthUsed: used };
+    }
   }
   if (level.weave) {
     // The same board effect must be applied on both sides, or the crossings

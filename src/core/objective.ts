@@ -15,8 +15,11 @@
  *   silhouette  reproduce the region. Only the filled area is shown, so on a
  *               level whose pegs admit more than one region you have to work
  *               out the order rather than read it off.
- *   par         reproduce the region, in no more string than par. Par is the
- *               provably shortest order, so this is an optimisation.
+ *   par         reproduce the region in at most this many segments. Boards
+ *               carry spare pegs along the edges of the shape, so the region
+ *               is the same however many of them you stop at: the puzzle is
+ *               to find its corners. Length is already the spool's job, so
+ *               par counts moves instead.
  *   enclose     no target at all: enclose these pegs, exclude those, within a
  *               segment budget. You invent the loop.
  *   clue        no target at all: the string runs along the board's wires, and
@@ -32,7 +35,7 @@ import type { Pt } from './geometry.js';
 export type Objective =
   | { kind: 'shape' }
   | { kind: 'silhouette' }
-  | { kind: 'par'; par: number }
+  | { kind: 'par'; segments: number }
   | { kind: 'enclose'; inside: number[]; outside: number[]; maxSegments: number }
   | { kind: 'clue'; cols: number; rows: number; clues: (number | null)[] };
 
@@ -161,10 +164,17 @@ export function cellWires(cols: number, r: number, c: number): [number, number][
 
 const key = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
 
-/** The set of wires a closed peg order uses. */
-export function usedWires(order: readonly number[]): Set<string> {
+/**
+ * The wires a peg order uses.
+ *
+ * An open path uses the wires between consecutive pegs; a closed one also uses
+ * the wire back to the start. The board wants both: mid-loop, to show which
+ * clues are already met, and at the end, to judge.
+ */
+export function usedWires(order: readonly number[], closed = true): Set<string> {
   const s = new Set<string>();
-  for (let i = 0; i < order.length; i++) {
+  const last = closed ? order.length : order.length - 1;
+  for (let i = 0; i < last; i++) {
     s.add(key(order[i], order[(i + 1) % order.length]));
   }
   return s;

@@ -6,16 +6,17 @@ import {
   sparkline, radar, sectionHeader, themeSwatch, threadSwatch, gameCard,
 } from './components.js';
 import * as haptics from '../render/haptics.js';
-import { type App, MODE_ACCENT, type Route } from './app.js';
+import { type App, MODE_ACCENT, type Route, type ChapterMode, MODE_TITLE } from './app.js';
 import { CLASSIC_CHAPTERS, WEAVE_CHAPTERS } from '../core/design.js';
+import { MODE_CHAPTERS } from '../core/modes.js';
 import { chapterColor } from './palette.js';
-import { chevronRight, locate, download } from './icons.js';
+import { chevronRight, locate, download, modeMark } from './icons.js';
 import { chapterPath, type PathNode, type PathView } from './path.js';
 import { enterLevel, cancelEnter } from './enter.js';
 import { solvedCount, starCount, dailyArchive } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
 import { themeUnlocked, skinUnlocked } from '../game/progress.js';
-import { deriveTarget, type Level } from '../core/level.js';
+import { deriveTarget, objectiveOf, type Level } from '../core/level.js';
 import { resetSave } from '../game/storage.js';
 import { DISCLAIMER } from '../core/rating.js';
 
@@ -23,16 +24,29 @@ import { DISCLAIMER } from '../core/rating.js';
 // Chapters
 // ---------------------------------------------------------------------------
 
+/** Does this level put its answer on screen anyway? */
+function revealsShape(level: Level): boolean {
+  const k = objectiveOf(level).kind;
+  return k === 'shape' || k === 'silhouette' || k === 'par';
+}
+
+/** The chapter list a mode was built from, for its names and its ideas. */
+function chapterSpecs(mode: ChapterMode) {
+  if (mode === 'classic') return CLASSIC_CHAPTERS;
+  if (mode === 'weave') return WEAVE_CHAPTERS;
+  return MODE_CHAPTERS[mode] ?? [];
+}
+
 export function chaptersScreen(app: App, route: Route): { el: HTMLElement } {
   const r = route as Extract<Route, { name: 'chapters' }>;
   const scroll = h('div', { class: 'scroll' });
   const el = h('div', { class: 'screen', style: `--accent:${MODE_ACCENT[r.mode]}` },
-    topBar(r.mode === 'classic' ? 'Classic' : 'Weave', { onBack: () => app.go({ name: 'home' }) }),
+    topBar(MODE_TITLE[r.mode] ?? r.mode, { onBack: () => app.go({ name: 'home' }) }),
     scroll,
   );
 
   const list = h('div', { class: 'cardlist' });
-  const specs = r.mode === 'classic' ? CLASSIC_CHAPTERS : WEAVE_CHAPTERS;
+  const specs = chapterSpecs(r.mode);
   let previousComplete = true;
 
   for (const ch of app.chapters(r.mode)) {
@@ -54,7 +68,11 @@ export function chaptersScreen(app: App, route: Route): { el: HTMLElement } {
       blurb: idea,
       foot: open ? `Chapter ${ch}` : 'Locked',
       note: open ? `${done} of ${ids.length}` : `Finish Chapter ${ch - 1} first`,
-      art: miniature(levels[0], { ink: 'var(--card-ink)', mono: true }),
+      // A chapter of corrals or clue boards must not put one of its answers
+      // on the card that opens it.
+      art: revealsShape(levels[0])
+        ? miniature(levels[0], { ink: 'var(--card-ink)', mono: true })
+        : modeMark(r.mode, 'var(--card-ink)'),
       locked: !open,
       onOpen: () => {
         if (!open) {
@@ -79,7 +97,7 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
   const r = route as Extract<Route, { name: 'levels' }>;
   const levels = app.chapterLevels(r.mode, r.chapter);
   const color = chapterColor(r.mode, r.chapter);
-  const specs = r.mode === 'classic' ? CLASSIC_CHAPTERS : WEAVE_CHAPTERS;
+  const specs = chapterSpecs(r.mode);
   const idea = specs.find((sp) => sp.chapter === r.chapter)?.idea ?? '';
   const ids = levels.map((l) => l.id);
   const done = solvedCount(app.save, ids);
@@ -195,7 +213,7 @@ function chapterHeader(
         'stroke-linecap': 'round', 'stroke-linejoin': 'round',
       }))),
     h('div', { class: 'headtext' },
-      h('div', { class: 'eyebrow', text: `${r.mode === 'classic' ? 'Classic' : 'Weave'} \u00b7 Chapter ${r.chapter}` }),
+      h('div', { class: 'eyebrow', text: `${MODE_TITLE[r.mode] ?? r.mode} \u00b7 Chapter ${r.chapter}` }),
       h('h1', { class: 'display', text: title }),
       idea ? h('p', { class: 'idea', text: idea }) : null,
     ),
@@ -222,7 +240,7 @@ export function galleryScreen(app: App): { el: HTMLElement } {
     scroll,
   );
 
-  const all = [...app.classic, ...app.weave];
+  const all = app.campaignLevels;
   const solved = new Set(app.save.gallery);
 
   if (solved.size === 0) {
@@ -263,7 +281,7 @@ export function galleryScreen(app: App): { el: HTMLElement } {
 
 /** Rasterise the poster to a PNG the player can keep. */
 function exportPoster(app: App): void {
-  const solved = [...app.classic, ...app.weave].filter((l) => app.save.gallery.includes(l.id));
+  const solved = app.campaignLevels.filter((l) => app.save.gallery.includes(l.id));
   if (solved.length === 0) {
     toast('Solve a level first');
     return;
@@ -339,7 +357,7 @@ export function statsScreen(app: App): { el: HTMLElement } {
   const scroll = h('div', { class: 'scroll' });
   const el = h('div', { class: 'screen' }, topBar('Stats'), scroll);
   const s = app.save.stats;
-  const allIds = [...app.classic, ...app.weave].map((l) => l.id);
+  const allIds = app.campaignLevels.map((l) => l.id);
 
   const body = h('div', { style: 'padding:16px' });
   body.append(

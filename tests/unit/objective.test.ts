@@ -116,37 +116,38 @@ describe('objectives decide the win', () => {
     threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
   };
 
-  it('a par level accepts the short way round', () => {
-    const level = validateLevel({ ...base, objective: { kind: 'par', par: 240.001 } });
+  it('a par level accepts the shape made in the moves allowed', () => {
+    const level = validateLevel({ ...base, objective: { kind: 'par', segments: 4 } });
     const target = deriveTarget(level).raster;
     const r = evaluate(level, play(level, [0, 1, 2, 3]).st, target);
     expect(r.win).toBe(true);
-    expect(r.lengthUsed).toBeCloseTo(240, 6);
   });
 
-  it('a par level refuses a longer order even when the shape still matches', () => {
-    // A peg just inside the top edge. Going through it leaves the region the
-    // same to within the win threshold, but costs a little more string.
-    const detour = {
+  it('a par level refuses the same shape made in more moves', () => {
+    // Spare pegs sit along the edges of the square, so stopping at them
+    // leaves the region alone and costs a move. Finding the corners is the
+    // whole puzzle.
+    const withSpares = {
       ...base,
-      pegs: [[10, 10], [90, 10], [90, 90], [10, 90], [50, 10.5]] as [number, number][],
+      pegs: [
+        [10, 10], [90, 10], [90, 90], [10, 90],
+        [50, 10], [90, 50], [50, 90], [10, 50],
+      ] as [number, number][],
       threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
     };
-    const level = validateLevel({ ...detour, objective: { kind: 'par', par: 320.001 } });
+    const level = validateLevel({ ...withSpares, objective: { kind: 'par', segments: 4 } });
     const target = deriveTarget(level).raster;
 
-    const direct = evaluate(level, play(level, [0, 1, 2, 3]).st, target);
-    expect(direct.win).toBe(true);
+    expect(evaluate(level, play(level, [0, 1, 2, 3]).st, target).win).toBe(true);
 
-    const wandered = evaluate(level, play(level, [0, 4, 1, 2, 3]).st, target);
+    const wandered = evaluate(level, play(level, [0, 4, 1, 5, 2, 6, 3, 7]).st, target);
     expect(wandered.similarity).toBeGreaterThanOrEqual(0.995);
-    expect(wandered.lengthUsed).toBeGreaterThan(320.001);
     expect(wandered.win).toBe(false);
     expect(wandered.fault).toBe('par');
   });
 
-  it('rejects a par that is shorter than the level\'s own solution', () => {
-    expect(() => validateLevel({ ...base, objective: { kind: 'par', par: 200 } })).toThrow();
+  it('rejects a par below what the level\'s own solution needs', () => {
+    expect(() => validateLevel({ ...base, objective: { kind: 'par', segments: 3 } })).toThrow();
   });
 
   it('an enclose level ignores the shape and judges the rule', () => {

@@ -12,7 +12,7 @@ import { checkLevel, fingerprint, auditRepetition, type LevelReport } from '../s
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LEVELS = join(HERE, '..', 'levels');
-const FILES = ['classic', 'weave', 'assess'];
+const FILES = ['classic', 'weave', 'shadow', 'par', 'corral', 'wire', 'assess'];
 
 const budgetMs = Number(process.env.GATE_BUDGET_MS ?? 900);
 const only = process.argv[2];
@@ -67,19 +67,19 @@ for (const [name, levels] of byFile) {
 // The table
 // ---------------------------------------------------------------------------
 
-const CHECKS = ['solvable', 'derived-target', 'uniqueness', 'threshold', 'mechanics'] as const;
+const CHECKS = ['solvable', 'derived-target', 'uniqueness', 'threshold', 'mechanics', 'objective'] as const;
 const pad = (s: string | number, n: number) => String(s).padEnd(n);
 const padL = (s: string | number, n: number) => String(s).padStart(n);
 
-console.log('\n' + pad('', 10) + CHECKS.map((c) => padL(c, 16)).join('') + padL('repetition', 12));
-console.log('-'.repeat(10 + 16 * CHECKS.length + 12));
+console.log('\n' + pad('', 8) + CHECKS.map((c) => padL(c, 15)).join('') + padL('repetition', 12));
+console.log('-'.repeat(8 + 15 * CHECKS.length + 12));
 for (const [name, levels] of byFile) {
   const subset = reports.filter((r) => levels.some((l) => l.id === r.id));
   const cells = CHECKS.map((c) => {
     const n = subset.filter((r) => r.checks.find((x) => x.name === c)?.pass).length;
-    return padL(`${n}/${subset.length}`, 16);
+    return padL(`${n}/${subset.length}`, 15);
   });
-  console.log(pad(name, 10) + cells.join('') + padL(subset.length ? 'ok' : '-', 12));
+  console.log(pad(name, 8) + cells.join('') + padL(subset.length ? 'ok' : '-', 12));
 }
 
 const mechCount = new Map<string, number>();
@@ -101,4 +101,4 @@ if (failed || repetitionIssues) {
   console.log(`\n${failed} level(s) failed, ${repetitionIssues} repetition issue(s).`);
   process.exit(1);
 }
-console.log('\nAll six checks green.');
+console.log('\nAll seven checks green.');

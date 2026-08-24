@@ -17,6 +17,7 @@ import { normalizeClosedPath } from '../src/core/rules.js';
 import { estimateDifficulty } from '../src/core/difficulty.js';
 import { makeRng } from '../src/core/rng.js';
 import { CLASSIC_CHAPTERS, WEAVE_CHAPTERS, ASSESS_FAMILIES, type ChapterSpec, type Body } from '../src/core/design.js';
+import { SHADOW_CHAPTERS, PAR_CHAPTERS, CORRAL_CHAPTERS, WIRE_CHAPTERS } from '../src/core/modes.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LEVELS_DIR = join(HERE, '..', 'levels');
@@ -246,16 +247,25 @@ console.log(`Building levels with seed "${seed}"`);
 
 const classic = buildMode('classic', CLASSIC_CHAPTERS, 'c', seed);
 const weave = buildMode('weave', WEAVE_CHAPTERS, 'w', seed);
+const shadow = buildMode('shadow', SHADOW_CHAPTERS, 's', seed);
+const par = buildMode('par', PAR_CHAPTERS, 'p', seed);
+const corral = buildMode('corral', CORRAL_CHAPTERS, 'k', seed);
+const wire = buildMode('wire', WIRE_CHAPTERS, 'q', seed);
 const assess = buildAssessment(seed, 5);
 
 write('classic', classic);
 write('weave', weave);
+write('shadow', shadow);
+write('par', par);
+write('corral', corral);
+write('wire', wire);
 write('assess', assess);
 
-const total = classic.length + weave.length + assess.length;
+const all = [...classic, ...weave, ...shadow, ...par, ...corral, ...wire, ...assess];
+const total = all.length;
 console.log(`\nTotal hand-designed levels: ${total}`);
 const families = new Map<string, number>();
-for (const l of [...classic, ...weave, ...assess]) {
+for (const l of all) {
   const key = mechanicsOf(l).sort().join('+');
   families.set(key, (families.get(key) ?? 0) + 1);
 }

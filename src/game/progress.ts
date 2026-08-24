@@ -87,6 +87,27 @@ export const MODE_UNLOCKS: UnlockRule[] = [
     id: 'workshop', label: 'Workshop', condition: 'Solve 30 levels in Classic',
     met: (s, c) => solvedCount(s, c.classicIds) >= 30,
   },
+  /*
+   * The four modes that ask something other than "copy this shape" open in the
+   * order they change the game by. Shadow only takes the outline away, so it
+   * comes first; Wire replaces the target with a rule and comes last.
+   */
+  {
+    id: 'shadow', label: 'Shadow', condition: 'Finish Chapter 3 in Classic',
+    met: (s, c) => c.chapterIds(3).length > 0 && solvedCount(s, c.chapterIds(3)) >= c.chapterIds(3).length,
+  },
+  {
+    id: 'par', label: 'Par', condition: 'Finish Chapter 2 in Classic',
+    met: (s, c) => c.chapterIds(2).length > 0 && solvedCount(s, c.chapterIds(2)) >= c.chapterIds(2).length,
+  },
+  {
+    id: 'corral', label: 'Corral', condition: 'Solve 20 levels in Classic',
+    met: (s, c) => solvedCount(s, c.classicIds) >= 20,
+  },
+  {
+    id: 'wire', label: 'Wire', condition: 'Solve 25 levels in Classic',
+    met: (s, c) => solvedCount(s, c.classicIds) >= 25,
+  },
 ];
 
 export function unlockedModes(save: Save, ctx: UnlockCtx): Set<string> {

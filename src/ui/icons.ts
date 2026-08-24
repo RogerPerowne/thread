@@ -81,6 +81,28 @@ const MARKS: Record<string, Draw> = {
   ],
   // A keyhole: the shape with a hole in it.
   workshop: (ink) => [poly(ring(4, 30), ink), poly(ring(4, 13), ink, 'none', 4.5)],
+  // A filled shape with no outline: the region, and nothing about the order.
+  shadow: (ink) => [poly(ring(5, 30), ink, ink, 0)],
+  // Four corners found among the pegs along the edges.
+  par: (ink) => {
+    const p = ring(4, 30);
+    const mids = p.map((a, i) => {
+      const b = p[(i + 1) % 4];
+      return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as [number, number];
+    });
+    return [poly(p, ink), ...mids.map(([x, y]) => dot(x, y, ink, 2.6))];
+  },
+  // A fence, with what it keeps in and what it keeps out.
+  corral: (ink) => [
+    poly(ring(6, 28), ink),
+    dot(50, 44, ink, 4),
+    path('M78 22 L88 32 M88 22 L78 32', ink, 'none', 4),
+  ],
+  // A grid with a number in it.
+  wire: (ink) => [
+    path('M22 22 H78 M22 50 H78 M22 78 H78 M22 22 V78 M50 22 V78 M78 22 V78', ink, 'none', 4),
+    path('M36 40 L36 60', ink, 'none', 6),
+  ],
 };
 
 const SOFT: Record<string, string> = {

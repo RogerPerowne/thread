@@ -38,6 +38,12 @@ export type PlayResult = {
   executionMs: number;
   searchOps: number;
   raster: Raster;
+  /** Why it was not a win. Different objectives fail for different reasons. */
+  fault: Evaluation['fault'];
+  /** Marked pegs on the wrong side, on a corral level. */
+  wrongPegs?: number[];
+  /** Cells whose count is wrong, on a clue level. */
+  wrongCells?: number[];
 };
 
 export type EngineHooks = {
@@ -573,6 +579,9 @@ export class Engine {
       executionMs: this.firstPegAt < 0 ? 0 : now - this.firstPegAt,
       searchOps: this.searchOps,
       raster: e.raster,
+      fault: e.fault,
+      wrongPegs: e.wrongPegs,
+      wrongCells: e.wrongCells,
     };
   }
 
@@ -703,6 +712,11 @@ export class Engine {
     if (!this.level || this.level.budget === undefined) return null;
     const used = lengthUsed(this.level, this.state);
     return { used, budget: this.level.budget, fraction: Math.max(0, 1 - used / this.level.budget) };
+  }
+
+  /** Pegs threaded so far, across every thread — what par and corral count. */
+  get movesUsed(): number {
+    return this.state.threads.reduce((n, t) => n + t.pegs.length, 0);
   }
 
   get mechanics(): string[] {

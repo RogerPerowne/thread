@@ -11,9 +11,9 @@ import { h, clear, copy } from './dom.js';
 import { topBar, pill, modal, toast, miniature, stars, shareSheet } from './components.js';
 import { starRow as starMarks } from './icons.js';
 import type { App, Route } from './app.js';
-import { MODE_ACCENT } from './app.js';
+import { MODE_ACCENT, MODE_TITLE, isChapterMode, type ChapterMode } from './app.js';
 import { Engine, type PlayResult } from '../game/engine.js';
-import { type Level, parLength, mechanicsOf } from '../core/level.js';
+import { type Level, parLength, mechanicsOf, objectiveOf } from '../core/level.js';
 import { starsFor, applyDailySolve, shouldOfferEasier, shareGrid, shareText } from '../game/progress.js';
 import { dailyLevel, blitzLevel, zenLevel, oneLifeLevel, randomSeed, seedFromUrl } from '../game/generate.js';
 import { decodeLevel, ShareCodeError } from '../game/sharecode.js';
@@ -123,8 +123,11 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
   const sub = h('span');
   const starRow = h('span', { class: 'stars' });
   const extraSlot = h('span');
+  // What this level is asking for, when it is asking for something other than
+  // "copy this shape". A player should never have to guess the rules.
+  const askLine = h('div', { class: 'ask' });
   metaLine.append(sub, starRow, spoolBar, extraSlot);
-  hudEl.append(label, metaLine);
+  hudEl.append(label, metaLine, askLine);
 
   /**
    * Mutate the title block rather than rebuild it. This runs on every peg the
@@ -141,6 +144,12 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     } else {
       spoolBar.style.display = 'none';
     }
+    // The ask is live where it counts down — a corral's remaining segments and
+    // a par level's remaining moves both change with every peg.
+    const askText = describeAsk(current, engine.movesUsed);
+    if (askLine.textContent !== askText) askLine.textContent = askText;
+    askLine.style.display = askText ? '' : 'none';
+
     const extra = session.hud?.();
     if (extra) {
       if (extraSlot.firstChild !== extra) {
@@ -165,7 +174,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
   /** One pip per level in the chapter, the current one drawn long. */
   function refreshPips(level: Level): void {
     clear(pips);
-    if (level.mode !== 'classic' && level.mode !== 'weave') return;
+    if (!isChapterMode(level.mode)) return;
     const siblings = app.chapterLevels(level.mode, level.chapter);
     if (siblings.length < 2) return;
     for (const l of siblings) {
@@ -248,8 +257,11 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     failuresHere++;
     const hook = (window as unknown as { __thread?: Record<string, unknown> }).__thread;
     if (hook?.current) (hook.current as Record<string, unknown>).lastMiss = res.similarity;
-    // "94%" makes people try again immediately; "wrong" makes them quit.
-    badge.textContent = `${Math.round(res.similarity * 100)}%`;
+    // "94%" makes people try again immediately; "wrong" makes them quit. On a
+    // level with a rule rather than a shape, though, a percentage is a number
+    // about nothing: it says how much of the rule was met, not how near the
+    // picture was, so it is spelled out instead.
+    badge.textContent = missBadge(current, res);
     badge.classList.remove('win');
     badge.classList.add('show');
     ticker.schedule(1400, () => badge.classList.remove('show'));
@@ -287,7 +299,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
    * Finishing a chapter plays its levels' melodies as one piece.
    */
   function maybeCelebrateChapter(): void {
-    if (current.mode !== 'classic' && current.mode !== 'weave') return;
+    if (!isChapterMode(current.mode)) return;
     const mode = current.mode;
     const siblings = app.chapterLevels(mode, current.chapter);
     if (!siblings.every((l) => (app.save.levels[l.id]?.stars ?? 0) > 0)) return;
@@ -322,7 +334,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
 
   function loadEasier(): void {
     const mechanics = mechanicsOf(current).join('+');
-    const pool = app.levelsFor(current.mode === 'weave' ? 'weave' : 'classic');
+    const pool = isChapterMode(current.mode) ? app.levelsFor(current.mode) : app.classic;
     const here = estimateDifficulty(current, deriveTarget(current).raster).b;
     const easier = pool
       .filter((l) => l.id !== current.id && mechanicsOf(l).join('+') === mechanics)
@@ -412,7 +424,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
 
   function makeSession(a: App, rt: Extract<Route, { name: 'play' }>): Session {
     const mode = rt.mode;
-    if (mode === 'classic' || mode === 'weave') {
+    if (isChapterMode(mode)) {
       const all = a.levelsFor(mode);
       let idx = rt.levelId ? all.findIndex((l) => l.id === rt.levelId) : -1;
 
@@ -438,7 +450,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
       if (idx < 0) idx = 0;
       let cursor = idx - 1;
       return {
-        title: mode === 'classic' ? 'Classic' : 'Weave',
+        title: MODE_TITLE[mode] ?? 'Thread',
         accent: MODE_ACCENT[mode],
         autoAdvance: true,
         allowHints: true,
@@ -566,12 +578,12 @@ function prettyDay(key: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-function chapterName(app: App, mode: 'classic' | 'weave', chapter: number): string {
+function chapterName(app: App, mode: ChapterMode, chapter: number): string {
   const l = app.levelsFor(mode).find((x) => x.chapter === chapter);
   return l?.name ?? `Chapter ${chapter}`;
 }
 
-function indexInChapter(app: App, mode: 'classic' | 'weave', level: Level): number {
+function indexInChapter(app: App, mode: ChapterMode, level: Level): number {
   return app.chapterLevels(mode, level.chapter).findIndex((l) => l.id === level.id) + 1;
 }
 
@@ -604,4 +616,56 @@ const HELP: Record<string, string> = {
   rotate: 'The outline is shown turned. Find the shape, whichever way up it is.',
 };
 
-export { seedFromUrl, parLength, stars, audio, easeOut };
+/**
+ * What to put on the badge when a loop does not win.
+ *
+ * A shape objective gets the percentage it has always had. A rule objective
+ * gets the rule: how many marks are on the right side, how many numbers are
+ * satisfied, how many pegs over the cap. Reporting 67% on a corral would be
+ * dressing a count of three up as a measurement.
+ */
+function missBadge(level: Level, res: PlayResult): string {
+  const o = objectiveOf(level);
+  if (res.fault === 'par') return 'Too many pegs';
+  if (res.fault === 'budget') return o.kind === 'enclose' ? 'Too many pegs' : 'Not enough string';
+  if (o.kind === 'enclose' && res.wrongPegs) {
+    const total = o.inside.length + o.outside.length;
+    return `${total - res.wrongPegs.length} of ${total}`;
+  }
+  if (o.kind === 'clue' && res.wrongCells) {
+    const asked = o.clues.filter((c) => c !== null).length;
+    return `${asked - res.wrongCells.length} of ${asked}`;
+  }
+  return `${Math.round(res.similarity * 100)}%`;
+}
+
+/**
+ * The level's demand, in words, for the levels that make one.
+ *
+ * Shape levels say nothing: the board already shows what to do. The others
+ * are rules, and a rule you have to infer is not a puzzle, it is a trick.
+ */
+function describeAsk(level: Level, moves: number): string {
+  const o = objectiveOf(level);
+  switch (o.kind) {
+    case 'silhouette':
+      return 'The shape is shown. The order is not.';
+    case 'par': {
+      const left = o.segments - moves;
+      return left >= 0
+        ? `Make the shape in ${o.segments} pegs \u00b7 ${left} left`
+        : `Make the shape in ${o.segments} pegs \u00b7 ${-left} over`;
+    }
+    case 'enclose': {
+      const left = o.maxSegments - moves;
+      return `Fence in the ${o.inside.length} filled, leave out the ${o.outside.length} crossed`
+        + ` \u00b7 ${left >= 0 ? `${left} pegs left` : `${-left} over`}`;
+    }
+    case 'clue':
+      return 'Each number counts the sides of its cell the loop uses';
+    default:
+      return '';
+  }
+}
+
+export { seedFromUrl, parLength, stars, audio, easeOut, describeAsk };

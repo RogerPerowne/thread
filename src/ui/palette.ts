@@ -36,6 +36,10 @@ export function shade(hex: string, amount: number): string {
 
 const MODE_CARD: Record<string, string> = {
   daily: '#7BC2E8',
+  shadow: '#B9A3E3',
+  par: '#8FCB9B',
+  corral: '#6FC2B4',
+  wire: '#F09A6B',
   classic: '#F0A030',
   weave: '#B9A3E3',
   blitz: '#EA7468',
@@ -51,11 +55,15 @@ export function modeColor(mode: string): string {
 }
 
 /**
- * Chapters inside a mode step through the palette. Weave starts a third of the
- * way in so its six chapters never repeat the first six of Classic — the two
- * lists are often seen one after the other.
+ * Chapters inside a mode step through the palette, each mode starting at a
+ * different place. Two mode lists are often seen one after the other, and a
+ * chapter you learn by its colour should not be wearing another mode's.
  */
-export function chapterColor(mode: 'classic' | 'weave', chapter: number): string {
-  const offset = mode === 'weave' ? 5 : 0;
+const MODE_OFFSET: Record<string, number> = {
+  classic: 0, weave: 5, shadow: 9, par: 11, corral: 3, wire: 7,
+};
+
+export function chapterColor(mode: string, chapter: number): string {
+  const offset = MODE_OFFSET[mode] ?? 0;
   return CARD_COLORS[(chapter - 1 + offset) % CARD_COLORS.length];
 }

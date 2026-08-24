@@ -529,6 +529,14 @@ button { font: inherit; color: inherit; }
   color: var(--mute);
 }
 .hud .meta .stars { color: var(--gold); letter-spacing: 1.5px; }
+/* What the level is asking for, on the levels that ask something. A rule you
+   have to infer is not a puzzle, it is a trick. */
+.hud .ask {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-2);
+  font-weight: 500;
+}
 .spool {
   flex: 1;
   height: 6px;

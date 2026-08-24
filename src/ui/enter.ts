@@ -21,6 +21,8 @@
 
 import { h, svg } from './dom.js';
 import { miniature } from './components.js';
+import { modeMark } from './icons.js';
+import { objectiveOf } from '../core/level.js';
 import type { PathView } from './path.js';
 import type { Level } from '../core/level.js';
 import * as haptics from '../render/haptics.js';
@@ -180,8 +182,18 @@ interface Card {
 }
 
 function buildCard(opts: EnterOpts, faceFill: string): Card {
-  const art = miniature(opts.level, { showPegs: true, mono: true, ink: 'var(--card)' });
-  const outline = art.querySelector('path');
+  /*
+   * On a level that shows its target, the card draws that shape: it is what
+   * you are about to make, and seeing it drawn is a pleasant way in. On a
+   * level that hides it — a corral, a clue board — the same drawing would be
+   * the answer, so the mode's own mark goes there instead.
+   */
+  const kind = objectiveOf(opts.level).kind;
+  const reveals = kind === 'shape' || kind === 'silhouette' || kind === 'par';
+  const art = reveals
+    ? miniature(opts.level, { showPegs: true, mono: true, ink: 'var(--card)' })
+    : modeMark(opts.level.mode, 'var(--card)');
+  const outline = reveals ? art.querySelector('path') : null;
   let dash = 0;
   if (outline) {
     dash = 340;

@@ -11,14 +11,14 @@
 import { h, svg } from './dom.js';
 import { miniature, sectionHeader, toast, themeSwatch, threadSwatch, gameCard } from './components.js';
 import { modeMark } from './icons.js';
-import { type App, MODE_BLURB, type Route } from './app.js';
+import { type App, MODE_BLURB, MODE_TITLE, type Route, isChapterMode, type ChapterMode } from './app.js';
 import { modeColor, chapterColor } from './palette.js';
 import { MODE_UNLOCKS, solvedCount, collectionCount } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
 import { themeUnlocked, skinUnlocked } from '../game/progress.js';
 import { dailyLevel } from '../game/generate.js';
 import { estimateDifficulty } from '../core/difficulty.js';
-import { deriveTarget, type Level } from '../core/level.js';
+import { deriveTarget, objectiveOf, type Level } from '../core/level.js';
 import { dateKey } from '../core/rng.js';
 import { ticker, easeInOut } from '../render/tween.js';
 import { audio } from '../render/audio.js';
@@ -130,7 +130,8 @@ function today(): string {
 // ---------------------------------------------------------------------------
 
 function continueCard(app: App): HTMLElement {
-  const lastMode = (app.save.lastPlayed?.mode === 'weave' ? 'weave' : 'classic') as 'classic' | 'weave';
+  const last = app.save.lastPlayed?.mode ?? '';
+  const lastMode: ChapterMode = isChapterMode(last) ? last : 'classic';
   const level = app.nextLevel(lastMode);
   const chapterLevels = app.chapterLevels(lastMode, level.chapter);
   const idx = chapterLevels.findIndex((l) => l.id === level.id) + 1;
@@ -141,10 +142,14 @@ function continueCard(app: App): HTMLElement {
     id: 'continue',
     color: chapterColor(lastMode, level.chapter),
     title: started ? 'Keep going' : 'Start playing',
-    blurb: `${lastMode === 'weave' ? 'Weave' : 'Classic'} \u00b7 ${name}`,
+    blurb: `${MODE_TITLE[lastMode] ?? lastMode} \u00b7 ${name}`,
     foot: `Level ${idx} of ${chapterLevels.length}`,
     note: started ? `${app.save.stats.solved} solved` : 'From the beginning',
-    art: miniature(level, { ink: 'var(--card-ink)', mono: true }),
+    // Continue can land on a corral or a clue board, whose shape is the
+    // answer. Those get their mode's mark rather than a spoiler.
+    art: revealsShape(level)
+      ? miniature(level, { ink: 'var(--card-ink)', mono: true })
+      : modeMark(lastMode, 'var(--card-ink)'),
     onOpen: () => app.go({ name: 'play', mode: lastMode, levelId: level.id }),
   });
 }
@@ -176,6 +181,12 @@ function dailyCard(app: App): HTMLElement {
   });
 }
 
+/** Does this level put its answer on screen anyway? */
+function revealsShape(level: Level): boolean {
+  const k = objectiveOf(level).kind;
+  return k === 'shape' || k === 'silhouette' || k === 'par';
+}
+
 /** An honest read on today's puzzle, from the static difficulty estimator. */
 function difficultyBand(level: Level): string {
   const b = estimateDifficulty(level, deriveTarget(level).raster).b;
@@ -191,7 +202,10 @@ function difficultyBand(level: Level): string {
 // ---------------------------------------------------------------------------
 
 /** The order they are meant to be met in, not the order the rules are written. */
-const HOME_ORDER = ['classic', 'weave', 'blitz', 'onelife', 'zen', 'assess', 'workshop'];
+const HOME_ORDER = [
+  'classic', 'shadow', 'par', 'corral', 'wire',
+  'weave', 'blitz', 'onelife', 'zen', 'assess', 'workshop',
+];
 
 function modeList(app: App): HTMLElement {
   const unlocked = app.modes;
@@ -229,14 +243,14 @@ function modeList(app: App): HTMLElement {
 }
 
 function routeFor(id: string): Route {
-  if (id === 'classic' || id === 'weave') return { name: 'chapters', mode: id };
+  if (isChapterMode(id)) return { name: 'chapters', mode: id };
   if (id === 'assess') return { name: 'assess' };
   if (id === 'workshop') return { name: 'workshop' };
   return { name: 'play', mode: id };
 }
 
 function progressFor(app: App, id: string): { fraction: number; text: string } {
-  if (id === 'classic' || id === 'weave') {
+  if (isChapterMode(id)) {
     const ids = app.levelsFor(id).map((l) => l.id);
     const done = solvedCount(app.save, ids);
     return { fraction: done / Math.max(ids.length, 1), text: `${done}/${ids.length}` };

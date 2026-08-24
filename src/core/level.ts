@@ -320,9 +320,12 @@ export function validateLevel(level: unknown): Level {
   const objective = l.objective;
   if (objective) {
     if (objective.kind === 'par') {
-      if (!Number.isFinite(objective.par) || objective.par <= 0) fail('par must be positive');
-      if (parLength(l) > objective.par + 1e-6) {
-        fail(`par ${objective.par.toFixed(1)} is shorter than its own solution`);
+      if (!Number.isInteger(objective.segments) || objective.segments < 3) {
+        fail('par needs a segment count of 3 or more');
+      }
+      const longest = Math.max(...l.threads.map((t) => t.sol.length));
+      if (longest > objective.segments) {
+        fail(`par ${objective.segments} is fewer segments than its own solution uses`);
       }
     }
     if (objective.kind === 'enclose') {

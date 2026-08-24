@@ -34,10 +34,10 @@ try {
 
   const counts = await page.evaluate(() => {
     const ids = window.__thread.levelIds();
-    return { classic: ids.classic.length, weave: ids.weave.length, assess: ids.assess.length };
+    return Object.fromEntries(Object.entries(ids).map(([k, v]) => [k, v.length]));
   });
-  const total = counts.classic + counts.weave + counts.assess;
-  if (total < 300) fail(`only ${total} levels loaded (${JSON.stringify(counts)})`);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (total < 450) fail(`only ${total} levels loaded (${JSON.stringify(counts)})`);
   else ok(`${total} levels loaded (${JSON.stringify(counts)})`);
 
   const mark = await page.locator('.wordmark').innerText();
