@@ -58,6 +58,12 @@ and `cancelAll()` runs on every level change. Nothing schedules visual work
 with `setTimeout`, because a stale timer writing into a new level's state is
 the cause of most "glitchiness".
 
+**A drag is more precise than a tap.** A tap gets a generous target — at least
+44 px, because a finger is imprecise from a standing start. A sweep gets a
+tighter one, because the finger is already down and tracking and the player is
+aiming at the peg they mean. Using the tap radius for both makes the string
+grab whatever the line happens to pass.
+
 **Closing is part of the gesture.** There is no Tie off button. A drag that
 moved past threshold and added a peg ties the loop when you lift your finger;
 tapping the peg you are on ties it; and on levels where the string may not
@@ -87,6 +93,12 @@ every level and prints a table.
    as the same shape. The threshold is **0.995**, and a correct solve scores
    exactly **1.000** because the player's polygon uses identical peg
    coordinates.
+
+   The same check also rejects a peg sitting on a solution edge. Sweeping along
+   that edge picks the peg up in passing, so the obvious gesture quietly makes
+   a different loop from the one it looked like — on a weave that changes the
+   crossings and the solve is refused for a reason the player cannot see. The
+   end-to-end harness found this by dragging, which is exactly why it drags.
 5. **Mechanics are load-bearing** — every declared mechanic must actually
    constrain the level. A post must block a real shortcut; a budget must be
    exceeded by a loop that looks like the answer; a gold peg must be skippable

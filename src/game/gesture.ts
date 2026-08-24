@@ -44,13 +44,24 @@ export type Action =
   | { type: 'reject'; peg: number; reason: Reject }
   | { type: 'cursor'; p: Pt | null }
   /** A rail peg is being slid along its rail. */
-  | { type: 'slide'; peg: number; p: Pt };
+  | { type: 'slide'; peg: number; p: Pt }
+  /** Keyboard equivalent: move a rail peg one notch along its rail. */
+  | { type: 'slide-notch'; peg: number; delta: number };
 
 export type GestureCtx = {
   level: Level;
   state: PlayState;
-  /** Nearest peg to a board point within the hit radius, or -1. */
-  pegAt(p: Pt): number;
+  /**
+   * Nearest peg to a board point, or -1.
+   *
+   * A tap needs a generous target — at least 44 CSS pixels — because a finger
+   * is imprecise from a standing start. A sweep does not: the finger is
+   * already down and tracking, and the player is aiming at the peg they mean.
+   * Using the tap radius while sweeping makes the string grab anything the
+   * line happens to pass, which quietly produces a different loop from the one
+   * the gesture looked like.
+   */
+  pegAt(p: Pt, mode: 'tap' | 'sweep'): number;
   /** When the active loop was auto-closed, for the grace period. */
   closedAt: number;
 };
@@ -62,6 +73,13 @@ export class GestureMachine {
   private movedPastThreshold = false;
   private addedWhileDown = 0;
   private slidingRail = -1;
+  /**
+   * A rail peg that has been pressed but not yet moved. Tapping a rail peg
+   * threads it like any other; dragging it slides it along its rail. Which
+   * of the two it is cannot be known until the pointer either moves or lifts,
+   * so the press is held here until it declares itself.
+   */
+  private railCandidate = -1;
 
   /** True while the player is mid-drag — the UI dims the target a little. */
   get dragging(): boolean {
@@ -73,6 +91,7 @@ export class GestureMachine {
     this.movedPastThreshold = false;
     this.addedWhileDown = 0;
     this.slidingRail = -1;
+    this.railCandidate = -1;
   }
 
   handle(input: PointerInput, ctx: GestureCtx): Action[] {
@@ -96,8 +115,9 @@ export class GestureMachine {
     this.movedPastThreshold = false;
     this.addedWhileDown = 0;
     this.slidingRail = -1;
+    this.railCandidate = -1;
 
-    const peg = ctx.pegAt(p);
+    const peg = ctx.pegAt(p, 'tap');
     if (peg < 0) return [{ type: 'cursor', p }];
 
     const st = this.active(ctx);
@@ -112,10 +132,11 @@ export class GestureMachine {
       return [];
     }
 
-    // A peg sitting on a rail can be slid before the string reaches it.
+    // A peg on a rail might be about to be slid, or might just be the next
+    // peg on the loop. Hold the press until the gesture says which.
     const rail = ctx.level.rails?.find((r) => r.peg === peg);
     if (rail && !st.pegs.includes(peg)) {
-      this.slidingRail = peg;
+      this.railCandidate = peg;
       return [{ type: 'cursor', p }];
     }
 
@@ -165,9 +186,15 @@ export class GestureMachine {
       this.movedPastThreshold = true;
     }
 
+    // Moved far enough with a rail peg under the finger: this is a slide.
+    if (this.railCandidate >= 0 && this.movedPastThreshold) {
+      this.slidingRail = this.railCandidate;
+      this.railCandidate = -1;
+    }
     if (this.slidingRail >= 0) {
       return [{ type: 'slide', peg: this.slidingRail, p }];
     }
+    if (this.railCandidate >= 0) return [{ type: 'cursor', p }];
 
     const out: Action[] = [{ type: 'cursor', p }];
     if (!this.movedPastThreshold) return out;
@@ -175,7 +202,7 @@ export class GestureMachine {
     const st = this.active(ctx);
     if (st.closed) return out;
 
-    const peg = ctx.pegAt(p);
+    const peg = ctx.pegAt(p, 'sweep');
     if (peg < 0) return out;
     const n = st.pegs.length;
     // Sweeping all the way round and back onto the start peg is the same
@@ -213,15 +240,20 @@ export class GestureMachine {
     const wasDrag = this.movedPastThreshold;
     const added = this.addedWhileDown;
     const wasSliding = this.slidingRail >= 0;
+    const heldRail = this.railCandidate;
     this.down = false;
     this.movedPastThreshold = false;
     this.addedWhileDown = 0;
     this.slidingRail = -1;
+    this.railCandidate = -1;
     void this.downAt;
-    void t;
 
     const out: Action[] = [{ type: 'cursor', p: null }];
     if (wasSliding) return out;
+
+    // Pressed a rail peg and lifted without moving: that was a tap, so thread
+    // it like any other peg.
+    if (heldRail >= 0) return [...this.press(heldRail, t, ctx), ...out];
 
     const st = this.active(ctx);
     if (st.closed) return out;
@@ -237,6 +269,7 @@ export class GestureMachine {
 
   /** Keyboard play routes through exactly the same decision as a tap. */
   private onActivate(peg: number, t: number, ctx: GestureCtx): Action[] {
+    void 0;
     const st = this.active(ctx);
     if (st.closed) {
       const loose = st.pegs[st.pegs.length - 1];
@@ -248,13 +281,41 @@ export class GestureMachine {
   }
 }
 
-/** Project a point onto a rail segment — used while sliding a rail peg. */
-export function projectOnRail(p: Pt, a: Pt, b: Pt): Pt {
+/** Where along a rail a point projects, as a fraction from a to b. */
+export function railT(p: Pt, a: Pt, b: Pt): number {
   const vx = b[0] - a[0];
   const vy = b[1] - a[1];
   const len2 = vx * vx + vy * vy;
-  if (len2 < 1e-9) return a;
-  let t = ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  if (len2 < 1e-9) return 0;
+  const t = ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2;
+  return t < 0 ? 0 : t > 1 ? 1 : t;
+}
+
+/** Board-space spacing between the notches on a rail. */
+export const NOTCH_SPACING = 6;
+
+/**
+ * Project a point onto a rail, snapping to the nearest notch.
+ *
+ * Rails have to snap. A peg is a vertex of the polygon, so half a board unit
+ * of slop changes the enclosed region by about as much as the win threshold
+ * allows — a player dragging by hand would be fighting the last pixel rather
+ * than solving the puzzle. Notching the rail keeps it an honest choice (which
+ * position, not how steady your thumb is) and lands the peg exactly.
+ *
+ * `home` anchors the notches, so the position the answer needs is always one
+ * of them and is never a lucky landing.
+ */
+export function projectOnRail(p: Pt, a: Pt, b: Pt, home?: Pt): Pt {
+  const vx = b[0] - a[0];
+  const vy = b[1] - a[1];
+  const length = Math.hypot(vx, vy);
+  let t = railT(p, a, b);
+  if (home && length > 1e-6) {
+    const tHome = railT(home, a, b);
+    const step = NOTCH_SPACING / length;
+    const k = Math.round((t - tHome) / step);
+    t = Math.min(1, Math.max(0, tHome + k * step));
+  }
   return [a[0] + t * vx, a[1] + t * vy];
 }

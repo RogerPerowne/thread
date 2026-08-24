@@ -16,7 +16,7 @@ import type { Rng } from './rng.js';
 import { THREAD_COLORS } from '../render/theme.js';
 import {
   ringPoints, ovalPoints, starPoints, starOrder, rect, lShape, plusShape, chevron,
-  arrow, house, trapezoid, staircase, comb, bowtie, propeller, donutOrder,
+  arrow, house, trapezoid, staircase, comb, bowtie, propeller, donutOrder, band,
   rotateAll, scaleAll, fitToBoard, quantize, scatterDecoys, edgeDecoys, minSeparation,
 } from './shapes.js';
 
@@ -26,12 +26,45 @@ export type ChapterSpec = { chapter: number; name: string; idea: string; count: 
 
 const C = THREAD_COLORS;
 
+/**
+ * A peg lying on a solution edge gets picked up by a drag along that edge, so
+ * the obvious gesture quietly produces a different loop from the one it looks
+ * like. Every maker funnels through here, so this is where it is caught.
+ */
+const SNAG_CLEARANCE = 4.6;
+
+function hasSnag(
+  pegs: ReadonlyArray<readonly number[]>,
+  sols: number[][],
+  /** Portal hops are teleports, so nothing travels along them. */
+  portals: Array<[number, number]> = [],
+): boolean {
+  const isPortal = (a: number, b: number) =>
+    portals.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+  for (const sol of sols) {
+    for (let i = 0; i < sol.length; i++) {
+      const from = sol[i];
+      const to = sol[(i + 1) % sol.length];
+      if (from === to) continue;
+      if (isPortal(from, to)) continue;
+      const a = pegs[from] as Pt;
+      const b = pegs[to] as Pt;
+      for (let p = 0; p < pegs.length; p++) {
+        if (p === from || p === to) continue;
+        if (pointSegmentDistance(pegs[p] as Pt, a, b) < SNAG_CLEARANCE) return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Assemble a level body from solution points plus decoys. */
 function body(loop: Pt[], decoys: Pt[], extra: Partial<Body> = {}, order?: number[]): Body | null {
   const pegs = quantize([...loop, ...decoys]);
   if (minSeparation(pegs as unknown as Pt[]) < 7) return null; // pegs too close to tell apart
   for (const [x, y] of pegs) if (x < 4 || x > 96 || y < 4 || y > 96) return null;
   const sol = order ?? loop.map((_, i) => i);
+  if (hasSnag(pegs, [sol], extra.portals as Array<[number, number]> | undefined)) return null;
   const threads: ThreadSpec[] = [{ color: C[0], sol }];
   return { pegs, threads, ...extra };
 }
@@ -279,11 +312,13 @@ const chapter7: Maker = (rng) => {
   const decoys = scatterDecoys(rng, pegs, rng.int(3), 12);
   const all = quantize([...pegs, ...decoys]);
   for (const [x, y] of all) if (x < 5 || x > 95 || y < 5 || y > 95) return null;
+  const sols = [aPts.map((_, i) => i), bPts.map((_, i) => aPts.length + i)];
+  if (hasSnag(all, sols)) return null;
   return {
     pegs: all,
     threads: [
-      { color: C[0], sol: aPts.map((_, i) => i) },
-      { color: C[1], sol: bPts.map((_, i) => aPts.length + i) },
+      { color: C[0], sol: sols[0] },
+      { color: C[1], sol: sols[1] },
     ],
     ...(apart ? { apart: true } : {}),
   };
@@ -293,32 +328,55 @@ const chapter7: Maker = (rng) => {
 // Chapter 8 — Over & Under. Threads weave; the target shows the weave.
 // ---------------------------------------------------------------------------
 
+function crossingBands(rng: Rng, count: number): Pt[][] {
+  const angle = rng.range(0, Math.PI);
+  const spread = Math.PI / count;
+  const out: Pt[][] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(band(
+      54 + rng.range(0, 16),
+      12 + rng.range(0, 7),
+      angle + i * spread + rng.range(-0.12, 0.12),
+      50, 50,
+      1 + rng.int(2),
+    ));
+  }
+  return out;
+}
+
 const chapter8: Maker = (rng) => {
-  const r = 20 + rng.range(0, 7);
-  const off = 13 + rng.range(0, 5);
-  const aPts = ringPoints(3 + rng.int(3), r, rng.range(0, 1), 50 - off, 50);
-  const bPts = ringPoints(3 + rng.int(3), r, rng.range(0, 1), 50 + off, 50);
-  const pegs = [...aPts, ...bPts];
+  // Bands crossing at an angle: clean crossings, and every peg sits well clear
+  // of the other band's edges. Two overlapping rings cross too, but they
+  // scatter pegs along each other's edges, and a peg on an edge is a peg a
+  // drag picks up by accident.
+  const loops = crossingBands(rng, 2 + (rng.chance(0.25) ? 1 : 0));
+  const pegs = loops.flat();
   if (minSeparation(pegs) < 9) return null;
-  const loops = [aPts, bPts];
-  if (mutualCrossings(aPts, bPts, true, true).length < 2) return null;
+  let mutual = 0;
+  for (let i = 0; i < loops.length; i++) {
+    for (let j = i + 1; j < loops.length; j++) mutual += mutualCrossings(loops[i], loops[j], true, true).length;
+  }
+  if (mutual < 2) return null;
+
   const crossings = allCrossings(loops);
   if (crossings.length === 0) return null;
   // Alternate over and under around the crossings — a real weave, not a stack.
-  const over: number[] = [];
-  crossings.forEach((_, k) => {
-    if (k % 2 === 0) over.push(k);
-  });
+  const over = crossings.map((_, k) => k).filter((k) => k % 2 === 0);
+
   const all = quantize(pegs);
   for (const [x, y] of all) if (x < 5 || x > 95 || y < 5 || y > 95) return null;
+  let base = 0;
+  const sols = loops.map((l) => {
+    const sol = l.map((_, i) => base + i);
+    base += l.length;
+    return sol;
+  });
+  if (hasSnag(all, sols)) return null;
   return {
     pegs: all,
     weave: true,
     allowCross: true,
-    threads: [
-      { color: C[0], sol: aPts.map((_, i) => i), over },
-      { color: C[1], sol: bPts.map((_, i) => aPts.length + i) },
-    ],
+    threads: sols.map((sol, t) => (t === 0 ? { color: C[0], sol, over } : { color: C[t % C.length], sol })),
   };
 };
 
@@ -335,12 +393,14 @@ const chapter9: Maker = (rng) => {
   if (minSeparation(pegs) < 8.5) return null;
   const all = quantize(pegs);
   for (const [x, y] of all) if (x < 5 || x > 95 || y < 5 || y > 95) return null;
+  const sols = [aPts.map((_, i) => i), bPts.map((_, i) => aPts.length + i)];
+  if (hasSnag(all, sols)) return null;
   return {
     pegs: all,
     allowCross: true,
     threads: [
-      { color: C[0], sol: aPts.map((_, i) => i) },
-      { color: C[2], sol: bPts.map((_, i) => aPts.length + i) },
+      { color: C[0], sol: sols[0] },
+      { color: C[2], sol: sols[1] },
     ],
   };
 };
@@ -352,9 +412,9 @@ const chapter9: Maker = (rng) => {
 const chapter10: Maker = (rng) => {
   // Two clusters far apart, linked by a portal pair. The hop is free, so
   // routing through it is the only way to enclose both.
-  const n = 3 + rng.int(2);
-  const a = ringPoints(n, 13 + rng.range(0, 4), rng.range(0, 1), 26, 30 + rng.range(0, 14));
-  const b = ringPoints(n, 13 + rng.range(0, 4), rng.range(0, 1), 74, 70 - rng.range(0, 14));
+  const n = 3 + rng.int(3);
+  const a = ringPoints(n, 12 + rng.range(0, 4), rng.range(0, 1), 24 + rng.range(0, 4), 26 + rng.range(0, 16));
+  const b = ringPoints(n, 12 + rng.range(0, 4), rng.range(0, 1), 76 - rng.range(0, 4), 74 - rng.range(0, 16));
   const pegs = [...a, ...b];
   if (minSeparation(pegs) < 9) return null;
   // The portal links the last peg of A to the first peg of B.
@@ -364,6 +424,7 @@ const chapter10: Maker = (rng) => {
   // Rotate so the portal edge pa->pb really is consecutive.
   const all = quantize(pegs);
   for (const [x, y] of all) if (x < 5 || x > 95 || y < 5 || y > 95) return null;
+  if (hasSnag(all, [order], [[pa, pb]])) return null;
   return {
     pegs: all,
     allowCross: true,
@@ -613,6 +674,7 @@ function weaveBody(rng: Rng, loops: Pt[][], extra: Partial<Body> = {}): Body | n
     base += l.length;
     return { color: C[t % C.length], sol };
   });
+  if (hasSnag(all, threads.map((t) => t.sol))) return null;
   void rng;
   return { pegs: all, threads, ...extra };
 }
@@ -633,7 +695,7 @@ const weave1: Maker = (rng) => weaveBody(rng, multiRings(rng, 2, 21 + rng.range(
 const weave2: Maker = (rng) => weaveBody(rng, multiRings(rng, 3, 24 + rng.range(0, 4), 12 + rng.range(0, 3)));
 
 const weave3: Maker = (rng) => {
-  const loops = multiRings(rng, 2, 14 + rng.range(0, 4), 19 + rng.range(0, 4));
+  const loops = crossingBands(rng, 2 + (rng.chance(0.35) ? 1 : 0));
   if (crossCount(loops) < 2) return null;
   const b = weaveBody(rng, loops, { allowCross: true, weave: true });
   if (!b) return null;
@@ -644,28 +706,33 @@ const weave3: Maker = (rng) => {
 };
 
 const weave4: Maker = (rng) => {
-  const loops = multiRings(rng, 2, 10 + rng.range(0, 4), 21 + rng.range(0, 4));
+  const loops = multiRings(rng, 2, 14 + rng.range(0, 4), 19 + rng.range(0, 4));
   if (crossCount(loops) === 0) return null;
   return weaveBody(rng, loops, { allowCross: true });
 };
 
 const weave5: Maker = (rng) => {
   // Interlocking: a second loop that lives inside the hole of a donut.
-  const outerN = 5 + rng.int(2);
-  const innerN = 3 + rng.int(2);
-  const outer = ringPoints(outerN, 38, rng.range(0, 0.5));
-  const inner = ringPoints(innerN, 20 + rng.range(0, 3), rng.range(0, 0.5));
-  const second = ringPoints(3, 9 + rng.range(0, 3), rng.range(0, 1), 50, 50);
+  // Vary every count: an interlock is structurally uniform, and a chapter of a
+  // dozen needs more distinct shapes than "donut plus a triangle".
+  const outerN = 4 + rng.int(4);
+  const innerN = 3 + rng.int(3);
+  const secondN = 3 + rng.int(2);
+  const outer = ringPoints(outerN, 37 + rng.range(0, 3), rng.range(0, 0.6));
+  const inner = ringPoints(innerN, 22 + rng.range(0, 4), rng.range(0, 0.6));
+  const second = ringPoints(secondN, 7 + rng.range(0, 3), rng.range(0, 1), 50, 50);
   const pegs = [...outer, ...inner, ...second];
   if (minSeparation(pegs) < 8) return null;
   const all = quantize(pegs);
   for (const [x, y] of all) if (x < 5 || x > 95 || y < 5 || y > 95) return null;
+  const sols = [donutOrder(outerN, innerN), second.map((_, i) => outerN + innerN + i)];
+  if (hasSnag(all, sols)) return null;
   return {
     pegs: all,
     allowCross: true,
     threads: [
-      { color: C[0], sol: donutOrder(outerN, innerN) },
-      { color: C[1], sol: second.map((_, i) => outerN + innerN + i) },
+      { color: C[0], sol: sols[0] },
+      { color: C[1], sol: sols[1] },
     ],
   };
 };

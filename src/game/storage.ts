@@ -33,6 +33,7 @@ export type Settings = {
   muted: boolean;
   motion: 'auto' | 'reduced' | 'full';
   highContrast: boolean;
+  haptics: boolean;
   leftHanded: boolean;
 };
 
@@ -81,7 +82,7 @@ export function emptySave(): Save {
     unlocks: { themes: ['paper'], skins: ['silk'], modes: ['classic', 'daily', 'zen'] },
     settings: {
       theme: 'paper', skin: 'silk', muted: false, motion: 'auto',
-      highContrast: false, leftHanded: false,
+      highContrast: false, haptics: true, leftHanded: false,
     },
     stats: {
       solved: 0, perfect: 0, firstTry: 0, totalAttempts: 0,

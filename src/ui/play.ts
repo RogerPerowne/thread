@@ -26,9 +26,13 @@ import { audio } from '../render/audio.js';
 
 /** How a mode supplies levels and reacts to a solve. */
 type Session = {
+  /** Shown in the top bar. */
   title: string;
+  /** The headline over the board — the chapter, or the day. */
+  title2(level: Level): string;
   accent: string;
   next(): Level | null;
+  /** The quieter line under the headline. */
   label(level: Level): string;
   onSolved?(level: Level, r: PlayResult): void;
   onFailed?(level: Level, r: PlayResult): 'continue' | 'end';
@@ -58,7 +62,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
   const hudEl = h('div', { class: 'hud' });
   const boardEl = h('div', { class: 'board' });
   const badge = h('div', { class: 'matchbadge', role: 'status', 'aria-live': 'polite' });
-  boardEl.appendChild(badge);
+  const pips = h('div', { class: 'pips', 'aria-hidden': 'true' });
   const controls = h('div', { class: 'controls' });
 
   el.style.setProperty('--accent', session.accent);
@@ -67,8 +71,11 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
       onBack: () => app.go({ name: 'home' }),
       onHelp: () => showHelp(current),
     }),
-    hudEl, boardEl, controls,
+    hudEl, boardEl, pips, controls,
   );
+  // The badge floats over the board, so it goes in after the engine has built
+  // its surface underneath.
+  boardEl.appendChild(badge);
 
   const engine = new Engine(boardEl, {
     themeId: app.save.settings.theme,
@@ -110,21 +117,26 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
 
   const spool = h('i');
   const spoolBar = h('div', { class: 'spool', role: 'progressbar', 'aria-label': 'String remaining' }, spool);
-  const label = h('span', { class: 'chapter' });
-  const extraSlot = h('span', { class: 'chapter' });
-  hudEl.append(label, spoolBar, extraSlot);
+  const label = h('div', { class: 'chapter' });
+  const metaLine = h('div', { class: 'meta' });
+  const sub = h('span');
+  const starRow = h('span', { class: 'stars' });
+  const extraSlot = h('span');
+  metaLine.append(sub, starRow, spoolBar, extraSlot);
+  hudEl.append(label, metaLine);
 
   /**
-   * Mutate the HUD rather than rebuild it. This runs on every peg the player
-   * adds, and the whole point of the renderer is that a frequent update must
-   * never destroy and recreate nodes.
+   * Mutate the title block rather than rebuild it. This runs on every peg the
+   * player adds, and the whole point of the renderer is that a frequent update
+   * never destroys and recreates nodes.
    */
   function refreshHud(): void {
-    const s = engine.spool;
-    if (s) {
-      spool.style.width = `${Math.round(s.fraction * 100)}%`;
+    const s2 = engine.spool;
+    if (s2) {
+      spool.style.width = `${Math.round(s2.fraction * 100)}%`;
       spoolBar.style.display = '';
-      spoolBar.setAttribute('aria-valuenow', String(Math.round(s.fraction * 100)));
+      spoolBar.classList.toggle('low', s2.fraction < 0.14);
+      spoolBar.setAttribute('aria-valuenow', String(Math.round(s2.fraction * 100)));
     } else {
       spoolBar.style.display = 'none';
     }
@@ -136,6 +148,28 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
       }
     } else if (extraSlot.firstChild) {
       clear(extraSlot);
+    }
+  }
+
+  /** Title, position in the chapter, and the stars already earned. */
+  function refreshTitle(level: Level): void {
+    label.textContent = session.title2(level);
+    sub.textContent = session.label(level);
+    const got = app.save.levels[level.id]?.stars ?? 0;
+    starRow.textContent = got ? '★'.repeat(got) + '☆'.repeat(3 - got) : '';
+    refreshPips(level);
+  }
+
+  /** One pip per level in the chapter, the current one drawn long. */
+  function refreshPips(level: Level): void {
+    clear(pips);
+    if (level.mode !== 'classic' && level.mode !== 'weave') return;
+    const siblings = app.chapterLevels(level.mode, level.chapter);
+    if (siblings.length < 2) return;
+    for (const l of siblings) {
+      const solved = (app.save.levels[l.id]?.stars ?? 0) > 0;
+      const here = l.id === level.id;
+      pips.appendChild(h('i', { class: here ? 'here' : solved ? 'done' : '' }));
     }
   }
 
@@ -158,7 +192,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     }
     current = level;
     failuresHere = 0;
-    label.textContent = session.label(level);
+    refreshTitle(level);
     // Read-only hook for the end-to-end harness. It drives the game through
     // real pointer events; this only lets it see what is on the board.
     const hook = (window as unknown as { __thread?: Record<string, unknown> }).__thread;
@@ -175,7 +209,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
       skinId: app.save.settings.skin,
       reducedMotion: app.reducedMotion,
     });
-    badge.classList.remove('show');
+    badge.classList.remove('show', 'win');
     refreshHud();
     refreshControls();
     if (session.timed && !timerRunning) {
@@ -199,7 +233,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     if (current.gem && firstTime) celebrateGem();
     if (firstTime) maybeCelebrateChapter();
     badge.textContent = current.gem ? 'A gem' : res.attempt === 1 ? 'Perfect' : 'Solved';
-    badge.classList.add('show');
+    badge.classList.add('show', 'win');
     ticker.schedule(900, () => badge.classList.remove('show'));
     if (session.timed) timeLeft += 3000;
     if (!session.autoAdvance) {
@@ -214,6 +248,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     if (hook?.current) (hook.current as Record<string, unknown>).lastMiss = res.similarity;
     // "94%" makes people try again immediately; "wrong" makes them quit.
     badge.textContent = `${Math.round(res.similarity * 100)}%`;
+    badge.classList.remove('win');
     badge.classList.add('show');
     ticker.schedule(1400, () => badge.classList.remove('show'));
 
@@ -299,7 +334,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     }
     current = easier.l;
     failuresHere = 0;
-    label.textContent = session.label(current);
+    refreshTitle(current);
     engine.load(current);
     refreshHud();
   }
@@ -378,6 +413,25 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     if (mode === 'classic' || mode === 'weave') {
       const all = a.levelsFor(mode);
       let idx = rt.levelId ? all.findIndex((l) => l.id === rt.levelId) : -1;
+
+      // A direct link to a level that is not in this mode's campaign — an
+      // assessment item, say — serves that one level rather than silently
+      // handing back something else.
+      if (idx < 0 && rt.levelId) {
+        const one = a.levelById(rt.levelId);
+        if (one) {
+          let served = false;
+          return {
+            title: one.name ?? 'Thread',
+            accent: MODE_ACCENT[mode],
+            autoAdvance: false,
+            allowHints: true,
+            next: () => (served ? null : ((served = true), one)),
+            title2: () => one.name ?? 'Thread',
+            label: () => one.id,
+          };
+        }
+      }
       if (idx < 0) idx = all.findIndex((l) => !(a.save.levels[l.id]?.stars > 0));
       if (idx < 0) idx = 0;
       let cursor = idx - 1;
@@ -387,7 +441,8 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
         autoAdvance: true,
         allowHints: true,
         next: () => all[++cursor] ?? null,
-        label: (l) => `${chapterName(a, mode, l.chapter)} · ${indexInChapter(a, mode, l)} of ${a.chapterLevels(mode, l.chapter).length}`,
+        title2: (l) => chapterName(a, mode, l.chapter),
+        label: (l) => `Level ${indexInChapter(a, mode, l)} of ${a.chapterLevels(mode, l.chapter).length}`,
       };
     }
 
@@ -400,7 +455,8 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
         autoAdvance: false,
         allowHints: true,
         next: () => (served ? null : ((served = true), dailyLevel(rt.seed ?? key))),
-        label: () => (rt.seed ?? key),
+        title2: () => 'Daily Thread',
+        label: () => prettyDay(rt.seed ?? key),
         onSolved: (level, res) => {
           const k = rt.seed ?? key;
           const rec = a.save.daily.history[k] ?? { solved: false, tries: 0 };
@@ -436,7 +492,8 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
         allowHints: false,
         timed: true,
         next: () => blitzLevel(seed, ++i),
-        label: () => `Solved ${sessionSolved}`,
+        title2: () => 'Blitz',
+        label: () => `${sessionSolved} solved`,
         hud: () => h('span', { class: 'chapter' }, timerEl, h('span', { text: 's' })),
         onSolved: () => {
           a.save.stats.blitzBest = Math.max(a.save.stats.blitzBest, sessionSolved);
@@ -455,6 +512,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
         allowHints: false,
         suddenDeath: true,
         next: () => oneLifeLevel(seed, ++i),
+        title2: () => 'One Life',
         label: () => `Rung ${sessionSolved + 1}`,
         onFailed: () => 'end',
         onSolved: () => {
@@ -473,6 +531,7 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
         autoAdvance: true,
         allowHints: true,
         next: () => zenLevel(seed, ++i),
+        title2: () => 'Zen',
         label: () => 'Take your time',
         onSolved: () => {
           a.save.stats.zenSolved++;
@@ -490,12 +549,19 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
         autoAdvance: false,
         allowHints: true,
         next: () => (served ? null : ((served = true), level)),
+        title2: () => 'A shared level',
         label: () => 'From a friend',
       };
     }
 
     throw new Error(`Unknown mode ${mode}`);
   }
+}
+
+function prettyDay(key: string): string {
+  const d = new Date(key + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return key;
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
 function chapterName(app: App, mode: 'classic' | 'weave', chapter: number): string {

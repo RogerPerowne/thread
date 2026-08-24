@@ -32,15 +32,18 @@ type Tool = 'peg' | 'thread' | 'post' | 'gold' | 'thorn' | 'erase';
 export function workshopScreen(app: App): { el: HTMLElement; dispose?: () => void } {
   const el = h('div', { class: 'screen playwrap', style: `--accent:${MODE_ACCENT.workshop}` });
   const boardEl = h('div', { class: 'board' });
-  const toolbar = h('div', { class: 'hud' });
-  const controls = h('div', { class: 'controls' });
+  const surface = h('div', { class: 'boardsurface' });
+  boardEl.appendChild(surface);
+  const toolbar = h('div', { class: 'toolbar' });
+  const controls = h('div', { class: 'controls scrollx' });
+  const primary = h('div', { class: 'primarybar' });
 
   el.append(
     topBar('Workshop', {
       onBack: () => app.go({ name: 'home' }),
       right: [h('button', { class: 'iconbtn', title: 'Open a code', onclick: openCode }, '⌘')],
     }),
-    toolbar, boardEl, controls,
+    toolbar, boardEl, h('div', { class: 'spacer below' }), controls, primary,
   );
 
   const draft: Draft = {
@@ -54,7 +57,7 @@ export function workshopScreen(app: App): { el: HTMLElement; dispose?: () => voi
   };
   let tool: Tool = 'thread';
 
-  const scene = new BoardScene(boardEl);
+  const scene = new BoardScene(surface);
   let state: PlayState = initialState(asLevel(draft, true));
 
   function rebuild(): void {
@@ -63,7 +66,7 @@ export function workshopScreen(app: App): { el: HTMLElement; dispose?: () => voi
     state.threads[0].pegs = [...draft.sol];
     state.threads[0].closed = draft.sol.length >= 3;
     scene.mount(level, { theme: app.theme, skin: app.skin, showTarget: false });
-    scene.setHitRadius(Math.min(boardEl.clientWidth, boardEl.clientHeight) || 320);
+    scene.setHitRadius(Math.min(surface.clientWidth, surface.clientHeight) || 320);
     scene.fillOpacity = 1;
     scene.update(state);
   }
@@ -132,8 +135,7 @@ export function workshopScreen(app: App): { el: HTMLElement; dispose?: () => voi
     clear(toolbar);
     const mk = (t: Tool, label: string) =>
       h('button', {
-        class: `pill ghost${tool === t ? ' primary' : ''}`,
-        style: 'padding:6px 12px;font-size:12px;min-height:34px',
+        class: `pill${tool === t ? ' primary' : ' ghost'}`,
         onclick: () => { tool = t; refreshToolbar(); },
       }, label);
     toolbar.append(mk('peg', 'Peg'), mk('thread', 'Thread'), mk('post', 'Post'), mk('gold', 'Gold'), mk('thorn', 'Thorn'), mk('erase', 'Erase'));
@@ -157,8 +159,12 @@ export function workshopScreen(app: App): { el: HTMLElement; dispose?: () => voi
         refreshControls();
         rebuild();
       }, 'ghost'),
-      pill('Check & share', () => share(), 'primary'),
     );
+    clear(primary);
+    // The one action that matters gets the full width, at the bottom.
+    const share2 = pill('Check and share', () => share(), 'primary');
+    share2.classList.add('block');
+    primary.appendChild(share2);
   }
 
   function spoolLabel(): string {

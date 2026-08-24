@@ -30,7 +30,7 @@ const ITEM_CAP_MS = 120_000;
 const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function assessScreen(app: App): { el: HTMLElement; dispose?: () => void } {
-  const el = h('div', { class: 'screen', style: `--accent:${MODE_ACCENT.assess}` });
+  const el = h('div', { class: 'screen', style: `--accent:${MODE_ACCENT.assess};--accent-ink:#fff` });
   const bodyEl = h('div', { class: 'playwrap' });
   el.append(topBar('Assessment', { onBack: () => app.go({ name: 'home' }) }), bodyEl);
 
@@ -58,7 +58,12 @@ function introCard(app: App, start: () => void): HTMLElement {
       statGrid([[last.score, 'Score'], [`±${last.margin}`, 'Margin'], [`${last.percentile}`, 'Percentile'], [app.save.assess.history.length, 'Taken']]),
       sparkline(app.save.assess.history.map((x) => x.score), MODE_ACCENT.assess),
     ) : null,
-    h('div', { class: 'actions', style: 'margin-top:18px' }, pill('Begin', start, 'primary')),
+    h('div', { class: 'actions', style: 'margin-top:22px' },
+      (() => {
+        const b = pill('Begin', start, 'accent');
+        b.classList.add('block');
+        return b;
+      })()),
   );
 }
 

@@ -203,6 +203,20 @@ export function portalTwin(level: Level, peg: number): number {
   return -1;
 }
 
+/**
+ * Where a rail peg STARTS: the far end of its rail from the position the
+ * answer needs. Sliding it there is the puzzle, so the game has to place it
+ * away from home when the level loads — otherwise the rail is decoration.
+ */
+export function initialRailPos(level: Level, peg: number): [number, number] | null {
+  const rail = level.rails?.find((r) => r.peg === peg);
+  if (!rail) return null;
+  const home = level.pegs[peg];
+  const da = Math.hypot(rail.a[0] - home[0], rail.a[1] - home[1]);
+  const db = Math.hypot(rail.b[0] - home[0], rail.b[1] - home[1]);
+  return da >= db ? [rail.a[0], rail.a[1]] : [rail.b[0], rail.b[1]];
+}
+
 /** The shortest legal length of the intended solution — used for the third star. */
 export function parLength(level: Level): number {
   let total = 0;

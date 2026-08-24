@@ -153,6 +153,34 @@ export function comb(teeth: number, w: number, h: number, depth: number): Pt[] {
   return pts.map(([px, py]) => [50 + px, 50 + py] as Pt);
 }
 
+/**
+ * A long thin band through the centre at `angle`.
+ *
+ * Two bands at different angles cross cleanly: every corner sits far from the
+ * other band's edges, which is what makes them the right shape for a weave.
+ * Two overlapping rings cross too, but they scatter pegs along each other's
+ * edges, and a peg on an edge is a peg a drag picks up by accident.
+ */
+export function band(
+  length: number,
+  width: number,
+  angle: number,
+  cx = 50,
+  cy = 50,
+  /** Extra pegs spaced along each long side; 1 means just the corners. */
+  segments = 1,
+): Pt[] {
+  const hl = length / 2;
+  const hw = width / 2;
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const put = (x: number, y: number): Pt => [cx + x * c - y * s, cy + x * s + y * c];
+  const out: Pt[] = [];
+  for (let i = 0; i <= segments; i++) out.push(put(-hl + (i / segments) * length, -hw));
+  for (let i = 0; i <= segments; i++) out.push(put(hl - (i / segments) * length, hw));
+  return out;
+}
+
 /** A bowtie: two triangles meeting at a crossing. Chapter 3 material. */
 export function bowtie(w: number, h: number): Pt[] {
   return [

@@ -2,18 +2,51 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+    <!-- viewport-fit=cover lets the page reach under the notch and the home
+         indicator; the safe-area insets in the CSS put the content back. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
     <meta name="theme-color" content="#FFFFFF" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Thread" />
+    <meta name="format-detection" content="telephone=no" />
     <title>Thread</title>
-    <meta name="description" content="A pegboard, one string, and the even-odd rule. Wrap the pegs, close the loop, match the shape." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;700&family=Zilla+Slab:wght@700&display=swap"
+    <meta
+      name="description"
+      content="A pegboard, one string, and the even-odd rule. Wrap the pegs, close the loop, match the shape."
     />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 4 L28 24 L4 14 L28 14 L4 24 Z' fill='none' stroke='%237A4FBF' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <meta property="og:title" content="Thread" />
+    <meta property="og:description" content="One string. Close the loop. Match the shape." />
+    <meta property="og:type" content="website" />
+
+    <!-- Self-hosted, so the first paint does not wait on someone else's CDN. -->
+    <link
+      rel="preload"
+      href="/fonts/libre-franklin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="preload" href="/fonts/zilla-slab-700.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23E6DCF7'/%3E%3Cpath d='M16 6 L26 24 L6 13 L26 13 L6 24 Z' fill='none' stroke='%237A4FBF' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23E6DCF7'/%3E%3Cpath d='M16 6 L26 24 L6 13 L26 13 L6 24 Z' fill='none' stroke='%237A4FBF' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <style>
+      /* Paint the page background before the stylesheet lands, so a phone
+         never flashes white on the way into a dark theme. */
+      html { background: #fff; }
+      @media (prefers-color-scheme: dark) { html { background: #fff; } }
+    </style>
   </head>
   <body>
     <div id="app"></div>

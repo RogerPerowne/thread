@@ -9,7 +9,7 @@
 
 import type { Pt } from '../core/geometry.js';
 import { dist } from '../core/geometry.js';
-import { type Level, deriveTarget, parLength, mechanicsOf, effectiveLoop } from '../core/level.js';
+import { type Level, deriveTarget, parLength, mechanicsOf, effectiveLoop, initialRailPos } from '../core/level.js';
 import {
   initialState, evaluate, canClose, normalizeClosedPath, threadPoints, lengthUsed,
   allCrossings, REJECT_TEXT, WIN_THRESHOLD,
@@ -20,8 +20,9 @@ import { BoardScene } from '../render/scene.js';
 import { Overlay } from '../render/particles.js';
 import { Ticker, easeOut, easeBack } from '../render/tween.js';
 import { audio } from '../render/audio.js';
+import * as haptics from '../render/haptics.js';
 import { themeById, skinById } from '../render/theme.js';
-import { GestureMachine, projectOnRail, type Action, type PointerInput } from './gesture.js';
+import { GestureMachine, projectOnRail, railT, NOTCH_SPACING, type Action, type PointerInput } from './gesture.js';
 
 export type PlayResult = {
   level: Level;
@@ -72,6 +73,8 @@ export class Engine {
   private diff = makeRaster();
   private closedAt = -1e9;
   private hitRadius = 4;
+  /** Tighter than the tap radius — see GestureCtx.pegAt. */
+  private sweepRadius = 3;
 
   /**
    * Weave levels: which crossings have the FIRST strand on top. The default is
@@ -95,12 +98,20 @@ export class Engine {
   private destroyed = false;
   private opts: EngineOpts;
 
-  constructor(private root: HTMLElement, opts: EngineOpts, private hooks: EngineHooks = {}) {
+  /** The square play surface the board is drawn into. */
+  private surface: HTMLElement;
+
+  constructor(root: HTMLElement, opts: EngineOpts, private hooks: EngineHooks = {}) {
     this.opts = opts;
     this.ticker = new Ticker();
     this.ticker.reducedMotion = opts.reducedMotion;
-    this.scene = new BoardScene(root);
-    this.overlay = new Overlay(root);
+    // The board lives on its own square surface so it never stretches with a
+    // tall phone screen, and so the pegboard reads as a physical thing.
+    this.surface = document.createElement('div');
+    this.surface.className = 'boardsurface';
+    root.appendChild(this.surface);
+    this.scene = new BoardScene(this.surface);
+    this.overlay = new Overlay(this.surface);
     this.overlay.reducedMotion = opts.reducedMotion;
     this.ticker.setRenderer(this.render);
     this.bind();
@@ -123,6 +134,13 @@ export class Engine {
 
     this.level = level;
     this.state = initialState(level);
+    // A peg on a rail starts at the far end of it, not where the answer needs
+    // it. Without this the rail is decoration: the board would load already
+    // solved and there would be nothing to slide.
+    for (const rail of level.rails ?? []) {
+      const start = initialRailPos(level, rail.peg);
+      if (start) this.state.railPos[rail.peg] = start;
+    }
     const derived = deriveTarget(level);
     this.target = derived.raster;
     this.history = [];
@@ -160,6 +178,7 @@ export class Engine {
     this.unbind();
     this.scene.destroy();
     this.overlay.clear();
+    this.surface.remove();
   }
 
   // -------------------------------------------------------------------------
@@ -177,10 +196,11 @@ export class Engine {
   };
 
   resize(): void {
-    const rect = this.root.getBoundingClientRect();
+    const rect = this.surface.getBoundingClientRect();
     const size = Math.min(rect.width, rect.height) || 320;
     this.overlay.resize(rect.width, rect.height);
     this.hitRadius = this.scene.setHitRadius(size);
+    this.sweepRadius = Math.max(2.8, this.hitRadius * 0.55);
     this.ticker.requestFrame();
   }
 
@@ -304,12 +324,39 @@ export class Engine {
       this.feed({ type: 'activate', peg, t: ev.timeStamp });
       return;
     }
+    // Shift plus left/right walks a rail peg along its rail, one notch a press.
+    if (ev.shiftKey && (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight')) {
+      const rail = this.level.rails?.find((r) => r.peg === peg);
+      if (rail) {
+        ev.preventDefault();
+        this.slideNotch(peg, ev.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
+    }
     const dir = { ArrowRight: 0, ArrowDown: 90, ArrowLeft: 180, ArrowUp: 270 }[ev.key];
     if (dir === undefined) return;
     ev.preventDefault();
     const next = this.nearestInDirection(peg, dir);
     if (next >= 0) this.scene.pegNodes[next].focus();
   };
+
+  /** Move a rail peg one notch along its rail, for keyboard play. */
+  private slideNotch(peg: number, delta: number): void {
+    const rail = this.level.rails?.find((r) => r.peg === peg);
+    if (!rail) return;
+    const a = rail.a as Pt;
+    const b = rail.b as Pt;
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const here = (this.state.railPos[peg] ?? this.level.pegs[peg]) as Pt;
+    const t = railT(here, a, b) + (delta * NOTCH_SPACING) / length;
+    const clamped = Math.min(1, Math.max(0, t));
+    const at: Pt = [a[0] + clamped * (b[0] - a[0]), a[1] + clamped * (b[1] - a[1])];
+    this.state.railPos[peg] = projectOnRail(at, a, b, this.level.pegs[peg] as Pt) as [number, number];
+    audio.pluck(34, 0.35);
+    haptics.notch();
+    this.ticker.requestFrame();
+    this.hooks.onStateChange?.();
+  }
 
   private nearestInDirection(from: number, degrees: number): number {
     const a = (degrees * Math.PI) / 180;
@@ -341,7 +388,7 @@ export class Engine {
       level: this.level,
       state: this.state,
       closedAt: this.closedAt,
-      pegAt: (p) => this.scene.pegAt(p, this.hitRadius, this.state),
+      pegAt: (p, mode) => this.scene.pegAt(p, mode === 'sweep' ? this.sweepRadius : this.hitRadius, this.state),
     });
     for (const a of actions) this.apply(a, input.t ?? performance.now());
     this.ticker.requestFrame();
@@ -362,6 +409,7 @@ export class Engine {
         this.popPeg(a.peg);
         if (prev !== undefined) {
           audio.pluck(dist(this.pegPoint(prev), this.pegPoint(a.peg)));
+          haptics.tick();
         }
         this.hooks.onStateChange?.();
         break;
@@ -391,6 +439,7 @@ export class Engine {
       case 'reject': {
         const msg = REJECT_TEXT[a.reason];
         if (msg) this.hooks.onToast?.(msg);
+        haptics.bump();
         this.nudgePeg(a.peg);
         break;
       }
@@ -401,7 +450,17 @@ export class Engine {
       case 'slide': {
         const rail = this.level.rails?.find((r) => r.peg === a.peg);
         if (rail) {
-          this.state.railPos[a.peg] = projectOnRail(a.p, rail.a as Pt, rail.b as Pt) as [number, number];
+          const before = this.state.railPos[a.peg];
+          const at = projectOnRail(
+            a.p, rail.a as Pt, rail.b as Pt, this.level.pegs[a.peg] as Pt,
+          ) as [number, number];
+          this.state.railPos[a.peg] = at;
+          // A click each time it lands in a new notch, so the snap is audible
+          // as well as visible.
+          if (!before || before[0] !== at[0] || before[1] !== at[1]) {
+            audio.pluck(34, 0.35);
+            haptics.notch();
+          }
         }
         break;
       }
@@ -472,6 +531,7 @@ export class Engine {
     st.closed = true;
     this.closedAt = t;
 
+    haptics.tie();
     // Tying off strums the loop, in order.
     audio.strum(segmentLengths(threadPoints(this.level, this.state, this.state.active)));
     this.ticker.add({
@@ -518,6 +578,7 @@ export class Engine {
 
   private onWin(r: PlayResult): void {
     audio.win();
+    haptics.win();
     const pts = threadPoints(this.level, this.state, 0);
     this.overlay.flourish(pts, this.level.threads[0].color);
     // One flourish, then stillness.
@@ -556,6 +617,7 @@ export class Engine {
    */
   private onMiss(r: PlayResult): void {
     audio.miss();
+    haptics.miss();
     if (this.level.weave && r.similarity >= WIN_THRESHOLD) {
       // The shape is right; only the over/under is wrong. Say so, and leave
       // the loop up so the player can tap the crossings.

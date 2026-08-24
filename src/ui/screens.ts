@@ -3,11 +3,14 @@
 import { h, svg, copy } from './dom.js';
 import {
   topBar, pill, modal, toast, miniature, stars, statGrid, streakCalendar,
-  sparkline, radar,
+  sparkline, radar, sectionHeader, themeSwatch, threadSwatch,
 } from './components.js';
+import * as haptics from '../render/haptics.js';
 import { type App, MODE_ACCENT, type Route } from './app.js';
+import { modeSoft, padlock } from './icons.js';
+import { CLASSIC_CHAPTERS, WEAVE_CHAPTERS } from '../core/design.js';
 import { solvedCount, perfectCount, starCount, dailyArchive } from '../game/progress.js';
-import { THEMES, SKINS } from '../render/theme.js';
+import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
 import { themeUnlocked, skinUnlocked } from '../game/progress.js';
 import { deriveTarget, type Level } from '../core/level.js';
 import { resetSave } from '../game/storage.js';
@@ -26,26 +29,40 @@ export function chaptersScreen(app: App, route: Route): { el: HTMLElement } {
   );
 
   const list = h('div', { class: 'list' });
+  const specs = r.mode === 'classic' ? CLASSIC_CHAPTERS : WEAVE_CHAPTERS;
   let previousComplete = true;
+
   for (const ch of app.chapters(r.mode)) {
     const levels = app.chapterLevels(r.mode, ch);
     const ids = levels.map((l) => l.id);
     const done = solvedCount(app.save, ids);
+    const stars = starCount(app.save, ids);
     const open = previousComplete || done > 0;
     // Chapter completion needs only solves, so a casual player is never stuck.
     previousComplete = done >= ids.length;
+    const idea = specs.find((sp) => sp.chapter === ch)?.idea ?? '';
 
     list.appendChild(h('button', {
       class: `row${open ? '' : ' locked'}`,
       disabled: !open,
       onclick: () => open && app.go({ name: 'levels', mode: r.mode, chapter: ch }),
     },
-      h('div', { class: 'mini', style: 'width:40px;height:40px' }, miniature(levels[0])),
+      h('div', {
+        class: 'tile sm',
+        style: `background:${done >= ids.length ? modeSoft(r.mode) : 'var(--panel)'}`,
+      }, miniature(levels[0])),
       h('div', { class: 'grow' },
-        h('div', { text: `${ch}. ${levels[0].name ?? `Chapter ${ch}`}` }),
-        h('div', { class: 'sub num', text: open ? `${done} / ${ids.length} solved · ${starCount(app.save, ids)} stars` : 'Finish the chapter before' }),
+        h('div', { class: 'title', text: `${ch}. ${levels[0].name ?? `Chapter ${ch}`}` }),
+        // The idea shows even when the chapter is locked: it is a reason to
+        // keep going, not a spoiler.
+        h('div', { class: 'sub', text: idea }),
       ),
-      h('span', { class: 'chev', text: open ? '›' : '🔒' }),
+      open
+        ? h('span', { class: 'meta' },
+          h('span', { class: 'num sub', text: `${done}/${ids.length}` }),
+          stars > 0 ? h('span', { class: 'stars', text: '★' }) : null,
+          h('span', { class: 'chev', text: '›' }))
+        : h('span', { class: 'meta' }, padlock()),
     ));
   }
   scroll.appendChild(list);
@@ -98,15 +115,36 @@ export function galleryScreen(app: App): { el: HTMLElement } {
 
   const all = [...app.classic, ...app.weave];
   const solved = new Set(app.save.gallery);
-  scroll.appendChild(h('p', { class: 'label', style: 'padding:14px 16px 0', text: `${solved.size} of ${all.length} shapes` }));
+
+  if (solved.size === 0) {
+    // A wall of 262 blank tiles is a poor way to meet a player. Say what the
+    // Gallery is for, and hand them the way in.
+    scroll.appendChild(h('div', { style: 'padding:28px var(--gutter) 8px;text-align:center' },
+      h('div', { class: 'tile lg', style: 'margin:0 auto 16px;background:var(--classic-soft)' },
+        miniature(app.classic[0], { showPegs: true })),
+      h('h2', { class: 'display', style: 'font-size:24px;margin:0 0 8px', text: 'Your poster starts here' }),
+      h('p', { style: 'color:var(--mute);font-size:15px;line-height:1.5;margin:0 auto;max-width:34ch' },
+        'Every shape you solve is added to a poster that fills in as you play. '
+        + 'When it has something on it you can save the whole thing as an image.'),
+      h('div', { style: 'margin-top:18px' },
+        pill('Play a level', () => app.go({ name: 'play', mode: 'classic' }), 'primary')),
+    ));
+  } else {
+    scroll.appendChild(h('div', { class: 'section' },
+      h('span', { class: 'label num', text: `${solved.size} of ${all.length} shapes` }),
+      h('button', { class: 'linky', text: 'Save as image', onclick: () => exportPoster(app) }),
+    ));
+  }
 
   const poster = h('div', { class: 'poster' });
   for (const level of all) {
     const got = solved.has(level.id);
     const cell = h('div', { class: `cell${got ? '' : ' empty'}` });
     if (got) cell.appendChild(miniature(level));
-    else cell.appendChild(svg('svg', { viewBox: '0 0 100 100' },
-      svg('circle', { cx: 50, cy: 50, r: 3, fill: 'currentColor', 'fill-opacity': 0.15 })));
+    else {
+      cell.appendChild(svg('svg', { viewBox: '0 0 100 100' },
+        svg('circle', { cx: 50, cy: 50, r: 3, fill: 'currentColor', 'fill-opacity': 0.14 })));
+    }
     cell.title = got ? (level.name ?? level.id) : 'Not solved yet';
     poster.appendChild(cell);
   }
@@ -226,9 +264,9 @@ export function statsScreen(app: App): { el: HTMLElement } {
     const last = history[history.length - 1];
     body.append(
       h('div', { class: 'label', text: 'Thread Score' }),
-      h('div', { class: 'stat', style: 'text-align:left;margin:4px 0 2px' },
-        h('b', { class: 'num', style: 'font-size:38px', text: `${last.score} ± ${last.margin}` }),
-        h('span', { text: `around the ${last.percentile}th percentile` }),
+      h('div', { style: 'margin:4px 0 2px' },
+        h('div', { class: 'bignum display', text: `${last.score} ± ${last.margin}` }),
+        h('div', { class: 'label', style: 'margin-top:6px', text: `around the ${last.percentile}th percentile` }),
       ),
       h('p', { class: 'sub', style: 'font-size:12px;color:var(--mute);margin:8px 0 0', text: DISCLAIMER }),
       sparkline(history.map((x) => x.score), MODE_ACCENT.assess),
@@ -244,15 +282,23 @@ export function statsScreen(app: App): { el: HTMLElement } {
 
   // Seven-day archive: catching up costs nothing and keeps people playing.
   const archive = h('div', { class: 'list' });
-  archive.appendChild(h('div', { class: 'label', style: 'padding-top:10px', text: 'Last seven days' }));
-  for (const key of dailyArchive(new Date().toISOString().slice(0, 10))) {
+  archive.appendChild(h('div', { class: 'label', style: 'padding:18px 0 6px', text: 'Last seven days' }));
+  const todayKey = new Date().toISOString().slice(0, 10);
+  for (const key of dailyArchive(todayKey)) {
     const rec = app.save.daily.history[key];
     archive.appendChild(h('button', {
       class: 'row',
+      style: 'padding-left:0;padding-right:0',
       onclick: () => app.go({ name: 'play', mode: 'daily', seed: key }),
     },
-      h('div', { class: 'grow' }, h('div', { class: 'num', text: key })),
-      h('span', { class: 'sub', text: rec?.solved ? `solved in ${rec.tries}` : 'play' }),
+      h('div', { class: 'grow' },
+        h('div', { class: 'title', text: friendlyDay(key, todayKey) }),
+        h('div', { class: 'sub num', text: key }),
+      ),
+      rec?.solved
+        ? h('span', { class: 'sub num', text: rec.tries === 1 ? 'first try' : `${rec.tries} tries` })
+        : h('span', { class: 'sub', text: 'Play' }),
+      h('span', { class: 'chev', text: '›' }),
     ));
   }
   body.appendChild(archive);
@@ -267,100 +313,140 @@ export function statsScreen(app: App): { el: HTMLElement } {
 export function settingsScreen(app: App): { el: HTMLElement } {
   const scroll = h('div', { class: 'scroll' });
   const el = h('div', { class: 'screen' }, topBar('Settings'), scroll);
-  const body = h('div', { style: 'padding:8px 16px 16px' });
   const ctx = app.unlockCtx;
 
-  const toggle = (label: string, get: () => boolean, set: (v: boolean) => void, note?: string) => {
-    const sw = h('button', { class: 'switch', role: 'switch', 'aria-checked': String(get()), 'aria-label': label });
+  const toggle = (
+    label: string,
+    get: () => boolean,
+    set: (v: boolean) => void,
+    note?: string,
+  ): HTMLElement => {
+    const sw = h('button', {
+      class: 'switch',
+      role: 'switch',
+      'aria-checked': String(get()),
+      'aria-label': label,
+    });
     sw.addEventListener('click', () => {
       set(!get());
       sw.setAttribute('aria-checked', String(get()));
       app.applySettings();
       app.persist();
+      haptics.tick();
     });
     return h('div', { class: 'switchrow' },
-      h('div', {}, h('div', { text: label }), note ? h('div', { class: 'sub', text: note }) : null),
+      h('div', { style: 'min-width:0' },
+        h('div', { style: 'font-weight:600;font-size:15.5px', text: label }),
+        note ? h('div', { class: 'sub', text: note }) : null),
       sw);
   };
 
+  const themeName = () => THEMES.find((t) => t.id === app.save.settings.theme)?.name ?? '';
+  const skinName = () => SKINS.find((sk) => sk.id === app.save.settings.skin)?.name ?? '';
+
+  const themes = h('div', { class: 'collection', style: 'padding-left:var(--gutter)' },
+    ...THEMES.map((t) => {
+      const open = themeUnlocked(app.save, t.id, ctx);
+      return h('button', {
+        class: `swatch${open ? '' : ' locked'}${app.save.settings.theme === t.id ? ' on' : ''}`,
+        style: 'padding:0;overflow:hidden',
+        title: open ? t.name : t.unlock,
+        'aria-label': open ? `Theme ${t.name}` : `Locked: ${t.unlock}`,
+        onclick: () => {
+          if (!open) {
+            toast(t.unlock);
+            return;
+          }
+          app.save.settings.theme = t.id;
+          app.applySettings();
+          app.persist();
+          app.go({ name: 'settings' });
+        },
+      }, themeSwatch(t.board, t.thread, t.peg));
+    }),
+  );
+
+  const skins = h('div', { class: 'collection', style: 'padding-left:var(--gutter)' },
+    ...SKINS.map((sk, i) => {
+      const open = skinUnlocked(app.save, sk.id, ctx);
+      return h('button', {
+        class: `swatch${open ? '' : ' locked'}${app.save.settings.skin === sk.id ? ' on' : ''}`,
+        style: 'padding:0;overflow:hidden;background:var(--panel)',
+        title: open ? sk.name : sk.unlock,
+        'aria-label': open ? `Thread ${sk.name}` : `Locked: ${sk.unlock}`,
+        onclick: () => {
+          if (!open) {
+            toast(sk.unlock);
+            return;
+          }
+          app.save.settings.skin = sk.id;
+          app.persist();
+          app.go({ name: 'settings' });
+        },
+      }, threadSwatch(THREAD_COLORS[i % THREAD_COLORS.length], sk.dash, sk.weight, sk.cap));
+    }),
+  );
+
+  const body = h('div', { style: 'padding:0 var(--gutter) 8px' });
   body.append(
-    h('div', { class: 'label', text: 'Theme' }),
-    h('div', { class: 'collection', style: 'padding-left:0' },
-      ...THEMES.map((t) => {
-        const open = themeUnlocked(app.save, t.id, ctx);
-        return h('button', {
-          class: `swatch${open ? '' : ' locked'}`,
-          style: `background:${t.board};border-color:${t.thread}${app.save.settings.theme === t.id ? ';outline:2px solid var(--ink);outline-offset:2px' : ''}`,
-          title: open ? t.name : t.unlock,
-          onclick: () => {
-            if (!open) {
-              toast(t.unlock);
-              return;
-            }
-            app.save.settings.theme = t.id;
-            app.applySettings();
-            app.persist();
-            app.go({ name: 'settings' });
-          },
-        });
-      }),
-    ),
-    h('div', { class: 'label', text: 'Thread' }),
-    h('div', { class: 'collection', style: 'padding-left:0' },
-      ...SKINS.map((sk) => {
-        const open = skinUnlocked(app.save, sk.id, ctx);
-        return h('button', {
-          class: `swatch${open ? '' : ' locked'}`,
-          style: `background:var(--panel)${app.save.settings.skin === sk.id ? ';outline:2px solid var(--ink);outline-offset:2px' : ''}`,
-          title: open ? sk.name : sk.unlock,
-          text: sk.name.slice(0, 1),
-          onclick: () => {
-            if (!open) {
-              toast(sk.unlock);
-              return;
-            }
-            app.save.settings.skin = sk.id;
-            app.persist();
-            app.go({ name: 'settings' });
-          },
-        });
-      }),
-    ),
-    h('div', { class: 'label', style: 'margin-top:14px', text: 'Play' }),
-    toggle('Sound', () => !app.save.settings.muted, (v) => { app.save.settings.muted = !v; }),
+    toggle('Sound', () => !app.save.settings.muted, (v) => { app.save.settings.muted = !v; },
+      'A pluck for each segment; the pitch rises as the segment shortens'),
+    toggle('Vibration', () => app.save.settings.haptics, (v) => { app.save.settings.haptics = v; },
+      'A short tick when a peg joins the loop'),
     toggle('Reduce motion', () => app.save.settings.motion === 'reduced',
       (v) => { app.save.settings.motion = v ? 'reduced' : 'auto'; },
-      'Transitions land instantly and particles are switched off'),
-    toggle('Higher contrast', () => app.save.settings.highContrast, (v) => { app.save.settings.highContrast = v; }),
+      'Transitions land instantly and no particles are drawn'),
+    toggle('Higher contrast', () => app.save.settings.highContrast,
+      (v) => { app.save.settings.highContrast = v; },
+      'Stronger lines and darker secondary text'),
+  );
 
-    h('div', { class: 'label', style: 'margin-top:14px', text: 'Data' }),
-    h('div', { class: 'actions', style: 'display:flex;gap:10px;padding:12px 0' },
-      pill('Export save', async () => {
-        const ok = await copy(JSON.stringify(app.save));
-        toast(ok ? 'Save copied to the clipboard' : 'Could not copy');
-      }, 'ghost'),
-      pill('Reset', () => {
-        modal((close) => [
-          h('h2', { class: 'display', text: 'Reset everything?' }),
-          h('p', { text: 'Your levels, streak, gallery and scores will be erased. This cannot be undone.' }),
-          h('div', { class: 'actions' },
-            pill('Keep it', close, 'ghost'),
-            pill('Reset', () => {
-              resetSave();
-              close();
-              location.reload();
-            }, 'primary'),
-          ),
-        ]);
-      }, 'ghost'),
-    ),
-    h('p', { class: 'sub', style: 'color:var(--mute);font-size:12px;line-height:1.5' },
+  const data = h('div', { style: 'display:flex;gap:10px;padding:16px var(--gutter) 4px' },
+    pill('Copy save', async () => {
+      const ok = await copy(JSON.stringify(app.save));
+      toast(ok ? 'Save copied to the clipboard' : 'Could not copy');
+    }, 'ghost'),
+    pill('Reset', () => {
+      modal((close) => [
+        h('h2', { class: 'display', text: 'Reset everything?' }),
+        h('p', { text: 'Your levels, streak, gallery and scores will be erased. This cannot be undone.' }),
+        h('div', { class: 'actions' },
+          pill('Keep it', close, 'primary'),
+          pill('Erase it all', () => {
+            resetSave();
+            close();
+            location.reload();
+          }, 'ghost'),
+        ),
+      ]);
+    }, 'ghost'),
+  );
+
+  scroll.append(
+    sectionHeader(`Theme · ${themeName()}`),
+    themes,
+    sectionHeader(`Thread · ${skinName()}`),
+    skins,
+    sectionHeader('Play'),
+    body,
+    sectionHeader('Data'),
+    data,
+    h('p', { class: 'note', style: 'padding-top:14px' },
       'Thread keeps everything on this device. No account, no ads, no tracking, and no '
       + 'notifications — a real daily reminder needs a push service, and there is no server '
       + 'here to run one, so there is no switch that pretends otherwise.'),
   );
-  scroll.appendChild(body);
   return { el };
+}
+
+/** "Today", "Yesterday", then the weekday. */
+function friendlyDay(key: string, todayKey: string): string {
+  const days = Math.round(
+    (Date.parse(todayKey + 'T00:00:00') - Date.parse(key + 'T00:00:00')) / 86400000,
+  );
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return new Date(key + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long' });
 }
 
 export { type Level };

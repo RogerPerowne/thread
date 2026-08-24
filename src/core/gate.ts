@@ -9,7 +9,7 @@ import type { Pt } from './geometry.js';
 import { selfCrossings, mutualCrossings, segmentHitsDisc, pointSegmentDistance } from './geometry.js';
 import {
   type Level, type Mechanic, deriveTarget, mechanicsOf, parLength, cycleLength,
-  isPortalEdge, validateLevel, effectiveLoop,
+  isPortalEdge, validateLevel, effectiveLoop, initialRailPos,
 } from './level.js';
 import {
   makeRaster, rasterizeLoop, similarity, topology, symmetryGroup, signature,
@@ -56,14 +56,36 @@ export type GateOpts = {
   stopOnFail?: boolean;
 };
 
-/** Where a rail peg starts: the far end of its rail from the solution position. */
-export function initialRailPos(level: Level, peg: number): [number, number] | null {
-  const rail = level.rails?.find((r) => r.peg === peg);
-  if (!rail) return null;
-  const home = level.pegs[peg];
-  const da = Math.hypot(rail.a[0] - home[0], rail.a[1] - home[1]);
-  const db = Math.hypot(rail.b[0] - home[0], rail.b[1] - home[1]);
-  return da >= db ? [...rail.a] as [number, number] : [...rail.b] as [number, number];
+/**
+ * How close a peg may come to a solution edge it is not an endpoint of.
+ * A little wider than the largest SWEEP radius the board ever uses, so the
+ * check holds on a small phone as well as a desktop.
+ */
+export const SNAG_RADIUS = 4.2;
+
+export type Snag = { peg: number; from: number; to: number; distance: number };
+
+/** The first peg a drag along a solution edge would pick up by accident. */
+export function snaggablePeg(level: Level): Snag | null {
+  for (const thread of level.threads) {
+    const sol = thread.sol;
+    for (let i = 0; i < sol.length; i++) {
+      const from = sol[i];
+      const to = sol[(i + 1) % sol.length];
+      if (from === to) continue;
+      // A portal hop is a teleport, not a journey: the string never travels
+      // along that chord, so nothing can be picked up on the way.
+      if (isPortalEdge(level, from, to)) continue;
+      const a = level.pegs[from] as Pt;
+      const b = level.pegs[to] as Pt;
+      for (let p = 0; p < level.pegs.length; p++) {
+        if (p === from || p === to) continue;
+        const d = pointSegmentDistance(level.pegs[p] as Pt, a, b);
+        if (d < SNAG_RADIUS) return { peg: p, from, to, distance: d };
+      }
+    }
+  }
+  return null;
 }
 
 const scratch = makeRaster();
@@ -207,12 +229,32 @@ function checkUniqueness(
  * untouched and it is the gold rule, not the shape, that rejects it.
  */
 function checkThreshold(level: Level): { result: CheckResult; worst: number } {
-  if (level.threads.length > 1) {
+  // A peg sitting on top of a solution edge is a trap: the natural gesture is
+  // to sweep along that edge, and the string picks the peg up on the way past.
+  // On most levels the extra vertex is a hairline and the player still wins,
+  // but on a weave it silently changes the crossings, and on a thorn or budget
+  // level it can fail outright. Either way the board is lying about what the
+  // obvious move does, so no level ships with one. This runs BEFORE the
+  // multi-thread shortcut below, because a weave is exactly where it bites.
+  const snag = snaggablePeg(level);
+  if (snag) {
     return {
-      result: { name: 'threshold', pass: true, detail: 'multi-thread: shape is checked per thread' },
+      result: {
+        name: 'threshold',
+        pass: false,
+        detail: `peg ${snag.peg} sits ${snag.distance.toFixed(1)} from the edge ${snag.from}-${snag.to}; a drag along it would snag`,
+      },
       worst: 0,
     };
   }
+
+  if (level.threads.length > 1) {
+    return {
+      result: { name: 'threshold', pass: true, detail: 'no snaggable peg; shape checked per thread' },
+      worst: 0,
+    };
+  }
+
   const target = deriveTarget(level).raster;
   const sol = level.threads[0].sol;
   let worst = 0;
@@ -640,6 +682,8 @@ export function quickCheck(level: Level): { ok: boolean; problems: string[] } {
     return { ok: false, problems: [(e as Error).message] };
   }
 }
+
+export { initialRailPos };
 
 export function greedyEasy(level: Level): boolean {
   return greedySolves(level, deriveTarget(level).raster);

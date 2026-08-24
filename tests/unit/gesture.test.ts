@@ -37,9 +37,9 @@ class Harness {
       level: this.level,
       state: this.state,
       closedAt: this.closedAt,
-      pegAt: (p: Pt) => {
+      pegAt: (p: Pt, mode: 'tap' | 'sweep' = 'tap') => {
         let best = -1;
-        let bd = 4 * 4;
+        let bd = mode === 'sweep' ? 2.8 * 2.8 : 4 * 4;
         this.level.pegs.forEach((q, i) => {
           const d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2;
           if (d <= bd) { bd = d; best = i; }
@@ -289,6 +289,43 @@ describe('rails', () => {
     expect(projectOnRail([0, 10], [20, 50], [80, 50])).toEqual([20, 50]);
     expect(projectOnRail([200, 10], [20, 50], [80, 50])).toEqual([80, 50]);
   });
+
+  it('snaps to notches anchored on the position the answer needs', () => {
+    const a: Pt = [20, 50];
+    const b: Pt = [80, 50];
+    const home: Pt = [50, 50];
+    // A thumb two units short still lands the peg exactly on the answer.
+    expect(projectOnRail([48, 44], a, b, home)).toEqual([50, 50]);
+    expect(projectOnRail([52, 56], a, b, home)).toEqual([50, 50]);
+    // And a deliberate move lands on the next notch, six units along.
+    expect(projectOnRail([56, 50], a, b, home)).toEqual([56, 50]);
+    expect(projectOnRail([44, 50], a, b, home)).toEqual([44, 50]);
+  });
+
+  it('never snaps past the ends of the rail', () => {
+    const out = projectOnRail([200, 50], [20, 50], [80, 50], [50, 50]);
+    expect(out[0]).toBeLessThanOrEqual(80);
+    expect(out[0]).toBeGreaterThanOrEqual(20);
+  });
+
+  it('leaves the peg where it was when the answer needs no move', () => {
+    // home at one end: the notches still line up on it exactly.
+    expect(projectOnRail([21, 50], [20, 50], [80, 50], [20, 50])).toEqual([20, 50]);
+  });
+  it('TAPPING a rail peg threads it — it is still a peg', () => {
+    // The rail peg could only ever be slid, never threaded, so no loop could
+    // include it and every Sliders level was unsolvable.
+    const h = new Harness(square({
+      pegs: [[20, 20], [80, 20], [80, 80], [50, 90]],
+      rails: [{ peg: 3, a: [20, 90], b: [80, 90] }],
+      threads: [{ color: '#7A4FBF', sol: [0, 1, 2, 3] }],
+    }));
+    h.tap(0); h.tap(1); h.tap(2); h.tap(3);
+    expect(h.pegs).toEqual([0, 1, 2, 3]);
+    h.tap(3);
+    expect(h.closed).toBe(true);
+  });
+
   it('dragging a rail peg slides it rather than threading it', () => {
     const h = new Harness(square({
       pegs: [[20, 20], [80, 20], [80, 80], [20, 80], [50, 90]],

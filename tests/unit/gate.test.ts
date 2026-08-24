@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { checkLevel, auditRepetition, fingerprint, quickCheck, initialRailPos } from '../../src/core/gate.js';
+import { checkLevel, auditRepetition, fingerprint, quickCheck, snaggablePeg, SNAG_RADIUS } from '../../src/core/gate.js';
+import { initialRailPos } from '../../src/core/level.js';
 import { validateLevel, type Level } from '../../src/core/level.js';
 
 const ring = (n: number, r = 34, cx = 50, cy = 50): [number, number][] => {
@@ -96,6 +97,41 @@ describe('check 4 — threshold safety', () => {
   });
 });
 
+describe('check 4 — a peg a drag would snag', () => {
+  it('rejects a peg sitting on a solution edge', () => {
+    // Peg 4 sits 2 units off the line from peg 0 to peg 1. Sweeping along that
+    // edge picks it up, and the loop the player gets is not the one they drew.
+    const l = lv({
+      pegs: [[20, 20], [80, 20], [80, 80], [20, 80], [50, 22]],
+      threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
+    });
+    expect(failed(l, 'threshold')?.detail).toMatch(/snag/);
+  });
+
+  it('accepts the same peg once it is clear of the edge', () => {
+    const l = lv({
+      pegs: [[20, 20], [80, 20], [80, 80], [20, 80], [50, 40]],
+      threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
+    });
+    expect(failed(l, 'threshold')).toBeUndefined();
+  });
+
+  it('does not object to the endpoints of the edge itself', () => {
+    expect(failed(lv({}), 'threshold')).toBeUndefined();
+  });
+
+  it('checks every thread, not just the first', () => {
+    const l = lv({
+      pegs: [[15, 15], [45, 15], [45, 45], [60, 60], [90, 60], [90, 90], [75, 60.5]],
+      threads: [
+        { color: '#000', sol: [0, 1, 2] },
+        { color: '#111', sol: [3, 4, 5] },
+      ],
+    });
+    expect(failed(l, 'threshold')?.detail).toMatch(/snag/);
+  });
+});
+
 describe('check 5 — mechanics are load-bearing', () => {
   it('rejects a post that blocks nothing', () => {
     const l = lv({ posts: [[8, 92, 3]] });
@@ -169,5 +205,21 @@ describe('rails', () => {
     const l = lv({ rails: [{ peg: 0, a: [10, 10], b: [50, 15] }] });
     const start = initialRailPos(l, 0);
     expect(start).toEqual([10, 10]);
+  });
+  it('and there is no rail position for a peg without a rail', () => {
+    expect(initialRailPos(lv({}), 0)).toBeNull();
+  });
+});
+
+describe('the snag radius', () => {
+  it('reports which peg and which edge', () => {
+    const l = lv({
+      pegs: [[20, 20], [80, 20], [80, 80], [20, 80], [50, 22]],
+      threads: [{ color: '#000', sol: [0, 1, 2, 3] }],
+    });
+    const s2 = snaggablePeg(l);
+    expect(s2).not.toBeNull();
+    expect(s2!.peg).toBe(4);
+    expect(s2!.distance).toBeLessThan(SNAG_RADIUS);
   });
 });

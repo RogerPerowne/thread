@@ -5,6 +5,8 @@
 
 import { h, clear } from './dom.js';
 import { toast, clearToast, closeTopModal } from './components.js';
+import { tabIcon } from './icons.js';
+import * as haptics from '../render/haptics.js';
 import { load, save as persist, type Save } from '../game/storage.js';
 import { unlockedModes, type UnlockCtx } from '../game/progress.js';
 import { type Level, validateLevel } from '../core/level.js';
@@ -27,14 +29,15 @@ export type Route =
   | { name: 'workshop' };
 
 export const MODE_ACCENT: Record<string, string> = {
-  classic: 'var(--accent-classic)',
-  weave: 'var(--accent-weave)',
-  daily: 'var(--accent-daily)',
-  blitz: 'var(--accent-blitz)',
-  assess: 'var(--accent-assess)',
-  zen: 'var(--accent-zen)',
-  onelife: 'var(--accent-onelife)',
-  workshop: 'var(--accent-workshop)',
+  classic: 'var(--classic)',
+  weave: 'var(--weave)',
+  daily: 'var(--daily)',
+  blitz: 'var(--blitz)',
+  assess: 'var(--assess)',
+  zen: 'var(--zen)',
+  onelife: 'var(--onelife)',
+  workshop: 'var(--workshop)',
+  shared: 'var(--workshop)',
 };
 
 export const MODE_BLURB: Record<string, string> = {
@@ -85,6 +88,13 @@ export class App {
     ticker.reducedMotion = reduced;
     audio.muted = s.muted;
     audio.setTheme(themeById(s.theme));
+    // Reduced motion is about sensory load, not only movement, so it quiets
+    // the haptics too — but they also have a switch of their own.
+    haptics.setHapticsEnabled(s.haptics && !reduced);
+    // Tint the browser's own chrome to match, so the page does not stop at a
+    // hard edge under the status bar on a phone.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', themeById(s.theme).board);
   }
 
   get reducedMotion(): boolean {
@@ -145,14 +155,21 @@ export class App {
     const mk = (name: Route['name'], glyph: string, label: string) =>
       h('button', {
         class: 'tab',
-        onclick: () => this.go({ name } as Route),
+        onclick: () => {
+          haptics.tick();
+          this.go({ name } as Route);
+        },
         'data-tab': name,
-      }, h('span', { class: 'glyph', text: glyph }), h('span', { text: label }));
+        'aria-label': label,
+      },
+        h('span', { class: 'glyph' }, tabIcon(glyph)),
+        h('span', { text: label }),
+      );
     return h('nav', { class: 'tabbar' },
-      mk('home', '◈', 'Home'),
-      mk('gallery', '▦', 'Gallery'),
-      mk('stats', '◔', 'Stats'),
-      mk('settings', '⚙', 'Settings'),
+      mk('home', 'home', 'Home'),
+      mk('gallery', 'gallery', 'Gallery'),
+      mk('stats', 'stats', 'Stats'),
+      mk('settings', 'settings', 'Settings'),
     );
   }
 

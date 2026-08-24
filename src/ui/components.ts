@@ -6,6 +6,7 @@
  */
 
 import { h, svg, clear, copy, type Child } from './dom.js';
+import * as haptics from '../render/haptics.js';
 import type { Level } from '../core/level.js';
 import { deriveTarget } from '../core/level.js';
 import { ticker, easeOut } from '../render/tween.js';
@@ -16,19 +17,46 @@ export function topBar(
 ): HTMLElement {
   return h('header', { class: 'topbar' },
     opts.onBack
-      ? h('button', { class: 'iconbtn', onclick: opts.onBack, 'aria-label': 'Back' }, '‹')
+      ? h('button', { class: 'iconbtn', onclick: opts.onBack, 'aria-label': 'Back' }, backArrow())
       : h('span'),
     h('h1', { class: 'display', text: title }),
     h('div', { class: 'right' },
       ...(opts.right ?? []),
       opts.onHelp ? h('button', { class: 'iconbtn', onclick: opts.onHelp, 'aria-label': 'How to play' }, '?') : null,
-      opts.onSettings ? h('button', { class: 'iconbtn', onclick: opts.onSettings, 'aria-label': 'Settings' }, '⚙') : null,
+      opts.onSettings ? h('button', { class: 'iconbtn', onclick: opts.onSettings, 'aria-label': 'Settings' }, '\u2699') : null,
     ),
   );
 }
 
-export function pill(label: string, onclick: () => void, kind: 'primary' | 'ghost' | '' = ''): HTMLButtonElement {
-  return h('button', { class: `pill ${kind}`.trim(), onclick }, label);
+function backArrow(): SVGElement {
+  return svg('svg', { viewBox: '0 0 24 24', width: 22, height: 22, fill: 'none', 'aria-hidden': 'true' },
+    svg('path', {
+      d: 'M15 5 L8 12 L15 19', stroke: 'currentColor', 'stroke-width': 2,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    }),
+  );
+}
+
+/** A small-caps section heading, optionally with an action on the right. */
+export function sectionHeader(label: string, action?: { text: string; onClick: () => void }): HTMLElement {
+  return h('div', { class: 'section' },
+    h('span', { class: 'label', text: label }),
+    action ? h('button', { class: 'linky', onclick: action.onClick, text: action.text }) : null,
+  );
+}
+
+export function pill(
+  label: string,
+  onclick: () => void,
+  kind: 'primary' | 'accent' | 'ghost' | '' = '',
+): HTMLButtonElement {
+  return h('button', {
+    class: `pill ${kind}`.trim(),
+    onclick: () => {
+      haptics.tick();
+      onclick();
+    },
+  }, label);
 }
 
 // ---------------------------------------------------------------------------
@@ -37,13 +65,23 @@ export function pill(label: string, onclick: () => void, kind: 'primary' | 'ghos
 
 let openScrim: HTMLElement | null = null;
 
-export function modal(content: (close: () => void) => Child[], opts: { dismissable?: boolean } = {}): () => void {
+export function modal(
+  content: (close: () => void) => Child[],
+  opts: { dismissable?: boolean; title?: string } = {},
+): () => void {
   const scrim = h('div', { class: 'scrim', role: 'dialog', 'aria-modal': 'true' });
   const sheet = h('div', { class: 'sheet' });
   scrim.appendChild(sheet);
 
+  // A sheet over the page must not let the page behind it scroll under a
+  // thumb — on a phone that reads as the whole app coming apart.
+  const scrollY = window.scrollY;
+  document.body.style.overflow = 'hidden';
+
   const close = () => {
     scrim.classList.remove('in');
+    document.body.style.overflow = '';
+    window.scrollTo(0, scrollY);
     // Removal rides the CSS transition rather than the ticker: a screen change
     // cancels every tween, and a modal that outlived its own dismissal would
     // sit there blocking the new screen.
@@ -54,31 +92,62 @@ export function modal(content: (close: () => void) => Child[], opts: { dismissab
       scrim.remove();
     };
     sheet.addEventListener('transitionend', drop, { once: true });
-    // Belt and braces for the case where no transition runs at all.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (getComputedStyle(sheet).transitionDuration === '0s') drop();
     }));
     if (openScrim === scrim) openScrim = null;
     document.removeEventListener('keydown', onKey);
   };
+
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && opts.dismissable !== false) close();
   };
+
+  if (opts.dismissable !== false) {
+    sheet.appendChild(h('div', { class: 'grabber', 'aria-hidden': 'true' }));
+    sheet.appendChild(h('button', { class: 'close', onclick: close, 'aria-label': 'Close' }, '\u2715'));
+  }
 
   for (const c of content(close)) {
     if (c === null || c === undefined || c === false) continue;
     sheet.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
   }
+
   if (opts.dismissable !== false) {
     scrim.addEventListener('pointerdown', (e) => {
       if (e.target === scrim) close();
     });
+    // Drag the sheet down to dismiss, the way a phone sheet should behave.
+    let startY = 0;
+    let dragging = false;
+    sheet.addEventListener('pointerdown', (e) => {
+      if (sheet.scrollTop > 0) return;
+      startY = e.clientY;
+      dragging = true;
+    });
+    sheet.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dy = e.clientY - startY;
+      if (dy <= 0) return;
+      sheet.style.transition = 'none';
+      sheet.style.transform = `translateY(${dy}px)`;
+    });
+    const release = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      sheet.style.transition = '';
+      sheet.style.transform = '';
+      if (e.clientY - startY > 90) close();
+    };
+    sheet.addEventListener('pointerup', release);
+    sheet.addEventListener('pointercancel', release);
   }
+
   document.addEventListener('keydown', onKey);
   document.body.appendChild(scrim);
   openScrim = scrim;
   requestAnimationFrame(() => scrim.classList.add('in'));
-  const focusable = sheet.querySelector<HTMLElement>('button, [tabindex]');
+  const focusable = sheet.querySelector<HTMLElement>('.pill, button, [tabindex]');
   focusable?.focus();
   return close;
 }
@@ -86,6 +155,7 @@ export function modal(content: (close: () => void) => Child[], opts: { dismissab
 export function closeTopModal(): void {
   openScrim?.remove();
   openScrim = null;
+  document.body.style.overflow = '';
 }
 
 /** Drop any toast that is still on screen — called on every screen change. */
@@ -158,6 +228,39 @@ export function ring(fraction: number, color: string): SVGElement {
       cx: 13, cy: 13, r, fill: 'none', stroke: color, 'stroke-width': 3, 'stroke-linecap': 'round',
       'stroke-dasharray': `${(c * Math.min(1, Math.max(0, fraction))).toFixed(2)} ${c.toFixed(2)}`,
       transform: 'rotate(-90 13 13)',
+    }),
+  );
+}
+
+/**
+ * A theme chip: the board colour with a thread drawn across it, so the swatch
+ * previews what the board will actually look like rather than being an
+ * abstract colour square.
+ */
+export function themeSwatch(board: string, thread: string, peg: string): SVGElement {
+  return svg('svg', { viewBox: '0 0 40 40', 'aria-hidden': 'true', width: '100%', height: '100%' },
+    svg('rect', { x: 0, y: 0, width: 40, height: 40, fill: board }),
+    svg('circle', { cx: 11, cy: 13, r: 2.1, fill: peg }),
+    svg('circle', { cx: 29, cy: 15, r: 2.1, fill: peg }),
+    svg('circle', { cx: 20, cy: 29, r: 2.1, fill: peg }),
+    svg('path', {
+      d: 'M11 13 L29 15 L20 29 Z',
+      fill: thread, 'fill-opacity': 0.18,
+      stroke: thread, 'stroke-width': 2.2, 'stroke-linejoin': 'round',
+    }),
+  );
+}
+
+/** A thread chip: the skin's weight, dash and cap, drawn as a stroke. */
+export function threadSwatch(color: string, dash: string | null, weight = 1, cap = 'round'): SVGElement {
+  return svg('svg', { viewBox: '0 0 40 40', 'aria-hidden': 'true', width: '100%', height: '100%' },
+    svg('path', {
+      d: 'M7 27 C15 8, 25 32, 33 12',
+      fill: 'none',
+      stroke: color,
+      'stroke-width': 4 * weight,
+      'stroke-linecap': cap,
+      ...(dash ? { 'stroke-dasharray': dash.split(' ').map((n) => Number(n) * 2).join(' ') } : {}),
     }),
   );
 }

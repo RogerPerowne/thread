@@ -139,14 +139,18 @@ export class BoardScene {
 
     // --- target ghost -------------------------------------------------------
     for (let t = 0; t < level.threads.length; t++) {
+      // The ghost is drawn in the thread's own colour: it is the shape you are
+      // about to make, not a neutral annotation beside it.
+      const ghostInk = level.threads[t].color || opts.theme.target;
       const p = el('path', {
         'fill-rule': 'evenodd',
-        fill: opts.theme.target,
-        'fill-opacity': opts.showTarget ? 0.13 : 0,
-        stroke: opts.theme.target,
-        'stroke-opacity': opts.showTarget ? 0.5 : 0,
-        'stroke-width': 0.45,
-        'stroke-dasharray': '1.8 1.4',
+        fill: ghostInk,
+        'fill-opacity': opts.showTarget ? 0.1 : 0,
+        stroke: ghostInk,
+        'stroke-opacity': opts.showTarget ? 0.42 : 0,
+        'stroke-width': 0.6,
+        'stroke-dasharray': '2.2 1.8',
+        'stroke-linecap': 'round',
         'stroke-linejoin': 'round',
         class: 'target-ghost',
       });
@@ -201,7 +205,7 @@ export class BoardScene {
       if (opts.skin.under) {
         const under = el('path', {
           fill: 'none', stroke: opts.skin.under,
-          'stroke-width': 1.5 * opts.skin.weight, 'stroke-linecap': opts.skin.cap,
+          'stroke-width': 1.8 * opts.skin.weight, 'stroke-linecap': opts.skin.cap,
           'stroke-linejoin': 'round', class: 'thread-under',
         });
         this.threadUnder.push(under);
@@ -212,7 +216,7 @@ export class BoardScene {
 
       const path = el('path', {
         fill: 'none', stroke: color,
-        'stroke-width': 0.95 * opts.skin.weight,
+        'stroke-width': 1.15 * opts.skin.weight,
         'stroke-linecap': opts.skin.cap,
         'stroke-linejoin': 'round',
         class: 'thread-path',
@@ -238,7 +242,7 @@ export class BoardScene {
       // The halo is the touch target. Its radius is set from the viewport by
       // setHitRadius so it is always at least 44 CSS pixels across.
       const halo = el('circle', { r: 3.4, fill: 'transparent', class: 'peg-halo' });
-      const dot = el('circle', { r: 1.5, fill: opts.theme.peg, class: 'peg-dot' });
+      const dot = el('circle', { r: 1.7, fill: opts.theme.peg, class: 'peg-dot' });
       g.append(halo, dot);
       g.setAttribute('tabindex', '0');
       g.setAttribute('role', 'button');
@@ -292,8 +296,8 @@ export class BoardScene {
 
   setTargetVisible(v: number): void {
     for (const p of this.targetFill) {
-      p.setAttribute('fill-opacity', String(0.13 * v));
-      p.setAttribute('stroke-opacity', String(0.5 * v));
+      p.setAttribute('fill-opacity', String(0.1 * v));
+      p.setAttribute('stroke-opacity', String(0.42 * v));
     }
   }
 
@@ -350,7 +354,7 @@ export class BoardScene {
       setD(this.portalGhost[t], this.ghostBuf.build());
       const fillPath = this.threadFill[t];
       setD(fillPath, st.closed && pegs.length >= 3 ? this.fillBuf.build() : '');
-      fillPath.setAttribute('fill-opacity', String(st.closed ? 0.22 * this.fillOpacity : 0));
+      fillPath.setAttribute('fill-opacity', String(st.closed ? 0.26 * this.fillOpacity : 0));
     }
 
     // Rubber band from the loose end to the pointer.
@@ -376,7 +380,7 @@ export class BoardScene {
     for (let i = 0; i < this.pegNodes.length; i++) {
       const dot = this.pegDots[i];
       const pop = this.pegPop[i];
-      const base = onLoop.has(i) ? 2.0 : 1.5;
+      const base = onLoop.has(i) ? 2.3 : 1.7;
       dot.setAttribute('r', String(round(base + pop * 1.2)));
       if (i === loose) {
         dot.setAttribute('fill-opacity', '1');
