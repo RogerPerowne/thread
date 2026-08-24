@@ -18,9 +18,14 @@ export default defineConfig({
   ],
   webServer: {
     // Build first: previewing a stale dist is worse than not running at all.
-    command: 'npx vite build && npx vite preview --port 4173 --strictPort',
+    // The host is pinned because vite preview otherwise binds to "localhost",
+    // which resolves to ::1 first on CI runners while Playwright polls the
+    // IPv4 address and waits until it times out.
+    command: 'npx vite build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
-    timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 180_000,
   },
 });
