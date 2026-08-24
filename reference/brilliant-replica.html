@@ -60,7 +60,8 @@ defs.appendChild(el('clipPath', { id: 'board' }, [
 ]));
 const beam = el('linearGradient', { id: 'beam', x1: 0, y1: 0, x2: 0, y2: 1 });
 beam.appendChild(el('stop', { offset: '0', 'stop-color': '#a06bff', 'stop-opacity': '0' }));
-beam.appendChild(el('stop', { offset: '1', 'stop-color': '#a06bff', 'stop-opacity': '0.185' }));
+beam.appendChild(el('stop', { offset: '0.58', 'stop-color': '#a06bff', 'stop-opacity': '0.20' }));
+beam.appendChild(el('stop', { offset: '1', 'stop-color': '#a06bff', 'stop-opacity': '0.22' }));
 defs.appendChild(beam);
 const face = el('linearGradient', { id: 'face', x1: 0, y1: 0, x2: 0, y2: 1 });
 face.appendChild(el('stop', { offset: '0', 'stop-color': '#b78afb' }));
@@ -134,43 +135,95 @@ function roundPoly(v, r) {
 const roundedDiamond = (cx, cy, hw, hh, r) =>
   roundPoly([[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]], r);
 
-// The extruded body: the diamond's lower half swept down by EXT, as one outline.
-const bodyPath = (cx, cy, hw, hh, r, ext) => roundPoly([
-  [cx - hw, cy], [cx, cy + hh], [cx + hw, cy],
-  [cx + hw, cy + ext], [cx, cy + hh + ext], [cx - hw, cy + ext],
-], r);
+/*
+ * The extruded body is the top face swept straight down, so it must be built
+ * from the top face's own rounded outline — rounding a six-sided silhouette
+ * separately pulls its side corners inside the top face's and leaves a notch
+ * of background showing where the two should meet.
+ *
+ * A vertical sweep of a convex shape is: the shape at the bottom of the sweep,
+ * plus a band between its leftmost and rightmost points. Those extreme points
+ * sit where the corner curve's tangent is vertical, which for a quadratic
+ * corner is its midpoint — hw * (1 - t/2) out from the centre. The band meets
+ * the curves tangentially there, so there is no seam and nothing overhangs.
+ */
+/*
+ * How far the rounded diamond actually reaches sideways. The fillet pulls the
+ * left and right points in: the widest place on the outline is the corner
+ * curve's midpoint, at hw * (1 - t/2), not the un-rounded vertex at hw.
+ * Both the extrusion band and the light column above the tile are sized from
+ * this, so they line up with the tile's real silhouette.
+ */
+function extremeX(hw, hh, r) {
+  const t = Math.min(r / Math.hypot(hw, hh), 0.48);
+  return hw * (1 - t / 2);
+}
+
+function bodyPath(cx, cy, hw, hh, r, ext) {
+  const ex = extremeX(hw, hh, r);
+  const band = `M ${(cx - ex).toFixed(2)} ${(cy - 0.4).toFixed(2)}`
+    + ` L ${(cx + ex).toFixed(2)} ${(cy - 0.4).toFixed(2)}`
+    + ` L ${(cx + ex).toFixed(2)} ${(cy + ext + 0.4).toFixed(2)}`
+    + ` L ${(cx - ex).toFixed(2)} ${(cy + ext + 0.4).toFixed(2)} Z`;
+  return `${roundedDiamond(cx, cy + ext, hw, hh, r)} ${band}`;
+}
+
+/*
+ * Glyphs are authored flat and upright in a 100x100 box centred on the origin,
+ * then laid on the tile's face by construction. The face map composed with the
+ * 45 degrees the diamond already carries reduces to a pure anisotropic scale —
+ * sqrt(2)*HW/BOX across, sqrt(2)*HH/BOX down — so an upright mark stays
+ * upright and simply lies down on the tile.
+ *
+ * The numbers below are the source's own glyphs un-projected through that
+ * scale: the tick measured at (-15,-3) (-5,5) (14,-13) off the tile centre
+ * becomes (-14.7,-4.8) (-4.9,8.0) (13.7,-20.9) in the flat box — an ordinary
+ * upright tick, which is the proof the original was built the same way.
+ */
+const GLYPH_BOX = 100;
+const FACE_SX = Math.SQRT2 * HW / GLYPH_BOX;
+const FACE_SY = Math.SQRT2 * HH / GLYPH_BOX;
+
+function onFace(cx, cy, kids) {
+  return el('g', {
+    transform: `translate(${cx} ${cy}) scale(${FACE_SX.toFixed(4)} ${FACE_SY.toFixed(4)})`,
+  }, kids);
+}
+
+const inked = (d, w) => el('path', {
+  d, fill: 'none', stroke: '#fbf4ff', 'stroke-width': w,
+  'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+});
 
 function checkGlyph(cx, cy) {
-  return el('path', {
-    d: `M ${cx - 15} ${cy - 3} L ${cx - 5} ${cy + 5} L ${cx + 14} ${cy - 13}`,
-    fill: 'none', stroke: '#fbf4ff', 'stroke-width': 7,
-    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-  });
+  return onFace(cx, cy, [inked('M -14.7 -4.8 L -4.9 8 L 13.7 -20.9', 9)]);
 }
-// Two small crosses lying flat in the isometric plane — the source's
-// "practice" mark reads as a pair of iso plus signs.
-function isoCross(cx, cy) {
-  const g = el('g', { stroke: '#fbf4ff', 'stroke-width': 7, 'stroke-linecap': 'round' });
-  const ax = 9, ay = 5.5;
-  g.appendChild(el('path', { d: `M ${cx - ax} ${cy - ay} L ${cx + ax} ${cy + ay}` }));
-  g.appendChild(el('path', { d: `M ${cx - ax} ${cy + ay} L ${cx + ax} ${cy - ay}` }));
-  return g;
-}
+
+/* Two small crosses. Upright in the flat box; the projection is what lays them
+   along the tile's edges, which is how they read in the source. */
 function practiceGlyph(cx, cy) {
-  const g = el('g');
-  g.appendChild(isoCross(cx + 7, cy - 9));
-  g.appendChild(isoCross(cx - 11, cy + 2));
-  return g;
+  const cross = (u, v) => {
+    const a = 10.3;
+    return el('g', { transform: `translate(${u} ${v})` }, [
+      inked(`M ${-a} ${-a} L ${a} ${a}`, 7.5),
+      inked(`M ${-a} ${a} L ${a} ${-a}`, 7.5),
+    ]);
+  };
+  return onFace(cx, cy, [cross(6.9, -14.5), cross(-10.8, 3.2)]);
 }
 
 for (const t of TILES) {
   const { x: cx, y: cy, kind } = t;
   const g = el('g');
-  // rising beam
-  g.appendChild(el('rect', { x: cx - 67, y: cy - HH - 74, width: 134, height: 94, fill: 'url(#beam)' }));
+  // Rising beam. It runs all the way down to the tile's widest row and is cut
+  // off by the tile itself, so the light hugs the tile's upper edges instead
+  // of stopping in mid-air above its top corner.
+  const bw = extremeX(HW, HH, 7);
+  g.appendChild(el('rect', { x: cx - bw, y: cy - 104, width: bw * 2, height: 104, fill: 'url(#beam)' }));
   // floating motes
   g.appendChild(el('rect', { x: cx - 58, y: cy - 40, width: 9, height: 9, rx: 1.5, fill: '#a06bff', opacity: 0.3 }));
   g.appendChild(el('rect', { x: cx + 45, y: cy - 52, width: 6, height: 6, rx: 1.2, fill: '#a06bff', opacity: 0.24 }));
+  g.appendChild(el('rect', { x: cx - 56, y: cy - 124, width: 9, height: 9, rx: 1.5, fill: '#a06bff', opacity: 0.22 }));
   // extruded body
   g.appendChild(el('path', { d: bodyPath(cx, cy, HW, HH, 7, EXT), fill: '#391c68' }));
   // top face

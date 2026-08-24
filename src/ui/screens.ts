@@ -1,15 +1,17 @@
-/** Chapter list, level grid, gallery, stats and settings. */
+/** Chapter cards, the level path, gallery, stats and settings. */
 
 import { h, svg, copy } from './dom.js';
 import {
-  topBar, pill, modal, toast, miniature, stars, statGrid, streakCalendar,
-  sparkline, radar, sectionHeader, themeSwatch, threadSwatch,
+  topBar, pill, modal, toast, miniature, statGrid, streakCalendar,
+  sparkline, radar, sectionHeader, themeSwatch, threadSwatch, gameCard,
 } from './components.js';
 import * as haptics from '../render/haptics.js';
 import { type App, MODE_ACCENT, type Route } from './app.js';
-import { modeSoft, padlock } from './icons.js';
 import { CLASSIC_CHAPTERS, WEAVE_CHAPTERS } from '../core/design.js';
-import { solvedCount, perfectCount, starCount, dailyArchive } from '../game/progress.js';
+import { chapterColor } from './palette.js';
+import { chevronRight, arrowDown, download } from './icons.js';
+import { chapterPath, type PathNode } from './path.js';
+import { solvedCount, starCount, dailyArchive } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
 import { themeUnlocked, skinUnlocked } from '../game/progress.js';
 import { deriveTarget, type Level } from '../core/level.js';
@@ -28,7 +30,7 @@ export function chaptersScreen(app: App, route: Route): { el: HTMLElement } {
     scroll,
   );
 
-  const list = h('div', { class: 'list' });
+  const list = h('div', { class: 'cardlist' });
   const specs = r.mode === 'classic' ? CLASSIC_CHAPTERS : WEAVE_CHAPTERS;
   let previousComplete = true;
 
@@ -36,68 +38,126 @@ export function chaptersScreen(app: App, route: Route): { el: HTMLElement } {
     const levels = app.chapterLevels(r.mode, ch);
     const ids = levels.map((l) => l.id);
     const done = solvedCount(app.save, ids);
-    const stars = starCount(app.save, ids);
     const open = previousComplete || done > 0;
     // Chapter completion needs only solves, so a casual player is never stuck.
     previousComplete = done >= ids.length;
     const idea = specs.find((sp) => sp.chapter === ch)?.idea ?? '';
+    const color = chapterColor(r.mode, ch);
 
-    list.appendChild(h('button', {
-      class: `row${open ? '' : ' locked'}`,
-      disabled: !open,
-      onclick: () => open && app.go({ name: 'levels', mode: r.mode, chapter: ch }),
-    },
-      h('div', {
-        class: 'tile sm',
-        style: `background:${done >= ids.length ? modeSoft(r.mode) : 'var(--panel)'}`,
-      }, miniature(levels[0])),
-      h('div', { class: 'grow' },
-        h('div', { class: 'title', text: `${ch}. ${levels[0].name ?? `Chapter ${ch}`}` }),
-        // The idea shows even when the chapter is locked: it is a reason to
-        // keep going, not a spoiler.
-        h('div', { class: 'sub', text: idea }),
-      ),
-      open
-        ? h('span', { class: 'meta' },
-          h('span', { class: 'num sub', text: `${done}/${ids.length}` }),
-          stars > 0 ? h('span', { class: 'stars', text: '★' }) : null,
-          h('span', { class: 'chev', text: '›' }))
-        : h('span', { class: 'meta' }, padlock()),
-    ));
+    list.appendChild(gameCard({
+      id: `chapter-${ch}`,
+      color,
+      title: levels[0].name ?? `Chapter ${ch}`,
+      // The idea shows even when the chapter is locked: it is a reason to keep
+      // going, not a spoiler.
+      blurb: idea,
+      foot: open ? `Chapter ${ch}` : 'Locked',
+      note: open ? `${done} of ${ids.length}` : `Finish Chapter ${ch - 1} first`,
+      art: miniature(levels[0], { ink: 'var(--card-ink)', mono: true }),
+      locked: !open,
+      onOpen: () => {
+        if (!open) {
+          toast(`Finish Chapter ${ch - 1} to open this one.`);
+          return;
+        }
+        app.go({ name: 'levels', mode: r.mode, chapter: ch });
+      },
+    }));
   }
   scroll.appendChild(list);
   return { el };
 }
 
-export function levelsScreen(app: App, route: Route): { el: HTMLElement } {
+/**
+ * A chapter, as a path you walk down rather than a grid you scan. The layout
+ * is the isometric meander measured in reference/ and held to by
+ * scripts/compare-reference.mjs; the paint is Thread's: the chapter's colour
+ * edge to edge, black ink, a white tile for the level you are up to.
+ */
+export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose?: () => void } {
   const r = route as Extract<Route, { name: 'levels' }>;
   const levels = app.chapterLevels(r.mode, r.chapter);
-  const scroll = h('div', { class: 'scroll' });
-  const el = h('div', { class: 'screen', style: `--accent:${MODE_ACCENT[r.mode]}` },
-    topBar(levels[0]?.name ?? `Chapter ${r.chapter}`, { onBack: () => app.go({ name: 'chapters', mode: r.mode }) }),
+  const color = chapterColor(r.mode, r.chapter);
+  const specs = r.mode === 'classic' ? CLASSIC_CHAPTERS : WEAVE_CHAPTERS;
+  const idea = specs.find((sp) => sp.chapter === r.chapter)?.idea ?? '';
+  const ids = levels.map((l) => l.id);
+  const done = solvedCount(app.save, ids);
+
+  const scroll = h('div', { class: 'scroll pathscroll' });
+  const el = h('div', {
+    class: 'screen chapterscreen',
+    style: `--card:${color};--accent:${MODE_ACCENT[r.mode]}`,
+  },
+    chapterHeader(app, r, levels[0]?.name ?? `Chapter ${r.chapter}`, idea, done, ids.length),
     scroll,
   );
 
-  const grid = h('div', { class: 'levelgrid' });
   let firstUnsolved = true;
-  levels.forEach((l, i) => {
+  const nodes: PathNode[] = levels.map((l, i) => {
     const rec = app.save.levels[l.id];
-    const done = (rec?.stars ?? 0) > 0;
-    const playable = done || firstUnsolved;
-    if (!done) firstUnsolved = false;
-    grid.appendChild(h('button', {
-      class: `levelbtn${done ? ' done' : ''}${l.gem ? ' gem' : ''}`,
-      disabled: !playable,
-      title: l.gem ? 'A gem' : '',
-      onclick: () => app.go({ name: 'play', mode: r.mode, levelId: l.id }),
-    },
-      h('span', { class: 'n', text: String(i + 1) }),
-      h('span', { class: 'stars', text: done ? stars(rec!.stars) : '' }),
-    ));
+    const solved = (rec?.stars ?? 0) > 0;
+    const isNext = !solved && firstUnsolved;
+    if (!solved) firstUnsolved = false;
+    return {
+      label: `Level ${i + 1}`,
+      sub: isNext ? 'Play' : undefined,
+      stars: solved ? rec!.stars : 0,
+      state: solved ? 'done' : isNext ? 'next' : 'locked',
+      gem: l.gem,
+      onOpen: () => app.go({ name: 'play', mode: r.mode, levelId: l.id }),
+    };
   });
-  scroll.appendChild(grid);
-  scroll.appendChild(h('p', { class: 'label', style: 'padding:0 16px', text: `${perfectCount(app.save, levels.map((l) => l.id))} of ${levels.length} perfected` }));
-  return { el };
+
+  const view = chapterPath(nodes, color);
+  scroll.appendChild(view.el);
+
+  // Brilliant puts a button here that drops you back to where you were on the
+  // path. It earns its place on a long chapter and gets in the way on a short
+  // one, so it only appears when the current tile can actually be off screen.
+  const jumpNeeded = view.currentY > 900;
+  if (jumpNeeded) {
+    el.appendChild(h('button', {
+      class: 'jumpbtn',
+      onclick: () => {
+        haptics.tick();
+        view.scrollToCurrent();
+      },
+    }, h('span', { class: 'arrow' }, arrowDown()), h('span', { text: 'Where I am' })));
+  }
+
+  // Land on the level you are up to, not on level one, and do it without an
+  // animation the player did not ask for.
+  const settle = requestAnimationFrame(() => view.scrollToCurrent('auto'));
+  return { el, dispose: () => cancelAnimationFrame(settle) };
+}
+
+function chapterHeader(
+  app: App,
+  r: Extract<Route, { name: 'levels' }>,
+  title: string,
+  idea: string,
+  done: number,
+  total: number,
+): HTMLElement {
+  return h('header', { class: 'chapterhead' },
+    h('button', {
+      class: 'iconbtn',
+      'aria-label': 'Back',
+      onclick: () => app.go({ name: 'chapters', mode: r.mode }),
+    }, svg('svg', { viewBox: '0 0 24 24', width: 24, height: 24, fill: 'none', 'aria-hidden': 'true' },
+      svg('path', {
+        d: 'M15 4 L7 12 L15 20', stroke: 'currentColor', 'stroke-width': 2.6,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      }))),
+    h('div', { class: 'headtext' },
+      h('div', { class: 'eyebrow', text: `${r.mode === 'classic' ? 'Classic' : 'Weave'} \u00b7 Chapter ${r.chapter}` }),
+      h('h1', { class: 'display', text: title }),
+      idea ? h('p', { class: 'idea', text: idea }) : null,
+    ),
+    h('div', { class: 'headbar', role: 'img', 'aria-label': `${done} of ${total} solved` },
+      h('span', { style: `width:${Math.round((done / Math.max(total, 1)) * 100)}%` }),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +168,10 @@ export function galleryScreen(app: App): { el: HTMLElement } {
   const scroll = h('div', { class: 'scroll' });
   const el = h('div', { class: 'screen' },
     topBar('Gallery', {
-      right: [h('button', { class: 'iconbtn', title: 'Export as an image', onclick: () => exportPoster(app) }, '⤓')],
+      right: [h('button', {
+        class: 'iconbtn', title: 'Export as an image', 'aria-label': 'Export as an image',
+        onclick: () => exportPoster(app),
+      }, download())],
     }),
     scroll,
   );
@@ -298,7 +361,7 @@ export function statsScreen(app: App): { el: HTMLElement } {
       rec?.solved
         ? h('span', { class: 'sub num', text: rec.tries === 1 ? 'first try' : `${rec.tries} tries` })
         : h('span', { class: 'sub', text: 'Play' }),
-      h('span', { class: 'chev', text: '›' }),
+      h('span', { class: 'chev' }, chevronRight()),
     ));
   }
   body.appendChild(archive);

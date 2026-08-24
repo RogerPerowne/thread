@@ -10,6 +10,7 @@ import * as haptics from '../render/haptics.js';
 import type { Level } from '../core/level.js';
 import { deriveTarget } from '../core/level.js';
 import { ticker, easeOut } from '../render/tween.js';
+import { starRow, gear, question } from './icons.js';
 
 export function topBar(
   title: string,
@@ -22,8 +23,8 @@ export function topBar(
     h('h1', { class: 'display', text: title }),
     h('div', { class: 'right' },
       ...(opts.right ?? []),
-      opts.onHelp ? h('button', { class: 'iconbtn', onclick: opts.onHelp, 'aria-label': 'How to play' }, '?') : null,
-      opts.onSettings ? h('button', { class: 'iconbtn', onclick: opts.onSettings, 'aria-label': 'Settings' }, '\u2699') : null,
+      opts.onHelp ? h('button', { class: 'iconbtn', onclick: opts.onHelp, 'aria-label': 'How to play' }, question()) : null,
+      opts.onSettings ? h('button', { class: 'iconbtn', onclick: opts.onSettings, 'aria-label': 'Settings' }, gear()) : null,
     ),
   );
 }
@@ -192,7 +193,10 @@ export function toast(msg: string, ms = 2000): void {
  * A small still of a level. This builds markup once, on a screen that is not
  * the play loop, which is why it is allowed to construct nodes.
  */
-export function miniature(level: Level, opts: { ink?: string; paper?: string; showPegs?: boolean } = {}): SVGElement {
+export function miniature(
+  level: Level,
+  opts: { ink?: string; paper?: string; showPegs?: boolean; mono?: boolean } = {},
+): SVGElement {
   const d = deriveTarget(level);
   const ink = opts.ink ?? 'currentColor';
   const root = svg('svg', { viewBox: '0 0 100 100', 'aria-hidden': 'true' });
@@ -200,13 +204,16 @@ export function miniature(level: Level, opts: { ink?: string; paper?: string; sh
   d.loops.forEach((loop, t) => {
     if (loop.length < 3) return;
     const path = loop.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('') + 'Z';
+    // On a full-colour card the shape is a mark, not a picture of the puzzle:
+    // one ink, one weight, no fill — anything else fights the card's colour.
+    const color = opts.mono ? ink : (level.threads[t]?.color ?? ink);
     root.appendChild(svg('path', {
       d: path,
       'fill-rule': 'evenodd',
-      fill: level.threads[t]?.color ?? ink,
-      'fill-opacity': 0.24,
-      stroke: level.threads[t]?.color ?? ink,
-      'stroke-width': 2.2,
+      fill: color,
+      'fill-opacity': opts.mono ? 0 : 0.24,
+      stroke: color,
+      'stroke-width': opts.mono ? 4.4 : 2.2,
       'stroke-linejoin': 'round',
     }));
   });
@@ -265,8 +272,9 @@ export function threadSwatch(color: string, dash: string | null, weight = 1, cap
   );
 }
 
-export function stars(n: number): string {
-  return '★'.repeat(n) + '☆'.repeat(Math.max(0, 3 - n));
+/** Three drawn stars, `n` of them filled. Never a font glyph — see icons.ts. */
+export function stars(n: number): HTMLElement {
+  return h('span', { class: 'stars', 'aria-label': `${n} of 3 stars` }, ...starRow(n));
 }
 
 // ---------------------------------------------------------------------------
@@ -399,3 +407,71 @@ export function onboarding(level: Level, sentence: string, onDone: () => void): 
 }
 
 export { clear };
+
+// ---------------------------------------------------------------------------
+// The big colour card — the unit the home and chapter lists are built from
+// ---------------------------------------------------------------------------
+
+export interface CardSpec {
+  /** A stable hook for tests and deep links; becomes data-card. */
+  id?: string;
+  color: string;
+  title: string;
+  blurb: string;
+  /** Bottom-left: the thing you'd read first when scanning. */
+  foot?: string;
+  /** Bottom-right: quieter, a by-line or a count. */
+  note?: string;
+  art?: SVGElement | HTMLElement;
+  locked?: boolean;
+  onOpen: () => void;
+}
+
+/**
+ * A full-bleed card in one saturated colour with black type on it, after the
+ * NYT Games home screen. The colour does the work of an icon: you learn a
+ * chapter by its colour long before you read its name.
+ *
+ * A locked card keeps its colour and gains a badge. Draining the colour out
+ * would tell you less, not more — the point of showing a locked thing at all
+ * is that you can see what you are heading for.
+ */
+export function gameCard(spec: CardSpec): HTMLElement {
+  const card = h('button', {
+    class: `gamecard${spec.locked ? ' locked' : ''}`,
+    'data-card': spec.id ?? '',
+    style: `--card:${spec.color}`,
+    onclick: () => {
+      haptics.tick();
+      spec.onOpen();
+    },
+  },
+    h('div', { class: 'cardhead' },
+      h('div', { class: 'cardtext' },
+        h('h3', { class: 'display', text: spec.title }),
+        h('p', { class: spec.locked ? 'lockline' : '', text: spec.blurb }),
+      ),
+      spec.art ? h('span', { class: 'cardart', 'aria-hidden': 'true' }, spec.art) : null,
+    ),
+    (spec.foot || spec.note)
+      ? h('div', { class: 'cardfoot' },
+        h('span', { class: 'foot', text: spec.foot ?? '' }),
+        h('span', { class: 'note', text: spec.note ?? '' }),
+      )
+      : null,
+  );
+  if (spec.locked) {
+    card.appendChild(h('span', { class: 'lockbadge', 'aria-hidden': 'true' }, padlockGlyph()));
+  }
+  return card;
+}
+
+function padlockGlyph(): SVGElement {
+  return svg('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true' },
+    svg('rect', { x: 4, y: 10.5, width: 16, height: 11, rx: 2.5, fill: 'currentColor' }),
+    svg('path', {
+      d: 'M8 10.5 V7.5 a4 4 0 0 1 8 0 v3', fill: 'none',
+      stroke: 'currentColor', 'stroke-width': 2.4, 'stroke-linecap': 'round',
+    }),
+  );
+}

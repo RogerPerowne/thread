@@ -103,6 +103,17 @@ export function modeIcon(mode: string): SVGSVGElement {
   return root;
 }
 
+/**
+ * The same mark with no tile behind it, in one ink. This is what sits on a
+ * full-colour card, where a second background would fight the card itself.
+ */
+export function modeMark(mode: string, ink = 'currentColor'): SVGSVGElement {
+  const root = svg('svg', { viewBox: '0 0 100 100', 'aria-hidden': 'true' });
+  const draw = MARKS[mode] ?? MARKS.classic;
+  for (const node of draw(ink)) root.appendChild(node);
+  return root;
+}
+
 export function modeSoft(mode: string): string {
   return SOFT[mode] ?? 'var(--panel)';
 }
@@ -131,6 +142,85 @@ export function padlock(size = 15): SVGSVGElement {
     stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round',
   }));
   return root;
+}
+
+// ---------------------------------------------------------------------------
+// UI marks. Every one of these is drawn rather than typed: a character like
+// the gear, the arrow or the star is a font glyph, so it changes shape between
+// platforms, ignores the stroke weight around it, and is at the mercy of
+// whatever fallback font the device reaches for. Drawing them keeps one line
+// weight across the whole interface.
+// ---------------------------------------------------------------------------
+
+function markSvg(size: number, ...kids: SVGElement[]): SVGSVGElement {
+  const root = svg('svg', {
+    viewBox: '0 0 24 24', width: size, height: size, fill: 'none', 'aria-hidden': 'true',
+  });
+  for (const k of kids) root.appendChild(k);
+  return root;
+}
+
+const line = (d: string, w = 2) => svg('path', {
+  d, stroke: 'currentColor', 'stroke-width': w,
+  'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+});
+
+export function chevronRight(size = 18): SVGSVGElement {
+  return markSvg(size, line('M9.5 5 L16 12 L9.5 19', 2.2));
+}
+
+export function arrowDown(size = 18): SVGSVGElement {
+  return markSvg(size, line('M12 4.5 V18.5', 2.2), line('M6 13 L12 19 L18 13', 2.2));
+}
+
+export function gear(size = 20): SVGSVGElement {
+  return markSvg(size,
+    line('M12 15.2 A3.2 3.2 0 1 0 12 8.8 A3.2 3.2 0 1 0 12 15.2 Z', 1.9),
+    line('M12 2.6 L12 5.2 M12 21.4 L12 18.8 M2.6 12 L5.2 12 M21.4 12 L18.8 12'
+      + ' M5.3 5.3 L7.1 7.1 M18.7 18.7 L16.9 16.9 M5.3 18.7 L7.1 16.9 M18.7 5.3 L16.9 7.1', 1.9),
+  );
+}
+
+export function question(size = 20): SVGSVGElement {
+  return markSvg(size,
+    line('M8.6 9 A3.4 3.4 0 1 1 12 13 V14.8', 2.2),
+    svg('circle', { cx: 12, cy: 18.4, r: 1.25, fill: 'currentColor' }),
+  );
+}
+
+/** Save the poster to a file. */
+export function download(size = 20): SVGSVGElement {
+  return markSvg(size, line('M12 3.5 V15', 2.1), line('M7 10.5 L12 15.5 L17 10.5', 2.1),
+    line('M4.5 19.5 H19.5', 2.1));
+}
+
+/** Open a shared level by its code. */
+export function codeMark(size = 20): SVGSVGElement {
+  return markSvg(size, line('M9.5 7.5 L5 12 L9.5 16.5', 2.1),
+    line('M14.5 7.5 L19 12 L14.5 16.5', 2.1));
+}
+
+/** A star, filled or hollow, for a level's three-star rating. */
+export function star(filled: boolean, size = 13): SVGSVGElement {
+  const pts: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 === 0 ? 10.5 : 4.4;
+    pts.push(`${(12 + r * Math.cos(a)).toFixed(2)} ${(12 + r * Math.sin(a)).toFixed(2)}`);
+  }
+  const d = `M${pts.join(' L')} Z`;
+  return markSvg(size, svg('path', {
+    d,
+    fill: filled ? 'currentColor' : 'none',
+    stroke: 'currentColor',
+    'stroke-width': filled ? 1 : 1.8,
+    'stroke-linejoin': 'round',
+  }));
+}
+
+/** Three stars in a row: `got` of them filled. */
+export function starRow(got: number, size = 13): SVGSVGElement[] {
+  return [0, 1, 2].map((i) => star(i < got, size));
 }
 
 export function tabIcon(name: string): SVGSVGElement {

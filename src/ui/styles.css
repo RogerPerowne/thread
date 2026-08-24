@@ -309,8 +309,16 @@ button { font: inherit; color: inherit; }
   gap: 12px;
 }
 .section .label { margin: 0; }
+/* The mark stays small; the thing a thumb has to hit does not. The box is
+   grown to 44px and the growth taken straight back off in margin, so the
+   header's baseline does not move. */
 .section a, .section button.linky {
-  border: 0; background: none; padding: 0; cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -13px -8px;
+  padding: 0 8px;
+  border: 0; background: none; cursor: pointer;
   font-size: 13px; font-weight: 600; color: var(--mute);
 }
 
@@ -374,101 +382,7 @@ button { font: inherit; color: inherit; }
 .tile.lg { width: 76px; height: 76px; border-radius: var(--r-lg); }
 .tile.sm { width: 40px; height: 40px; border-radius: var(--r-sm); }
 
-/* The featured card: whatever you were last playing. */
-.continue {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: calc(100% - var(--gutter) * 2);
-  margin: 18px var(--gutter) 6px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--paper);
-  box-shadow: var(--shadow-1);
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--ui);
-  transition: transform 110ms var(--ease), box-shadow var(--dur) var(--ease);
-}
-.continue:active { transform: scale(0.985); box-shadow: none; }
-.continue .grow { flex: 1; min-width: 0; }
-.continue h3 {
-  font-family: var(--display);
-  font-size: 21px;
-  margin: 0 0 3px;
-  letter-spacing: -0.015em;
-}
-.continue p {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--mute);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.continue .go {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 14px;
-  font-weight: 700;
-  padding: 9px 18px;
-}
-
 /* Every other mode is a row. */
-.gamerow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 12px var(--gutter);
-  border: 0;
-  background: none;
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--ui);
-  position: relative;
-  transition: background var(--dur) var(--ease);
-}
-.gamerow::after {
-  content: '';
-  position: absolute;
-  left: calc(var(--gutter) + 70px);
-  right: var(--gutter);
-  bottom: 0;
-  height: 1px;
-  background: var(--line);
-}
-.gamerow:last-of-type::after { display: none; }
-.gamerow:active { background: var(--panel); }
-.gamerow .grow { flex: 1; min-width: 0; }
-.gamerow h4 {
-  font-family: var(--display);
-  font-size: 18px;
-  margin: 0 0 2px;
-  letter-spacing: -0.01em;
-}
-.gamerow p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--mute);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.gamerow .meta {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex: 0 0 auto;
-  color: var(--mute);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.gamerow.locked .tile { opacity: 0.45; }
-.gamerow.locked h4 { color: var(--mute); }
 .chev { font-size: 20px; color: var(--line-strong); line-height: 1; }
 
 .streakpill {
@@ -732,9 +646,9 @@ button { font: inherit; color: inherit; }
 .toolbar::-webkit-scrollbar { display: none; }
 .toolbar .pill {
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: 44px;
   font-size: 13.5px;
-  padding: 0 14px;
+  padding: 0 15px;
 }
 
 /* Where you are in the chapter, at a glance. */
@@ -1040,49 +954,6 @@ button { font: inherit; color: inherit; }
 .row.locked { color: var(--mute); cursor: default; }
 .row.locked:active { background: none; }
 
-.levelgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 10px;
-  padding: 16px var(--gutter);
-}
-.levelbtn {
-  aspect-ratio: 1;
-  border: 1.5px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--paper);
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 3px;
-  cursor: pointer;
-  font-family: var(--ui);
-  position: relative;
-  transition: transform 110ms var(--ease), background var(--dur) var(--ease);
-}
-.levelbtn:active { transform: scale(0.94); }
-.levelbtn .n {
-  font-size: 17px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-.levelbtn .stars { font-size: 9px; color: var(--gold); letter-spacing: 0.5px; height: 11px; line-height: 1; }
-.levelbtn.done { background: var(--panel); border-color: transparent; }
-.levelbtn.gem { border-color: var(--gold); }
-.levelbtn.gem::after {
-  content: '';
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--gold);
-}
-.levelbtn[disabled] { opacity: 0.38; cursor: default; transform: none; }
-.levelbtn[disabled] .n { font-weight: 500; }
-
 /* --- forms --------------------------------------------------------------- */
 
 .field { display: block; margin: 0 0 16px; }
@@ -1113,13 +984,17 @@ button { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .switchrow .sub { font-size: 12.5px; color: var(--mute); margin-top: 3px; line-height: 1.35; }
+/* 52x32 to look at, 52x44 to press: the padding is part of the button, and
+   background-clip keeps the paint on the track itself. */
 .switch {
   flex: 0 0 auto;
   width: 52px;
-  height: 32px;
+  height: 44px;
+  padding: 6px 0;
   border-radius: 999px;
   border: 0;
   background: var(--line-strong);
+  background-clip: content-box;
   position: relative;
   cursor: pointer;
   transition: background var(--dur) var(--ease);
@@ -1127,7 +1002,7 @@ button { font: inherit; color: inherit; }
 .switch::after {
   content: '';
   position: absolute;
-  top: 3px;
+  top: 9px;
   left: 3px;
   width: 26px;
   height: 26px;
@@ -1161,6 +1036,242 @@ pre.share {
   padding: 4px var(--gutter) 0;
 }
 
+/* An inline illustration inside a sheet. Without an explicit size an SVG with
+   only a viewBox takes its own intrinsic dimensions and runs straight out of
+   the sheet, over the text and the button under it. */
+.mini {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--ink);
+}
+.mini svg { width: 100%; height: 100%; display: block; }
+
+/* --- the big colour card -------------------------------------------------- */
+/*
+ * One saturated colour, black type, a rounded corner and a lot of air. The
+ * colour is the identity: you learn a chapter by its colour before you read
+ * its name. Ink is fixed black rather than var(--ink) because the card colour
+ * does not change with the theme, so the contrast on it must not either.
+ */
+
+.cardlist {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px var(--gutter) 4px;
+}
+
+.gamecard {
+  --card-ink: #121212;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-height: 148px;
+  padding: 20px 18px 16px;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--card);
+  color: var(--card-ink);
+  font-family: var(--ui);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 130ms var(--ease), filter 130ms var(--ease);
+}
+.gamecard:active { transform: scale(0.982); filter: brightness(0.95); }
+
+.cardhead {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.cardtext { flex: 1; min-width: 0; }
+.gamecard h3 {
+  margin: 0 0 4px;
+  font-size: clamp(26px, 7.6vw, 32px);
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+}
+.gamecard p {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.32;
+  color: var(--card-ink);
+  opacity: 0.86;
+  max-width: 30ch;
+}
+.cardart {
+  flex: 0 0 auto;
+  width: 62px;
+  height: 62px;
+  margin-top: 2px;
+  color: var(--card-ink);
+}
+.cardart svg { width: 100%; height: 100%; display: block; }
+
+.cardfoot {
+  margin-top: auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cardfoot .foot {
+  font-size: 14.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cardfoot .note {
+  font-size: 12.5px;
+  opacity: 0.68;
+  text-align: right;
+}
+
+.gamecard.locked { cursor: default; }
+.gamecard.locked .cardhead, .gamecard.locked .cardfoot { opacity: 0.62; }
+.lockbadge {
+  position: absolute;
+  top: -9px;
+  left: -4px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow-1);
+}
+
+/* On a dark theme the cards stay coloured — draining them would cost the one
+   thing they are for — but they are pulled back so they do not glare. */
+[data-theme='slate'] .gamecard,
+[data-theme='neon'] .gamecard,
+[data-theme='gold'] .gamecard { filter: brightness(0.9) saturate(0.94); }
+
+/* --- the chapter path ----------------------------------------------------- */
+
+.chapterscreen {
+  background: var(--card);
+  --card-ink: #121212;
+  color: var(--card-ink);
+}
+.chapterscreen .scroll { padding-bottom: calc(var(--safe-b) + 96px); }
+
+.chapterhead {
+  position: relative;
+  z-index: 2;
+  padding: calc(6px + var(--safe-t)) var(--gutter) 14px;
+  background: var(--card);
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: start;
+  row-gap: 10px;
+  /* The path scrolls under the header, so the header needs to sit on its own
+     soft shelf rather than end at a hard line. */
+  box-shadow: 0 14px 22px -14px rgba(0, 0, 0, 0.28);
+}
+.chapterhead .iconbtn {
+  grid-row: 1;
+  color: var(--card-ink);
+  margin-top: 2px;
+}
+.headtext {
+  grid-column: 2;
+  text-align: center;
+  min-width: 0;
+}
+.headtext .eyebrow {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.66;
+}
+.headtext h1 {
+  margin: 2px 0 0;
+  font-size: clamp(27px, 7.4vw, 34px);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+}
+.headtext .idea {
+  margin: 6px 0 0;
+  font-family: var(--display);
+  font-size: 16px;
+  line-height: 1.28;
+  opacity: 0.82;
+}
+.headbar {
+  grid-column: 1 / -1;
+  height: 9px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+.headbar span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--card-ink);
+  transition: width 320ms var(--ease-out);
+}
+
+.pathwrap { padding: 0; }
+.pathsvg { display: block; width: 100%; height: auto; }
+
+.ptile { cursor: pointer; }
+.ptile[aria-disabled='true'] { cursor: default; }
+.ptile .top, .ptile .side, .ptile .inner { transition: opacity 140ms var(--ease); }
+.ptile:not([aria-disabled='true']):active { transform: translateY(3px); }
+.ptile:focus { outline: none; }
+.ptile:focus-visible .top { stroke: var(--card-ink); stroke-width: 4; }
+
+.plabel, .psub {
+  font-family: var(--ui);
+  fill: var(--card-ink);
+  paint-order: stroke;
+}
+.plabel { font-size: 28px; font-weight: 650; }
+.pstars { color: var(--card-ink); }
+.psub { font-size: 25px; font-weight: 500; opacity: 0.68; }
+.ptile.locked .plabel, .ptile.locked .psub { opacity: 0.44; }
+.ptile.next .plabel { font-weight: 800; }
+
+/* The tile you are up to breathes, once every few seconds, and only if the
+   player has not asked for stillness. */
+@keyframes ptile-pulse {
+  0%, 72%, 100% { transform: translateY(0); }
+  82% { transform: translateY(-6px); }
+}
+.ptile.next { animation: ptile-pulse 3.4s var(--ease) infinite; }
+
+.jumpbtn {
+  position: absolute;
+  left: 50%;
+  bottom: calc(20px + var(--safe-b));
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--ui);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow-2);
+  z-index: 3;
+}
+.jumpbtn:active { transform: translateX(-50%) scale(0.96); }
+.jumpbtn .arrow { font-size: 17px; line-height: 1; }
+
 /* --- accessibility ------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1184,7 +1295,6 @@ body[data-contrast='high'] {
   --mute: #3A3A38;
 }
 body[data-contrast='high'] .peg-dot { stroke: var(--ink); stroke-width: 0.4; }
-body[data-contrast='high'] .gamerow::after,
 body[data-contrast='high'] .row::after { background: var(--line-strong); }
 
 .sr {
@@ -1202,10 +1312,50 @@ body[data-contrast='high'] .row::after { background: var(--line-strong); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* A short viewport (landscape phone) gives the board every pixel it can. */
-@media (max-height: 560px) {
+@media (max-height: 620px) {
   .masthead { padding: 14px var(--gutter) 12px; }
   .wordmark { font-size: 32px; }
   .hero-sub { display: none; }
   .controls { padding-top: 8px; padding-bottom: calc(8px + var(--safe-b)); }
   .hud { padding-top: 6px; padding-bottom: 6px; min-height: 38px; }
+}
+
+/*
+ * Landscape.
+ *
+ * Stacked vertically, a phone on its side leaves the board about 180px — a
+ * quarter of the screen — while the two long edges sit empty. So the column
+ * becomes two: the board takes the full height on the left, and the title,
+ * progress and controls move into a rail beside it. The page also stops
+ * holding itself to the portrait reading width, which was leaving a bar of
+ * nothing down each side.
+ */
+@media (orientation: landscape) and (max-height: 620px) {
+  :root { --page: 100vw; }
+
+  .playwrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 30%);
+    grid-template-rows: auto auto auto 1fr;
+    grid-template-areas:
+      "top   top"
+      "board hud"
+      "board pips"
+      "board controls";
+    column-gap: 4px;
+    padding-right: var(--safe-r);
+  }
+  .playwrap > .topbar { grid-area: top; }
+  .playwrap > .board { grid-area: board; padding: 0 2px 6px 10px; }
+  .playwrap > .hud { grid-area: hud; padding: 8px 12px 2px 4px; }
+  .playwrap > .pips { grid-area: pips; justify-content: flex-start; padding: 2px 12px 2px 4px; }
+  .playwrap > .controls {
+    grid-area: controls;
+    align-self: end;
+    flex-wrap: wrap;
+    border-top: 0;
+    padding: 0 12px calc(10px + var(--safe-b)) 4px;
+  }
+  .playwrap > .controls .pill { max-width: none; min-width: 74px; }
+  .playwrap > .primarybar { grid-column: 2; padding-left: 4px; padding-right: 12px; }
 }
