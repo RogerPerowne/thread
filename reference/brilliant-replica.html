@@ -1,0 +1,263 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Brilliant path screen — replica</title>
+<!--
+  A pixel copy of reference/brilliant-source.png, built only from measurements
+  taken off that image (scripts/measure-*.mjs). Nothing here is Thread's design
+  and nothing here ships: it exists so scripts/compare-reference.mjs can score
+  how close the isometric path screen is before the layout is adapted.
+-->
+<style>
+  @font-face {
+    font-family: 'Libre Franklin';
+    src: url('../public/fonts/libre-franklin-var.woff2') format('woff2-variations');
+    font-weight: 100 900;
+    font-display: block;
+  }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body { width: 771px; height: 1524px; overflow: hidden; }
+  svg { display: block; }
+  text { font-family: 'Libre Franklin', system-ui, sans-serif; }
+</style>
+<body><svg id="s" width="771" height="1524" viewBox="0 0 771 1524" xmlns="http://www.w3.org/2000/svg"></svg></body>
+<script>
+const W = 771, H = 1524;
+const HEADER_H = 228, TAB_Y = 1427;
+
+// ---- geometry measured off the source -------------------------------------
+const PERIOD = 1025;
+// one period of the meander, in path order
+const CORNERS = [
+  [-42, 253], [283, 447], [530, 295], [835, 491],
+  [289, 818], [639, 1024], [330, 1214], [191, 1127],
+];
+const PATH_W = 11.6, PATH_COLOR = '#d2b7ff';
+
+// tile: diamond top face 144 x 88, extruded 24 down
+const HW = 72, HH = 44, EXT = 24;
+const TILES = [
+  { x: 191, y:   97, kind: 'practice', label: ['Practice Level', '1: Sprout'] },
+  { x: 390, y:  371, kind: 'done',     label: ['Level 2: Twig'] },
+  { x: 608, y:  614, kind: 'practice', label: ['Practice Level', '2: Twig'] },
+  { x: 390, y:  863, kind: 'done',     label: ['Level 3: Boost'] },
+  { x: 191, y: 1122, kind: 'practice', label: ['Practice Level', '3: Boost'] },
+  { x: 390, y: 1396, kind: 'done',     label: ['Level 4: Bloom'] },
+];
+
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a = {}, kids = []) => {
+  const e = document.createElementNS(NS, n);
+  for (const k in a) e.setAttribute(k, a[k]);
+  for (const c of [].concat(kids)) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  return e;
+};
+const svg = document.getElementById('s');
+
+// ---- defs -----------------------------------------------------------------
+const defs = el('defs');
+defs.appendChild(el('clipPath', { id: 'board' }, [
+  el('rect', { x: 0, y: HEADER_H, width: W, height: TAB_Y - HEADER_H }),
+]));
+const beam = el('linearGradient', { id: 'beam', x1: 0, y1: 0, x2: 0, y2: 1 });
+beam.appendChild(el('stop', { offset: '0', 'stop-color': '#a06bff', 'stop-opacity': '0' }));
+beam.appendChild(el('stop', { offset: '1', 'stop-color': '#a06bff', 'stop-opacity': '0.185' }));
+defs.appendChild(beam);
+const face = el('linearGradient', { id: 'face', x1: 0, y1: 0, x2: 0, y2: 1 });
+face.appendChild(el('stop', { offset: '0', 'stop-color': '#b78afb' }));
+face.appendChild(el('stop', { offset: '1', 'stop-color': '#c5a2fd' }));
+defs.appendChild(face);
+const scrim = el('linearGradient', { id: 'scrim', x1: 0, y1: 0, x2: 0, y2: 1 });
+scrim.appendChild(el('stop', { offset: '0', 'stop-color': '#000', 'stop-opacity': '0.038' }));
+scrim.appendChild(el('stop', { offset: '1', 'stop-color': '#000', 'stop-opacity': '0' }));
+defs.appendChild(scrim);
+svg.appendChild(defs);
+
+svg.appendChild(el('rect', { width: W, height: H, fill: '#ffffff' }));
+
+const board = el('g', { 'clip-path': 'url(#board)' });
+svg.appendChild(board);
+
+// ---- faint circuit decoration ---------------------------------------------
+// In the source these are ~4% grey traces that hug the left and right margins
+// on a true 2:1 isometric slope, with small open nodes at some corners.
+const FAINT = '#f2f2f2';
+function circuitColumn(anchorX, amp, y0, y1, phase) {
+  const pts = [];
+  const period = 250;
+  for (let y = y0, i = phase; y < y1; y += period / 2, i++) {
+    pts.push([anchorX + (i % 2 ? amp : 0), y]);
+  }
+  return pts;
+}
+for (const [ax, amp, y0, y1, phase] of [
+  [-14, 152, 236, 1440, 0], [785, -156, 190, 1440, 0], [-40, 104, 700, 1200, 1],
+]) {
+  const pts = circuitColumn(ax, amp, y0, y1, phase);
+  board.appendChild(el('polyline', {
+    points: pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' '),
+    fill: 'none', stroke: FAINT, 'stroke-width': 3.4,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+  }));
+  pts.forEach((p, i) => {
+    if (i % 4 === 2) board.appendChild(el('circle', {
+      cx: p[0], cy: p[1], r: 5, fill: 'none', stroke: FAINT, 'stroke-width': 3.4,
+    }));
+  });
+}
+
+// ---- the lavender path ----------------------------------------------------
+const pathPts = [];
+for (let k = -1; k <= 1; k++) for (const [x, y] of CORNERS) pathPts.push([x, y + k * PERIOD]);
+board.appendChild(el('polyline', {
+  points: pathPts.map(p => p.join(',')).join(' '),
+  fill: 'none', stroke: PATH_COLOR, 'stroke-width': PATH_W,
+  'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+}));
+
+// ---- tiles ----------------------------------------------------------------
+// Rounded isometric diamond: the source's corners are softened, not pointed.
+function roundPoly(v, r) {
+  const lead = (a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+    const t = Math.min(r / len, 0.48);
+    return [a[0] + dx * t, a[1] + dy * t];
+  };
+  let d = '';
+  for (let i = 0; i < v.length; i++) {
+    const p = v[i], prev = v[(i + v.length - 1) % v.length], next = v[(i + 1) % v.length];
+    const a = lead(p, prev), b = lead(p, next);
+    d += (i === 0 ? `M ${a[0].toFixed(2)} ${a[1].toFixed(2)} ` : `L ${a[0].toFixed(2)} ${a[1].toFixed(2)} `);
+    d += `Q ${p[0].toFixed(2)} ${p[1].toFixed(2)} ${b[0].toFixed(2)} ${b[1].toFixed(2)} `;
+  }
+  return d + 'Z';
+}
+const roundedDiamond = (cx, cy, hw, hh, r) =>
+  roundPoly([[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]], r);
+
+// The extruded body: the diamond's lower half swept down by EXT, as one outline.
+const bodyPath = (cx, cy, hw, hh, r, ext) => roundPoly([
+  [cx - hw, cy], [cx, cy + hh], [cx + hw, cy],
+  [cx + hw, cy + ext], [cx, cy + hh + ext], [cx - hw, cy + ext],
+], r);
+
+function checkGlyph(cx, cy) {
+  return el('path', {
+    d: `M ${cx - 15} ${cy - 3} L ${cx - 5} ${cy + 5} L ${cx + 14} ${cy - 13}`,
+    fill: 'none', stroke: '#fbf4ff', 'stroke-width': 7,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+  });
+}
+// Two small crosses lying flat in the isometric plane — the source's
+// "practice" mark reads as a pair of iso plus signs.
+function isoCross(cx, cy) {
+  const g = el('g', { stroke: '#fbf4ff', 'stroke-width': 7, 'stroke-linecap': 'round' });
+  const ax = 9, ay = 5.5;
+  g.appendChild(el('path', { d: `M ${cx - ax} ${cy - ay} L ${cx + ax} ${cy + ay}` }));
+  g.appendChild(el('path', { d: `M ${cx - ax} ${cy + ay} L ${cx + ax} ${cy - ay}` }));
+  return g;
+}
+function practiceGlyph(cx, cy) {
+  const g = el('g');
+  g.appendChild(isoCross(cx + 7, cy - 9));
+  g.appendChild(isoCross(cx - 11, cy + 2));
+  return g;
+}
+
+for (const t of TILES) {
+  const { x: cx, y: cy, kind } = t;
+  const g = el('g');
+  // rising beam
+  g.appendChild(el('rect', { x: cx - 67, y: cy - HH - 74, width: 134, height: 94, fill: 'url(#beam)' }));
+  // floating motes
+  g.appendChild(el('rect', { x: cx - 58, y: cy - 40, width: 9, height: 9, rx: 1.5, fill: '#a06bff', opacity: 0.3 }));
+  g.appendChild(el('rect', { x: cx + 45, y: cy - 52, width: 6, height: 6, rx: 1.2, fill: '#a06bff', opacity: 0.24 }));
+  // extruded body
+  g.appendChild(el('path', { d: bodyPath(cx, cy, HW, HH, 7, EXT), fill: '#391c68' }));
+  // top face
+  g.appendChild(el('path', { d: roundedDiamond(cx, cy, HW, HH, 7), fill: '#9c66f8' }));
+  g.appendChild(el('path', { d: roundedDiamond(cx, cy, HW * 0.675, HH * 0.675, 6), fill: 'url(#face)' }));
+  g.appendChild(kind === 'done' ? checkGlyph(cx, cy) : practiceGlyph(cx, cy));
+  board.appendChild(g);
+
+  t.label.forEach((line, i) => {
+    board.appendChild(el('text', {
+      x: cx, y: cy + 104 + i * 43, 'text-anchor': 'middle',
+      'font-size': 27.5, 'font-weight': 500, fill: '#3d3d42',
+    }, line));
+  });
+}
+
+// ---- header ---------------------------------------------------------------
+svg.appendChild(el('rect', { x: 0, y: HEADER_H, width: W, height: 28, fill: 'url(#scrim)' }));
+svg.appendChild(el('rect', { x: 0, y: 0, width: W, height: HEADER_H, fill: '#ffffff' }));
+
+svg.appendChild(el('path', {
+  d: 'M 56 65 L 42 77.5 L 56 90', fill: 'none', stroke: '#1c1c1c',
+  'stroke-width': 5.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+}));
+svg.appendChild(el('text', {
+  x: 390, y: 77, 'text-anchor': 'middle', 'font-size': 26, 'font-weight': 800,
+  'letter-spacing': 1.4, fill: '#5f43a0',
+}, 'CS • LEVEL 2'));
+svg.appendChild(el('text', {
+  x: 390, y: 132.5, 'text-anchor': 'middle', 'font-size': 40, 'font-weight': 800,
+  'letter-spacing': -0.4, fill: '#111114',
+}, '2.1 Programming with Python'));
+svg.appendChild(el('circle', { cx: 736.5, cy: 97, r: 15, fill: 'none', stroke: '#3b3b3b', 'stroke-width': 2.6 }));
+svg.appendChild(el('path', {
+  d: 'M 736.5 93 L 736.5 105', stroke: '#3b3b3b', 'stroke-width': 2.6, 'stroke-linecap': 'round',
+}));
+svg.appendChild(el('circle', { cx: 736.5, cy: 88.5, r: 1.7, fill: '#3b3b3b' }));
+svg.appendChild(el('rect', { x: 185, y: 173, width: 404, height: 17, rx: 8.5, fill: '#f2f2f2' }));
+svg.appendChild(el('rect', { x: 185, y: 173, width: 62, height: 17, rx: 8.5, fill: '#28cc54' }));
+
+// ---- jump-to-current pill -------------------------------------------------
+svg.appendChild(el('rect', { x: 302, y: 1333, width: 176, height: 76, rx: 38, fill: '#004c15' }));
+svg.appendChild(el('path', {
+  d: 'M 352 1350 L 352 1391 M 337 1377 L 352 1392 L 367 1377',
+  fill: 'none', stroke: '#ffffff', 'stroke-width': 6,
+  'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+}));
+svg.appendChild(el('rect', { x: 390, y: 1347, width: 49, height: 49, rx: 15, fill: '#2ecb63' }));
+svg.appendChild(el('rect', { x: 405, y: 1362, width: 19, height: 19, rx: 5, fill: '#ffffff' }));
+
+// ---- tab bar --------------------------------------------------------------
+svg.appendChild(el('rect', { x: 0, y: TAB_Y, width: W, height: H - TAB_Y, fill: '#ffffff' }));
+svg.appendChild(el('rect', { x: 0, y: TAB_Y, width: W, height: 1.2, fill: '#000', opacity: 0.07 }));
+
+const TABS = ['Home', 'Courses', 'Leagues', 'Premium', 'Settings'];
+const ICON_Y = 1464;
+function tabIcon(i, cx, on) {
+  const c = on ? '#1c1c1c' : '#b6b6b6', sw = on ? 3.2 : 2.9;
+  const g = el('g', { fill: 'none', stroke: c, 'stroke-width': sw, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+  const y = ICON_Y;
+  if (i === 0) {
+    g.appendChild(el('path', { d: `M ${cx - 21} ${y + 1} L ${cx} ${y - 20} L ${cx + 21} ${y + 1} L ${cx + 21} ${y + 21} L ${cx - 21} ${y + 21} Z` }));
+    g.appendChild(el('path', { d: `M ${cx - 7} ${y + 21} L ${cx - 7} ${y + 6} L ${cx + 7} ${y + 6} L ${cx + 7} ${y + 21}` }));
+  } else if (i === 1) {
+    g.appendChild(el('rect', { x: cx - 5, y: y - 22, width: 26, height: 30, rx: 5 }));
+    g.appendChild(el('rect', { x: cx - 21, y: y - 12, width: 30, height: 34, rx: 5, fill: '#fff' }));
+    g.appendChild(el('path', { d: `M ${cx - 14} ${y + 4} L ${cx - 7} ${y + 11} L ${cx + 3} ${y - 3}` }));
+  } else if (i === 2) {
+    g.appendChild(el('path', { d: `M ${cx} ${y - 22} L ${cx + 20} ${y - 14} L ${cx + 20} ${y + 4} Q ${cx + 20} ${y + 17} ${cx} ${y + 23} Q ${cx - 20} ${y + 17} ${cx - 20} ${y + 4} L ${cx - 20} ${y - 14} Z`, fill: on ? c : '#e9e9e9', stroke: 'none' }));
+  } else if (i === 3) {
+    g.appendChild(el('circle', { cx: cx - 2, cy: y - 10, r: 10 }));
+    g.appendChild(el('path', { d: `M ${cx - 20} ${y + 22} Q ${cx - 2} ${y + 2} ${cx + 16} ${y + 22}` }));
+    g.appendChild(el('path', { d: `M ${cx + 16} ${y - 22} L ${cx + 16} ${y - 12} M ${cx + 11} ${y - 17} L ${cx + 21} ${y - 17}`, 'stroke-width': 2.4 }));
+  } else {
+    g.appendChild(el('path', { d: `M ${cx} ${y - 22} L ${cx + 19} ${y - 11} L ${cx + 19} ${y + 11} L ${cx} ${y + 22} L ${cx - 19} ${y + 11} L ${cx - 19} ${y - 11} Z` }));
+    g.appendChild(el('circle', { cx, cy: y, r: 7 }));
+  }
+  return g;
+}
+TABS.forEach((name, i) => {
+  const cx = Math.round((W / 5) * (i + 0.5));
+  const on = i === 1;
+  svg.appendChild(tabIcon(i, cx, on));
+  svg.appendChild(el('text', {
+    x: cx, y: 1515, 'text-anchor': 'middle', 'font-size': 19,
+    'font-weight': on ? 700 : 500, fill: on ? '#1c1c1c' : '#b0b0b0',
+  }, name));
+});
+document.documentElement.dataset.ready = '1';
+</script>
