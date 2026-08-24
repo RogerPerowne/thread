@@ -7,7 +7,7 @@
  * no decision.
  */
 
-import { h, clear } from './dom.js';
+import { h, clear, copy } from './dom.js';
 import { topBar, pill, modal, toast, miniature, stars, shareSheet } from './components.js';
 import type { App, Route } from './app.js';
 import { MODE_ACCENT } from './app.js';
@@ -193,9 +193,12 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     sessionSolved++;
     const hook = (window as unknown as { __thread?: Record<string, unknown> }).__thread;
     if (hook?.current) (hook.current as Record<string, unknown>).solved = true;
+    const firstTime = !(app.save.levels[current.id]?.stars > 0);
     recordSolve(app, res);
     session.onSolved?.(current, res);
-    badge.textContent = res.attempt === 1 ? 'Perfect' : 'Solved';
+    if (current.gem && firstTime) celebrateGem();
+    if (firstTime) maybeCelebrateChapter();
+    badge.textContent = current.gem ? 'A gem' : res.attempt === 1 ? 'Perfect' : 'Solved';
     badge.classList.add('show');
     ticker.schedule(900, () => badge.classList.remove('show'));
     if (session.timed) timeLeft += 3000;
@@ -228,6 +231,44 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     if (shouldOfferEasier(failuresHere) && session.allowHints) {
       offerMercy();
     }
+  }
+
+  /**
+   * Roughly one level in fifteen is a gem. The reward is aesthetic — a longer
+   * flourish and a note that it has joined the Gallery — never a prize.
+   * Unpredictable delight sustains attention; unpredictable rewards do not.
+   */
+  function celebrateGem(): void {
+    const pts = current.threads[0].sol.map((i) => current.pegs[i] as [number, number]);
+    engine.overlay.flourish(pts, current.threads[0].color);
+    ticker.schedule(160, () => engine.overlay.flourish(pts, '#C8A020'));
+    toast('A gem — it has joined your Gallery');
+  }
+
+  /**
+   * Every shape has its own melody, because pitch follows segment length.
+   * Finishing a chapter plays its levels' melodies as one piece.
+   */
+  function maybeCelebrateChapter(): void {
+    if (current.mode !== 'classic' && current.mode !== 'weave') return;
+    const mode = current.mode;
+    const siblings = app.chapterLevels(mode, current.chapter);
+    if (!siblings.every((l) => (app.save.levels[l.id]?.stars ?? 0) > 0)) return;
+    const melodies = siblings.map((l) => {
+      const pts = l.threads[0].sol.map((i) => l.pegs[i]);
+      return pts.map((p, k) => {
+        const q = pts[(k + 1) % pts.length];
+        return Math.hypot(p[0] - q[0], p[1] - q[1]);
+      });
+    });
+    ticker.schedule(600, () => audio.suite(melodies));
+    ticker.schedule(700, () => {
+      modal((close) => [
+        h('h2', { class: 'display', text: `${siblings[0].name ?? 'Chapter'} complete` }),
+        h('p', { text: 'Every shape in this chapter has its own melody, because a shorter segment rings higher. This is all of them, played as one piece.' }),
+        h('div', { class: 'actions' }, pill('Lovely', close, 'primary')),
+      ]);
+    });
   }
 
   function offerMercy(): void {
@@ -267,11 +308,20 @@ export function playScreen(app: App, route: Route): { el: HTMLElement; dispose?:
     if (ended) return;
     ended = true;
     timerRunning = false;
+    const seed = (route as { seed?: string }).seed;
     modal((close) => [
       h('h2', { class: 'display', text: reason === 'Time' ? "Time's up" : reason === 'One life' ? 'Run over' : 'Finished' }),
       h('p', { text: `${sessionSolved} solved.` }),
       h('div', { class: 'actions' },
         pill('Home', () => { close(); app.go({ name: 'home' }); }, 'ghost'),
+        seed
+          ? pill('Challenge a friend', async () => {
+            // The same seed is the same ladder, so a link is a fair contest.
+            const url = `${location.href.split('#')[0]}#/play/${r.mode}?seed=${seed}`;
+            const ok = await copy(url);
+            toast(ok ? 'Link copied — same puzzles, same order' : 'Could not copy');
+          }, 'ghost')
+          : null,
         pill('Again', () => { close(); app.go({ ...(route as object), seed: randomSeed() } as Route); }, 'primary'),
       ),
     ], { dismissable: false });

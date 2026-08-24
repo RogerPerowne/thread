@@ -18,17 +18,20 @@ test('a 200-event drag never blows the frame budget', async ({ page }) => {
   const first = at(level.pegs[sol[0]]);
   await page.mouse.move(first.x, first.y);
   await page.mouse.down();
+
+  // Sweep round the loop, over and over, until 200 real move events have gone
+  // in. Whatever the level's peg count, the count is what matters.
   let events = 0;
-  for (let lap = 0; lap < 3 && events < 200; lap++) {
-    for (let i = 1; i <= sol.length && events < 200; i++) {
-      const from = at(level.pegs[sol[(i - 1) % sol.length]]);
-      const to = at(level.pegs[sol[i % sol.length]]);
-      for (let s = 1; s <= 12 && events < 200; s++) {
-        const k = s / 12;
-        await page.mouse.move(from.x + (to.x - from.x) * k, from.y + (to.y - from.y) * k);
-        events++;
-      }
+  let leg = 0;
+  while (events < 200) {
+    const from = at(level.pegs[sol[leg % sol.length]]);
+    const to = at(level.pegs[sol[(leg + 1) % sol.length]]);
+    for (let s = 1; s <= 10 && events < 200; s++) {
+      const k = s / 10;
+      await page.mouse.move(from.x + (to.x - from.x) * k, from.y + (to.y - from.y) * k);
+      events++;
     }
+    leg++;
   }
   await page.mouse.up();
   expect(events).toBeGreaterThanOrEqual(200);

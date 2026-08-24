@@ -205,7 +205,7 @@ export class App {
       this.go({ name: 'play', mode: 'shared', seed: shared[1] });
       return;
     }
-    const m = /^#\/([a-z]+)(?:\/([a-z]+))?(?:\/([^/]+))?(?:\/([^/]+))?/.exec(hash);
+    const m = /^#\/([a-z]+)(?:\/([a-z]+))?(?:\/([^/?]+))?/.exec(hash);
     if (!m) return;
     const [, name, a, b] = m;
     switch (name) {
@@ -220,9 +220,17 @@ export class App {
           this.go({ name: 'levels', mode: a, chapter: Number(b) }, { replace: true });
         }
         break;
-      case 'play':
-        if (a) this.go({ name: 'play', mode: a, levelId: b }, { replace: true });
+      case 'play': {
+        // #/play/<mode>/<levelId> or #/play/<mode>?seed=<seed>
+        const seedMatch = /[?&]seed=([A-Za-z0-9_-]+)/.exec(hash);
+        if (a) {
+          this.go(
+            { name: 'play', mode: a, levelId: b, seed: seedMatch?.[1] },
+            { replace: true },
+          );
+        }
         break;
+      }
       default:
         break;
     }

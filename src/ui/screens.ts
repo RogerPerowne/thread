@@ -332,10 +332,7 @@ export function settingsScreen(app: App): { el: HTMLElement } {
       (v) => { app.save.settings.motion = v ? 'reduced' : 'auto'; },
       'Transitions land instantly and particles are switched off'),
     toggle('Higher contrast', () => app.save.settings.highContrast, (v) => { app.save.settings.highContrast = v; }),
-    toggle('Daily reminder', () => app.save.settings.dailyReminder, (v) => {
-      app.save.settings.dailyReminder = v;
-      if (v) toast('Your browser will ask permission once');
-    }, 'One a day. Nothing else, ever.'),
+
     h('div', { class: 'label', style: 'margin-top:14px', text: 'Data' }),
     h('div', { class: 'actions', style: 'display:flex;gap:10px;padding:12px 0' },
       pill('Export save', async () => {
@@ -358,7 +355,9 @@ export function settingsScreen(app: App): { el: HTMLElement } {
       }, 'ghost'),
     ),
     h('p', { class: 'sub', style: 'color:var(--mute);font-size:12px;line-height:1.5' },
-      'Thread keeps everything on this device. No account, no ads, no tracking.'),
+      'Thread keeps everything on this device. No account, no ads, no tracking, and no '
+      + 'notifications — a real daily reminder needs a push service, and there is no server '
+      + 'here to run one, so there is no switch that pretends otherwise.'),
   );
   scroll.appendChild(body);
   return { el };

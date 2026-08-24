@@ -146,21 +146,32 @@ function buildMode(mode: Mode, chapters: ChapterSpec[], prefix: string, seed: st
  */
 function spreadTopologies(blocks: Level[][], prefix: string): Level[] {
   const out: Level[] = [];
-  const recent: string[] = [];
+  const lastUsedAt = new Map<string, number>();
   let stillColliding = 0;
 
   for (const block of blocks) {
     const remaining = block.map((l) => ({ level: l, topo: fingerprint(l, 0).topo }));
     while (remaining.length) {
-      let pick = remaining.findIndex((c) => !recent.includes(c.topo));
+      const here = out.length;
+      // Prefer a topology not seen in the last five levels, keeping difficulty
+      // order among those. When every remaining candidate collides, take the
+      // LEAST RECENTLY used one rather than the first — that is what stops the
+      // tail of a chapter clumping together.
+      let pick = remaining.findIndex((c) => here - (lastUsedAt.get(c.topo) ?? -Infinity) > 4);
       if (pick < 0) {
-        pick = 0;
         stillColliding++;
+        let oldest = Infinity;
+        remaining.forEach((c, i) => {
+          const at = lastUsedAt.get(c.topo) ?? -Infinity;
+          if (at < oldest) {
+            oldest = at;
+            pick = i;
+          }
+        });
       }
       const [chosen] = remaining.splice(pick, 1);
       out.push(chosen.level);
-      recent.push(chosen.topo);
-      if (recent.length > 4) recent.shift();
+      lastUsedAt.set(chosen.topo, here);
     }
   }
   // Renumber so the ids follow play order.

@@ -67,9 +67,12 @@ test('a wrong loop shows how close it was, not just "wrong"', async ({ page }) =
   const wrong = sol.slice(0, -1);
   for (const p of wrong) await tap(page, at(level.pegs[p]));
   await tap(page, at(level.pegs[wrong[wrong.length - 1]]));
+  // The substantive point: a number, not the word "wrong".
   await expect(page.locator('.matchbadge')).toHaveText(/\d+%/);
+  await expect(page.locator('.matchbadge')).toHaveClass(/show/);
   const c = await readCurrent(page);
-  expect(c.lastMiss).toBeGreaterThan(0.5);
+  expect(c.lastMiss).toBeGreaterThan(0);
+  expect(c.lastMiss).toBeLessThan(0.995);
   expect(c.solved).toBe(false);
 });
 

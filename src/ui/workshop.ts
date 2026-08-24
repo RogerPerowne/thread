@@ -10,7 +10,7 @@ import { h, clear, copy } from './dom.js';
 import { topBar, pill, modal, toast } from './components.js';
 import { type App, MODE_ACCENT } from './app.js';
 import { BoardScene } from '../render/scene.js';
-import { type Level, validateLevel, deriveTarget } from '../core/level.js';
+import { type Level, validateLevel, deriveTarget, cycleLength } from '../core/level.js';
 import { initialState, canAdd, canClose, type PlayState } from '../core/rules.js';
 import { quickCheck, checkLevel } from '../core/gate.js';
 import { encodeLevel, decodeLevel, shareUrl, ShareCodeError } from '../game/sharecode.js';
@@ -152,8 +152,32 @@ export function workshopScreen(app: App): { el: HTMLElement; dispose?: () => voi
         refreshControls();
         rebuild();
       }, 'ghost'),
+      pill(spoolLabel(), () => {
+        cycleBudget();
+        refreshControls();
+        rebuild();
+      }, 'ghost'),
       pill('Check & share', () => share(), 'primary'),
     );
+  }
+
+  function spoolLabel(): string {
+    if (draft.budget === null) return 'Spool: off';
+    return `Spool: ${draft.budget.toFixed(0)}`;
+  }
+
+  /** Off, then tight, then a little slack — measured from the drawn loop. */
+  function cycleBudget(): void {
+    if (draft.sol.length < 3) {
+      toast('Thread a loop first, then the spool has something to measure');
+      draft.budget = null;
+      return;
+    }
+    const lvl = asLevel(draft, false);
+    const par = cycleLength(lvl, draft.sol);
+    if (draft.budget === null) draft.budget = Math.round(par * 1.03);
+    else if (draft.budget < par * 1.1) draft.budget = Math.round(par * 1.2);
+    else draft.budget = null;
   }
 
   function share(): void {
