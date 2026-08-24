@@ -38,7 +38,10 @@ src/core      pure TypeScript, ZERO DOM imports — runs in plain Node
 src/game      state machine, input interpretation, progression, persistence
 src/render    scene graph, tween engine, particles, audio, themes
 src/ui        screens and components
+  palette.ts     one saturated colour per chapter
+  path.ts        the isometric level path
 levels        JSON, one file per mode — generated, never hand-authored
+reference     the screenshot the path layout is measured against, and a copy
 tests         vitest unit tests + playwright end-to-end
 ```
 
@@ -136,6 +139,38 @@ Casual play never produces a score. It silently updates a hidden estimate; the
 badge comes only from the Assessment, once every seven days, because repeated
 testing inflates scores through practice effects.
 
+## The chapter path
+
+A chapter is a path you walk down, not a grid you scan: levels sit on isometric
+tiles along a meandering ribbon, in the chapter's own colour edge to edge.
+Solved tiles are solid ink, the tile you are up to is paper-white, locked tiles
+are the chapter colour taken down a few steps. The ribbon is inked in behind
+you, so progress needs no separate read-out.
+
+The geometry is not invented. `reference/brilliant-source.png` is a screenshot
+of a learning app's course map; every constant in `src/ui/path.ts` — the
+meander's corner coordinates and its 1035px period, the 144x88x24 isometric
+tile, the 0.675 inner-face inset — was measured off it.
+`reference/brilliant-replica.html` is a bare copy of that screen carrying none
+of Thread's styling, and `pnpm compare:reference` scores the copy against the
+original on six metrics. That runs in CI, so the layout cannot drift.
+
+Three things are derived rather than placed by hand, because hand-placed
+numbers go wrong the moment a size changes:
+
+- **The extruded side** is the top face swept down, built from the top face's
+  own rounded outline. Rounding a six-sided silhouette separately pulls its
+  side corners inside the top face's and leaves a notch of background showing.
+- **The band and the light column** are sized to `HW * (1 - t/2)`, which is
+  where the fillet actually puts the tile's widest point — not the un-rounded
+  vertex at `HW`. The light runs down to the tile's widest row and is cut off
+  by the tile, so it hugs the upper edges instead of stopping in mid-air.
+- **Glyphs** are authored flat and upright in a 100x100 box and projected. The
+  face map composed with the 45 degrees the diamond already carries reduces to
+  a pure foreshorten, so an upright mark stays upright and lies down on the
+  tile. Un-projecting the reference's own tick through that scale gives an
+  ordinary upright tick, which is the proof the original was built the same way.
+
 ## Accessibility
 
 Full keyboard play (arrows move between pegs, Enter threads).
@@ -143,6 +178,17 @@ Full keyboard play (arrows move between pegs, Enter threads).
 ever emitted. Threads are distinguished by dash pattern and end-cap shape as
 well as colour. Peg hit radius scales with the viewport, not with the drawn
 radius, so a touch target is never smaller than 44 px.
+
+`scripts/fit-audit.mjs` walks every route at six handset sizes and fails on
+anything running off the edge, spilling out of its sheet, or smaller than 44 px
+to press — hit-testing the area that actually responds rather than trusting the
+box, so a small mark with a padded hit area counts as a fair target. It runs in
+CI as `tests/e2e/fit.spec.ts`.
+
+No icon in the interface is a text character. A gear, an arrow or a star typed
+as a glyph changes shape between platforms, ignores the stroke weight around it
+and depends on whatever fallback font the device reaches for; every mark is
+drawn in `src/ui/icons.ts` instead.
 
 ## Typefaces
 

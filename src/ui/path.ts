@@ -346,12 +346,33 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
 
   const el = h('div', { class: 'pathwrap' }, root);
 
+  /*
+   * Long screens in this app scroll the document; short ones scroll an inner
+   * box. Rather than assume either, walk up for the first ancestor that is
+   * actually scrolling and fall back to the window — otherwise this silently
+   * does nothing on exactly the screens that are long enough to need it.
+   */
   const scrollToCurrent = (behavior: ScrollBehavior = 'smooth') => {
-    const scroller = el.closest('.scroll') as HTMLElement | null;
-    if (!scroller || !currentY) return;
-    const scale = root.getBoundingClientRect().width / VIEW_W;
-    const target = el.offsetTop + (currentY - HH - 60) * scale - scroller.clientHeight * 0.34;
-    scroller.scrollTo({ top: Math.max(0, target), behavior });
+    if (!currentY) return;
+    const box = root.getBoundingClientRect();
+    // Called before the screen is in the document, every measurement is zero
+    // and the scroll lands at the top — which looks like the feature simply
+    // not working. Refuse to act on a measurement that cannot be real.
+    if (box.width === 0) return;
+    const scale = box.width / VIEW_W;
+    // Where the tile sits now, relative to the viewport.
+    const here = box.top + (currentY - HH) * scale;
+    const wanted = window.innerHeight * 0.34;
+    const delta = here - wanted;
+
+    let scroller: HTMLElement | null = el.parentElement;
+    while (scroller) {
+      const cs = getComputedStyle(scroller);
+      if (/auto|scroll/.test(cs.overflowY) && scroller.scrollHeight > scroller.clientHeight + 1) break;
+      scroller = scroller.parentElement;
+    }
+    if (scroller) scroller.scrollBy({ top: delta, behavior });
+    else window.scrollBy({ top: delta, behavior });
   };
 
   return { el, scrollToCurrent, currentY };

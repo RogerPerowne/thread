@@ -1161,8 +1161,12 @@ pre.share {
 }
 .chapterscreen .scroll { padding-bottom: calc(var(--safe-b) + 96px); }
 
+/* The path scrolls under this, so it holds the back button and the progress
+   in place. Sticky rather than fixed: it belongs to the chapter, and it should
+   leave with it. */
 .chapterhead {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 2;
   padding: calc(6px + var(--safe-t)) var(--gutter) 14px;
   background: var(--card);
@@ -1248,8 +1252,11 @@ pre.share {
 }
 .ptile.next { animation: ptile-pulse 3.4s var(--ease) infinite; }
 
+/* Fixed, not absolute: on a long chapter the document is what scrolls, so an
+   absolutely-positioned button would sit at the very bottom of the path rather
+   than floating over it. */
 .jumpbtn {
-  position: absolute;
+  position: fixed;
   left: 50%;
   bottom: calc(20px + var(--safe-b));
   transform: translateX(-50%);

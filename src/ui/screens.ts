@@ -125,9 +125,26 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
     }, h('span', { class: 'arrow' }, arrowDown()), h('span', { text: 'Where I am' })));
   }
 
-  // Land on the level you are up to, not on level one, and do it without an
-  // animation the player did not ask for.
-  const settle = requestAnimationFrame(() => view.scrollToCurrent('auto'));
+  /*
+   * Land on the level you are up to, not on level one, and without an
+   * animation the player did not ask for.
+   *
+   * Two frames, because measuring on the frame the screen is attached gives
+   * zeroes. Then wait out anything that has locked the document: on a first
+   * run the intro sheet is open over the top, and a scroll attempted under it
+   * silently does nothing, leaving the player at level one when they dismiss
+   * it. The wait costs one style read a frame and only ever happens once.
+   */
+  let settle = 0;
+  let frames = 0;
+  const land = () => {
+    if (getComputedStyle(document.body).overflow === 'hidden' && frames++ < 1800) {
+      settle = requestAnimationFrame(land);
+      return;
+    }
+    view.scrollToCurrent('auto');
+  };
+  settle = requestAnimationFrame(() => { settle = requestAnimationFrame(land); });
   return { el, dispose: () => cancelAnimationFrame(settle) };
 }
 
