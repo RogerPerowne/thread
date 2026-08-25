@@ -24,6 +24,7 @@ import { miniBoard } from './mini.js';
 import type { PathView } from './path.js';
 import type { Board } from '../core/board.js';
 import * as haptics from '../render/haptics.js';
+import { warmCompile } from '../core/board.js';
 
 const FLY = 520;
 const HOLD = 420;
@@ -66,6 +67,15 @@ export function enterLevel(opts: EnterOpts): void {
   cancelEnter();
   haptics.bump();
 
+  /*
+   * Work the board out now, while the finger is still down and nothing is
+   * moving. Otherwise the first thing the play screen does is compile it —
+   * tens of milliseconds of it — in the middle of the landing, which is a
+   * visible stall at exactly the moment the animation is asking to be
+   * believed.
+   */
+  warmCompile(opts.board);
+
   const svgRoot = view.el.querySelector('svg');
   svgRoot?.classList.add('flying');
   const tile = svgRoot?.querySelectorAll('.ptile')[index];
@@ -85,6 +95,7 @@ export function enterLevel(opts: EnterOpts): void {
   let raf = 0;
   let t0 = 0;
   let mounted = false;
+  let holdRect: DOMRect | null = null;
   let landing: { from: DOMRect; to: DOMRect } | null = null;
 
   const cleanup = () => {
@@ -111,23 +122,48 @@ export function enterLevel(opts: EnterOpts): void {
     }
 
     if (e < FLY + HOLD) {
-      flight.at(1);
-      const r = flight.faceRect();
+      /*
+       * The camera has arrived. Redrawing the same still frame twenty-five
+       * times over is work for nothing, so the tile is drawn once and its
+       * rectangle kept — which also means the path screen can be taken out
+       * from under the card without the rectangle going with it.
+       */
+      if (holdRect === null) {
+        flight.at(1);
+        holdRect = flight.faceRect();
+      }
       const k = Math.min(1, (e - FLY) / 200);
       card.fade(1);
       card.settle(k);
-      card.place(r, k);
+      card.place(holdRect, k);
       card.draw(Math.min(1, (e - FLY) / (HOLD * 0.8)));
+
+      /*
+       * Mount the play screen partway through the hold rather than at the end
+       * of it. Building a screen costs tens of milliseconds, and at the end of
+       * the hold that lands exactly on the first frame of the landing — a
+       * stall at the one moment the animation is asking to be believed. Here
+       * the card is stationary and covers the screen, so the swap behind it
+       * costs a frame nobody can see.
+       */
+      if (!mounted && e > FLY + HOLD * 0.45) {
+        mounted = true;
+        handingOver = true;
+        go();
+        handingOver = false;
+      }
       raf = requestAnimationFrame(frame);
       return;
     }
 
-    if (!mounted) {
-      mounted = true;
-      const from = flight.faceRect();
-      handingOver = true;
-      go();
-      handingOver = false;
+    if (!landing) {
+      if (!mounted) {
+        mounted = true;
+        handingOver = true;
+        go();
+        handingOver = false;
+      }
+      const from = holdRect ?? flight.faceRect();
       // The play screen is in the document now, so the board can be measured
       // rather than guessed at.
       const board = document.querySelector('.boardsurface');

@@ -517,8 +517,17 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
 
   // -- drawing ---------------------------------------------------------------
 
-  function draw(cam: Cam): void {
-    for (const { el, z, pts } of layers) {
+  /**
+   * Redraw at this camera.
+   *
+   * `only` is the flight's doing. While the camera is moving, the ribbon and
+   * every tile but one are held at zero opacity by CSS — and rebuilding a
+   * few hundred projected points and nine tiles' worth of swept geometry for
+   * things nobody can see is what made the flight run at a few frames a
+   * second on a phone. Passing the tile being flown to skips all of it.
+   */
+  function draw(cam: Cam, only = -1): void {
+    if (only < 0) for (const { el, z, pts } of layers) {
       const dz = z * lift(cam);
       let out = '';
       for (const g of pts) {
@@ -528,25 +537,31 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
       el.setAttribute('points', out);
     }
 
-    const yTop = project(cam, top[0], top[1], 0)[1];
-    const yBot = project(cam, bottom[0], bottom[1], 0)[1];
-    const span = Math.max(1, yBot - yTop);
-    maskTop.setAttribute('y', String(yTop - span * 4));
-    maskTop.setAttribute('height', String(span * 4 - 40));
-    maskMid.setAttribute('y', String(yTop - 40));
-    maskMid.setAttribute('height', String(span + 80));
-    maskBot.setAttribute('y', String(yBot + 40));
-    maskBot.setAttribute('height', String(span * 4));
+    if (only < 0) {
+      const yTop = project(cam, top[0], top[1], 0)[1];
+      const yBot = project(cam, bottom[0], bottom[1], 0)[1];
+      const span = Math.max(1, yBot - yTop);
+      maskTop.setAttribute('y', String(yTop - span * 4));
+      maskTop.setAttribute('height', String(span * 4 - 40));
+      maskMid.setAttribute('y', String(yTop - 40));
+      maskMid.setAttribute('height', String(span + 80));
+      maskBot.setAttribute('y', String(yBot + 40));
+      maskBot.setAttribute('height', String(span * 4));
+    }
 
     const r = cornerR(cam);
     const inset = 0.675;
-    for (const t of tiles) {
+    for (let ti = 0; ti < tiles.length; ti++) {
+      if (only >= 0 && ti !== only) continue;
+      const t = tiles[ti];
       t.side.setAttribute('d', bodyPath(cam, t.g));
       t.top.setAttribute('d', roundPoly(faceQuad(cam, t.g, TOP_Z), r));
       const innerQuad = ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as Pt2[])
         .map(([du, dv]) => project(cam, t.g[0] + (du * inset) / 2, t.g[1] + (dv * inset) / 2, TOP_Z));
       t.inner.setAttribute('d', roundPoly(innerQuad, r * 0.86));
       t.glyph.setAttribute('transform', faceTransform(cam, t.g));
+
+      if (only >= 0) continue;   // the label and the light are hidden in flight
 
       const [cx, cy] = project(cam, t.g[0], t.g[1], 0);
       t.text.setAttribute('transform', `translate(${cx.toFixed(1)} ${(cy + 92).toFixed(1)})`);
@@ -638,7 +653,7 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
           cam.ox = from[0] + (to[0] - from[0]) * t - p[0];
           cam.oy = from[1] + (to[1] - from[1]) * t - p[1];
           last = cam;
-          draw(cam);
+          draw(cam, i);
         },
         faceRect: () => rectAt(last, i),
       };

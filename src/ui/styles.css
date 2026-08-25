@@ -154,8 +154,16 @@ body {
   width: 100%;
   max-width: var(--page);
   margin: 0 auto;
-  min-height: 100dvh;
+  /*
+   * Order matters, and getting it wrong is why the bottom of the stage sat
+   * under Safari's search bar. 100vh on iOS is the LARGE viewport — the one
+   * with the bar hidden — so a page sized to it runs under the bar whenever
+   * the bar is showing. 100dvh is the viewport as it currently is. The static
+   * unit goes first as the fallback and the dynamic one overrides it wherever
+   * it is understood.
+   */
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -1458,6 +1466,25 @@ html, body {
   overflow: hidden;
   touch-action: none;
 }
+
+/*
+ * The play screen is exactly as tall as the viewport actually is, and its
+ * bottom row clears the home indicator. Both are needed: dvh keeps the screen
+ * out from under Safari's bar, and the inset keeps the buttons off the bar on
+ * a phone that has no bar to hide.
+ */
+.screen.play {
+  height: 100vh;
+  height: 100dvh;
+}
+.screen.play .toolbar {
+  padding-bottom: calc(10px + var(--safe-b));
+}
+
+/* The light on the tile is a blurred filter; re-filtering it every frame of
+   the flight is the one thing on this screen a phone cannot afford, and the
+   card covers the tile by then anyway. */
+.pathsvg.flying .halo { display: none; }
 
 /* The path fills what is left of its screen; it scrolls, it does not squash. */
 .pathwrap { min-height: 0; }

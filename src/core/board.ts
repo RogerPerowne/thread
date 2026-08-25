@@ -264,7 +264,28 @@ export function runsConflict(board: Board, r: Run, s: Run): boolean {
   return segSegDist2(P[r.a], P[r.b], P[s.a], P[s.b]) < CLEAR_STRING2;
 }
 
+/*
+ * Compiling is quadratic in the number of runs — every pair of them is checked
+ * for conflict — so a thirty-post board costs tens of milliseconds. That is
+ * nothing once, and a dropped frame if it happens while something is moving.
+ * The result depends only on the board, which never changes, so it is kept.
+ */
+const compiled = new WeakMap<Board, Compiled>();
+
+/** Compile ahead of time, so a board can be mounted without the pause. */
+export function warmCompile(board: Board): void {
+  compile(board);
+}
+
 export function compile(board: Board): Compiled {
+  const had = compiled.get(board);
+  if (had) return had;
+  const made = compileFresh(board);
+  compiled.set(board, made);
+  return made;
+}
+
+function compileFresh(board: Board): Compiled {
   const n = board.posts.length;
   const runId = new Int32Array(n * n).fill(-1);
   const runs: Run[] = [];
