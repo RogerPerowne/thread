@@ -9,6 +9,18 @@
 import './ui/styles.css';
 import { App } from './ui/shell.js';
 
+/*
+ * Pinch and double-tap zoom, shut off at the source. The viewport meta asks
+ * for it, but iOS Safari ignores that and fires its own gesture events, and a
+ * trackpad pinch arrives as a ctrl-wheel — so both are refused here as well.
+ */
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+document.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) e.preventDefault();
+}, { passive: false });
+
 const root = document.getElementById('app');
 if (root) {
   const app = new App(root);

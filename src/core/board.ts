@@ -26,6 +26,12 @@
  * only passable if it is wider than the string. That is the tension the game
  * is made of: a gap just wide enough for one string, and two strings that both
  * want it.
+ *
+ * The string does not wrap the posts it uses — it runs through them. A version
+ * that wrapped the rim was tried and dropped: it made the drawn shape stray
+ * from the line the rule measures, so the rule had to be widened to cover the
+ * stray, and a rule that is stricter than the picture is a rule that refuses
+ * moves which look fine.
  */
 
 export type Pt = readonly [number, number];
@@ -165,26 +171,24 @@ export function turnAngle(prev: Pt, mid: Pt, next: Pt): number {
 /*
  * The clearances the rule is stated in, pre-squared for the inner loops.
  *
- * These are measured between the straight lines through post centres, but the
- * string is not drawn along those lines: it is drawn taut, wrapping each post
- * it uses (see taut.ts). A taut string strays from the centre line by at most
- * the wrap radius, POST_R + STRING_W, so every clearance carries that stray
- * plus the string's own half-width.
+ * A post has no width as far as the string is concerned: the string runs from
+ * centre to centre and straight through, rather than wrapping the rim. That
+ * makes the drawing and the rule the same object again — a polyline stroked at
+ * 2 * STRING_W with round caps and joins covers exactly the points within
+ * STRING_W of its centreline — so these are exact, not a bound on something
+ * else.
  *
- * That makes the rule a little stricter than the picture rather than a little
- * looser, which is the only direction it is safe to be wrong in: a string that
- * looks clear is clear. `tests/unit/taut.test.ts` holds that by sampling the
- * drawn shape of every shipped board and checking nothing touches.
+ * Post width still matters for what a string may pass: a post the red string
+ * uses is a pillar the blue one has to get around, and the gap between two
+ * posts is only passable if it is wider than the string.
  */
-const STRAY = POST_R + STRING_W;
-const HALF_BODY = STRAY + STRING_W;
 
 /** How far apart two strings' centre lines have to stay. */
-export const CLEAR_STRING = 2 * HALF_BODY;
+export const CLEAR_STRING = 2 * STRING_W;
 /** How far a string has to stay from a post it does not use. */
-export const CLEAR_POST = POST_R + HALF_BODY;
+export const CLEAR_POST = POST_R + STRING_W;
 /** How far a string has to stay from a block. */
-export const CLEAR_BLOCK = HALF_BODY;
+export const CLEAR_BLOCK = STRING_W;
 
 const CLEAR_STRING2 = CLEAR_STRING ** 2;
 const CLEAR_POST2 = CLEAR_POST ** 2;

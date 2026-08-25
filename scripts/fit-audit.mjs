@@ -39,7 +39,7 @@ const ROUTES = [
   ['path deep', '#/c/grid/5'],
   ['play first', '#/p/classic/1'],
   ['play biggest', '#/p/classic/60'],
-  ['play coloured', '#/p/coloured/50'],
+  ['play coloured', '#/p/coloured/47'],
   ['play grid', '#/p/grid/50'],
 ];
 

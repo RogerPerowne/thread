@@ -629,6 +629,23 @@ button { font: inherit; color: inherit; }
   stroke-linejoin: round;
   transition: stroke-width 160ms var(--ease);
 }
+
+/*
+ * The loose end. Lighter than laid string, because it is not laid yet, and it
+ * greys out when letting go there would do nothing — so the answer arrives
+ * before the player has to guess it from a move that did not happen.
+ */
+.lead {
+  opacity: 0;
+  stroke-opacity: 0.62;
+  stroke-dasharray: 3 2.4;
+  transition: opacity 90ms linear;
+  pointer-events: none;
+}
+.lead.out-of-reach { stroke: var(--line) !important; stroke-opacity: 0.9; }
+
+/* The game itself never scrolls. Everything it needs is on the screen. */
+.screen.play, .screen.play .playwrap { overflow: hidden; }
 /* The solve runs a highlight round every string once and stops. */
 .board-svg.celebrate .string {
   animation: settle 700ms var(--ease);
@@ -1417,3 +1434,30 @@ body[data-contrast='high'] .row::after { background: var(--line-strong); }
   .playwrap > .controls .pill { max-width: none; min-width: 74px; }
   .playwrap > .primarybar { grid-column: 2; padding-left: 4px; padding-right: 12px; }
 }
+
+
+/* ---------------------------------------------------------------------------
+ * Nothing zooms, and the game itself never scrolls.
+ *
+ * A pinch on a puzzle you are dragging on is never intended, so zoom is off
+ * everywhere. Scrolling is a different matter: a list of chapters is meant to
+ * be swiped, and only the board has to hold still. So the play screen is
+ * pinned to the viewport and everything on it is sized to fit, while the
+ * screens around it scroll as lists do.
+ * ------------------------------------------------------------------------- */
+
+html, body {
+  overscroll-behavior: none;
+  touch-action: pan-y;
+  -ms-content-zooming: none;
+}
+
+.screen.play,
+.screen.play .playwrap,
+.screen.play .board {
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* The path fills what is left of its screen; it scrolls, it does not squash. */
+.pathwrap { min-height: 0; }

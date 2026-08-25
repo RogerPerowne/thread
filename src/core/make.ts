@@ -228,8 +228,14 @@ function blockAcross(
  *
  * Returns null rather than a compromise: a board with two answers is not a
  * puzzle, and a board whose answer the blocks broke is a bug.
+ *
+ * The budget is generous because it has to be. With the string running through
+ * post centres rather than round them, a run only has to clear a post by the
+ * string's own width — so far more runs are legal than when it wrapped, the
+ * graph is much denser, and a big board needs a dozen blocks before one answer
+ * is left standing. Blocks are cheap to look at; a second answer is not.
  */
-export function carve(base: Board, intended: number[][], rng: Rng, maxBlocks = 7): Made | null {
+export function carve(base: Board, intended: number[][], rng: Rng, maxBlocks = 14): Made | null {
   const keep = runsOf(intended);
   let blocks = [...base.blocks];
 

@@ -4,7 +4,7 @@ import {
 } from './helpers.js';
 
 const MODES = ['classic', 'coloured', 'grid'] as const;
-const PER_MODE: Record<string, number> = { classic: 60, coloured: 50, grid: 50 };
+const PER_MODE: Record<string, number> = { classic: 60, coloured: 47, grid: 50 };
 
 test('home is the masthead and one card per mode', async ({ page }) => {
   await gotoApp(page);

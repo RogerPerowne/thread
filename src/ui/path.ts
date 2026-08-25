@@ -341,6 +341,8 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
   const root = svg('svg', {
     class: 'pathsvg',
     viewBox: `0 0 ${VIEW_W} ${height.toFixed(1)}`,
+    // The whole chapter has to fit its box: nothing in this game scrolls.
+    preserveAspectRatio: 'xMidYMid meet',
     width: '100%',
     role: 'list',
     'aria-label': 'Levels',

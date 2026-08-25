@@ -16,7 +16,6 @@ import { svg } from './dom.js';
 import {
   type Compiled, POST_R, STRING_W, VIEW,
 } from '../core/board.js';
-import { tautPath } from '../core/taut.js';
 import type { Verdict, Attempt } from '../core/check.js';
 
 const SW = STRING_W * 2;
@@ -34,6 +33,14 @@ export type BoardView = {
   markCursor(i: number): void;
   /** The board is solved: run the string round once. */
   celebrate(): void;
+  /**
+   * The loose end, following the finger. `post` is where the string currently
+   * ends; x and y are where the thumb is, in board space. `reach` says whether
+   * letting go there would actually lay string, which is worth showing before
+   * the player finds out by nothing happening.
+   */
+  setLead(strand: number, post: number, x: number, y: number, reach: boolean): void;
+  clearLead(): void;
   dispose(): void;
 };
 
@@ -85,6 +92,17 @@ export function mountBoard(c: Compiled): BoardView {
     gStrings.appendChild(p);
     strandEl.push(p);
   }
+
+  /*
+   * The loose end. A string that only moves when your thumb crosses a post
+   * feels like it is being placed for you; one that reaches out to wherever
+   * your thumb is feels like something you are holding.
+   */
+  const lead = svg('path', {
+    class: 'lead', fill: 'none', 'stroke-width': SW,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0,
+  });
+  gStrings.appendChild(lead);
 
   // --- the nail heads, on top, so the string passes behind them -------------
   const gHeads = svg('g', { class: 'heads' });
@@ -154,11 +172,19 @@ export function mountBoard(c: Compiled): BoardView {
     }
   }
 
+  const buf: string[] = [];
+
   function update(attempt: Attempt, verdict: Verdict): void {
     for (let s = 0; s < strandEl.length; s++) {
-      // Taut, so the string wraps every post it uses rather than running
-      // through the middle of it. See core/taut.ts.
-      strandEl[s].setAttribute('d', tautPath(board.posts, attempt[s] ?? []));
+      const path = attempt[s] ?? [];
+      buf.length = 0;
+      for (let i = 0; i < path.length; i++) {
+        const [x, y] = board.posts[path[i]];
+        buf.push(`${i === 0 ? 'M' : 'L'}${x} ${y}`);
+      }
+      // A single post is a stub of string on the nail, not an empty path: it
+      // shows the strand has been started.
+      strandEl[s].setAttribute('d', path.length === 1 ? `${buf[0]}l0 0` : buf.join(''));
     }
 
     // Leftover posts are only worth pointing out once there is something to
@@ -190,6 +216,19 @@ export function mountBoard(c: Compiled): BoardView {
     el.classList.toggle('solved', verdict.solved);
   }
 
+  function setLead(strand: number, post: number, x: number, y: number, reach: boolean): void {
+    const a = board.posts[post];
+    if (!a) return;
+    lead.setAttribute('d', `M${a[0]} ${a[1]}L${x.toFixed(2)} ${y.toFixed(2)}`);
+    lead.setAttribute('stroke', board.strands[strand]?.color ?? '#888');
+    lead.classList.toggle('out-of-reach', !reach);
+    lead.setAttribute('opacity', '1');
+  }
+
+  function clearLead(): void {
+    lead.setAttribute('opacity', '0');
+  }
+
   function at(clientX: number, clientY: number): { x: number; y: number } {
     const r = el.getBoundingClientRect();
     const side = Math.min(r.width, r.height);
@@ -214,5 +253,8 @@ export function mountBoard(c: Compiled): BoardView {
   }
 
   void c;
-  return { el, update, at, nearestPost, flashPost, markCursor, celebrate, dispose };
+  return {
+    el, update, at, nearestPost, flashPost, markCursor, celebrate,
+    setLead, clearLead, dispose,
+  };
 }

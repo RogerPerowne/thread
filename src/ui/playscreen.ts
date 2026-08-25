@@ -280,6 +280,17 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     const p = view.at(e.clientX, e.clientY);
     const post = view.nearestPost(p.x, p.y, GRAB_POST);
     if (post >= 0) extend(post);
+
+    // Whatever happened, the loose end goes where the thumb is.
+    const path = paths[dragging];
+    const head = path[path.length - 1];
+    if (head !== undefined) {
+      const near = view.nearestPost(p.x, p.y, GRAB_POST * 1.6);
+      const reach = near < 0 || near === head
+        || (!path.includes(near) && runBetween(c, head, near) >= 0)
+        || tail.includes(near);
+      view.setLead(dragging, head, p.x, p.y, reach);
+    }
     e.preventDefault();
   };
 
@@ -287,6 +298,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     if (dragging < 0) return;
     reconnect();
     dragging = -1;
+    view.clearLead();
     repaint(false);
   };
 
