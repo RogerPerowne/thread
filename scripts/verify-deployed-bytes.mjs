@@ -109,8 +109,12 @@ for (const [mode, n] of [['classic', 30], ['coloured', 25], ['grid', 20]]) {
   }
   ok(`${mode} ${n} solved by real drags on the deployed bundle`,
      (await page.locator('.screen.play.won').count()) > 0);
+  // Posts have no width as far as the string is concerned: it runs from centre
+  // to centre and straight through. An arc in the path data would mean the
+  // wrapping experiment had come back.
   const d = await page.locator('.string').first().getAttribute('d');
-  ok(`${mode} ${n} draws its string taut, wrapping the posts`, (d ?? '').includes('A'));
+  ok(`${mode} ${n} runs its string straight through the posts`,
+     (d ?? '').length > 0 && !/[AaCcQq]/.test(d ?? ''));
 }
 
 ok('no page errors and no failed requests', errs.length === 0, errs.join(' | '));
