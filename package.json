@@ -7,16 +7,14 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "levels": "tsx scripts/build-levels.ts",
     "validate": "tsx scripts/validate.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "ci": "pnpm typecheck && pnpm test && pnpm validate && pnpm build",
-    "verify:deploy": "node scripts/verify-deploy.mjs",
-    "compare:reference": "node scripts/compare-reference.mjs",
-    "verify:bytes": "node scripts/verify-deployed-bytes.mjs"
+    "verify:bytes": "node scripts/verify-deployed-bytes.mjs",
+    "boards": "tsx scripts/build-boards.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",

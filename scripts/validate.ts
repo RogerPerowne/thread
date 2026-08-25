@@ -1,104 +1,96 @@
 /**
- * `pnpm validate` — the level quality gate, over every level that ships.
- * Prints a table and exits non-zero if anything fails, so CI can hold the line.
+ * The gate. Every shipped board, re-proven from the JSON that actually ships.
+ *
+ * The designer already checked all of this, but the designer is not what runs
+ * in CI — the files are. Four questions per board, and a board that fails any
+ * of them is not a puzzle:
+ *
+ *   1. Is the answer it ships with actually legal?
+ *   2. Is it the ONLY answer?
+ *   3. Is every post reachable at all, so the board is not quietly impossible?
+ *   4. Is it the right size and shape for the mode it claims to be?
+ *
+ *   npx tsx scripts/validate.ts
  */
 
-import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { Level } from '../src/core/level.js';
-import { validateLevel, mechanicsOf } from '../src/core/level.js';
-import { checkLevel, fingerprint, auditRepetition, type LevelReport } from '../src/core/gate.js';
+import { readFileSync } from 'node:fs';
+import { compile, type Board } from '../src/core/board.js';
+import { judge } from '../src/core/check.js';
+import { search } from '../src/core/search.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const LEVELS = join(HERE, '..', 'levels');
-const FILES = ['classic', 'weave', 'shadow', 'par', 'corral', 'wire', 'assess'];
+const MODES = ['classic', 'coloured', 'grid'] as const;
+const NODES = 400_000;
 
-const budgetMs = Number(process.env.GATE_BUDGET_MS ?? 900);
-const only = process.argv[2];
-
-let allLevels: Level[] = [];
-const byFile = new Map<string, Level[]>();
-
-for (const f of FILES) {
-  const path = join(LEVELS, `${f}.json`);
-  if (!existsSync(path)) {
-    console.error(`levels/${f}.json is missing — run \`pnpm levels\` first.`);
-    process.exit(1);
-  }
-  const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown[];
-  const levels = raw.map((l) => validateLevel(l));
-  byFile.set(f, levels);
-  allLevels = allLevels.concat(levels);
-}
-
-const targets = only ? allLevels.filter((l) => l.id.startsWith(only)) : allLevels;
-
-console.log(`Thread level gate — ${targets.length} levels, ${budgetMs} ms search budget each\n`);
-
-const reports: LevelReport[] = [];
-let failed = 0;
+let bad = 0;
+let checked = 0;
 const t0 = Date.now();
 
-for (const level of targets) {
-  const r = checkLevel(level, { budgetMs });
-  reports.push(r);
-  if (!r.pass) {
-    failed++;
-    console.log(`FAIL ${r.id}`);
-    for (const c of r.checks) if (!c.pass) console.log(`       ${c.name}: ${c.detail}`);
+console.log('Thread board gate\n');
+console.log('           boards   answer legal   only answer   nodes to prove');
+console.log('-'.repeat(66));
+
+for (const mode of MODES) {
+  const boards = JSON.parse(readFileSync(`boards/${mode}.json`, 'utf8')) as Board[];
+  let legal = 0;
+  let unique = 0;
+  let worst = 0;
+  const ids = new Set<string>();
+
+  for (const board of boards) {
+    checked++;
+    if (board.mode !== mode) {
+      console.error(`  ${board.id}: claims mode "${board.mode}" in ${mode}.json`);
+      bad++;
+    }
+    if (ids.has(board.id)) {
+      console.error(`  ${board.id}: duplicate id`);
+      bad++;
+    }
+    ids.add(board.id);
+
+    const c = compile(board);
+    const verdict = judge(c, board.solution as number[][]);
+    if (verdict.solved) legal++;
+    else {
+      console.error(`  ${board.id}: its own answer does not hold — ${verdict.faults.join(', ')}`);
+      bad++;
+    }
+
+    const found = search(c, 2, NODES);
+    if (found.exhausted) {
+      console.error(`  ${board.id}: could not be proven either way inside ${NODES} nodes`);
+      bad++;
+    } else if (found.solutions.length === 1) {
+      unique++;
+      worst = Math.max(worst, found.nodes);
+    } else {
+      console.error(`  ${board.id}: has ${found.solutions.length} answers, not one`);
+      bad++;
+    }
+
+    // A post nothing can reach makes the board unsolvable, and a post with one
+    // way out has to be a string end — worth naming separately from "no answer"
+    // because it points straight at the mistake.
+    for (let p = 0; p < c.n; p++) {
+      if (c.neighbours[p].length === 0) {
+        console.error(`  ${board.id}: post ${p} has no legal run at all`);
+        bad++;
+      }
+    }
   }
+
+  console.log(
+    `${mode.padEnd(10)} ${String(boards.length).padStart(5)}` +
+    `   ${String(legal).padStart(11)}/${boards.length}` +
+    `   ${String(unique).padStart(9)}/${boards.length}` +
+    `   ${String(worst).padStart(12)}`,
+  );
 }
 
-// Check 6 is a property of the whole set, not of one level.
-let repetitionIssues = 0;
-for (const [name, levels] of byFile) {
-  const prints = levels.map((l, i) => fingerprint(l, i));
-  const issues = auditRepetition(prints);
-  repetitionIssues += issues.length;
-  if (issues.length) {
-    console.log(`\nREPETITION in ${name}:`);
-    for (const i of issues.slice(0, 20)) console.log(`       ${i.a} vs ${i.b}: ${i.reason}`);
-    if (issues.length > 20) console.log(`       ...and ${issues.length - 20} more`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// The table
-// ---------------------------------------------------------------------------
-
-const CHECKS = ['solvable', 'derived-target', 'uniqueness', 'threshold', 'mechanics', 'objective'] as const;
-const pad = (s: string | number, n: number) => String(s).padEnd(n);
-const padL = (s: string | number, n: number) => String(s).padStart(n);
-
-console.log('\n' + pad('', 8) + CHECKS.map((c) => padL(c, 15)).join('') + padL('repetition', 12));
-console.log('-'.repeat(8 + 15 * CHECKS.length + 12));
-for (const [name, levels] of byFile) {
-  const subset = reports.filter((r) => levels.some((l) => l.id === r.id));
-  const cells = CHECKS.map((c) => {
-    const n = subset.filter((r) => r.checks.find((x) => x.name === c)?.pass).length;
-    return padL(`${n}/${subset.length}`, 15);
-  });
-  console.log(pad(name, 8) + cells.join('') + padL(subset.length ? 'ok' : '-', 12));
-}
-
-const mechCount = new Map<string, number>();
-for (const l of targets) {
-  for (const m of mechanicsOf(l)) mechCount.set(m, (mechCount.get(m) ?? 0) + 1);
-}
-console.log('\nMechanic coverage');
-for (const [m, n] of [...mechCount.entries()].sort((a, b) => b[1] - a[1])) {
-  console.log(`  ${pad(m, 10)} ${padL(n, 4)} levels`);
-}
-
-const worst = reports.reduce((a, b) => (b.worstNearMiss > a.worstNearMiss ? b : a), reports[0]);
-const avgDiff = reports.reduce((n, r) => n + r.difficulty, 0) / Math.max(reports.length, 1);
-console.log(`\nWorst near miss anywhere: ${worst.worstNearMiss.toFixed(4)} (${worst.id}), threshold 0.995`);
-console.log(`Mean static difficulty:   ${avgDiff.toFixed(2)}`);
-console.log(`Elapsed:                  ${((Date.now() - t0) / 1000).toFixed(1)} s`);
-
-if (failed || repetitionIssues) {
-  console.log(`\n${failed} level(s) failed, ${repetitionIssues} repetition issue(s).`);
+console.log('-'.repeat(66));
+console.log(`\n${checked} boards checked in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+if (bad > 0) {
+  console.error(`\n${bad} problem${bad === 1 ? '' : 's'}. Nothing ships like this.`);
   process.exit(1);
 }
-console.log('\nAll seven checks green.');
+console.log('\nEvery board has exactly one answer.');

@@ -27,7 +27,7 @@ jobs:
         run: pnpm typecheck
       - name: Unit tests
         run: pnpm test
-      - name: Level quality gate (all six checks)
+      - name: Board gate: every board has exactly one answer
         run: pnpm validate
       - name: Build
         run: pnpm build
@@ -49,7 +49,7 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
       - run: pnpm build
-      - name: Solve every level
+      - name: Solve every board through real drags
         run: pnpm e2e
       - uses: actions/upload-artifact@v4
         if: failure()
