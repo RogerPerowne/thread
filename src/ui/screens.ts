@@ -15,7 +15,6 @@ import { chapterPath, type PathNode, type PathView } from './path.js';
 import { enterLevel, cancelEnter } from './enter.js';
 import { solvedCount, starCount, dailyArchive } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
-import { themeUnlocked, skinUnlocked } from '../game/progress.js';
 import { deriveTarget, objectiveOf, type Level } from '../core/level.js';
 import { resetSave } from '../game/storage.js';
 import { DISCLAIMER } from '../core/rating.js';
@@ -47,15 +46,10 @@ export function chaptersScreen(app: App, route: Route): { el: HTMLElement } {
 
   const list = h('div', { class: 'cardlist' });
   const specs = chapterSpecs(r.mode);
-  let previousComplete = true;
-
   for (const ch of app.chapters(r.mode)) {
     const levels = app.chapterLevels(r.mode, ch);
     const ids = levels.map((l) => l.id);
     const done = solvedCount(app.save, ids);
-    const open = previousComplete || done > 0;
-    // Chapter completion needs only solves, so a casual player is never stuck.
-    previousComplete = done >= ids.length;
     const idea = specs.find((sp) => sp.chapter === ch)?.idea ?? '';
     const color = chapterColor(r.mode, ch);
 
@@ -63,24 +57,15 @@ export function chaptersScreen(app: App, route: Route): { el: HTMLElement } {
       id: `chapter-${ch}`,
       color,
       title: levels[0].name ?? `Chapter ${ch}`,
-      // The idea shows even when the chapter is locked: it is a reason to keep
-      // going, not a spoiler.
       blurb: idea,
-      foot: open ? `Chapter ${ch}` : 'Locked',
-      note: open ? `${done} of ${ids.length}` : `Finish Chapter ${ch - 1} first`,
+      foot: `Chapter ${ch}`,
+      note: `${done} of ${ids.length}`,
       // A chapter of corrals or clue boards must not put one of its answers
       // on the card that opens it.
       art: revealsShape(levels[0])
         ? miniature(levels[0], { ink: 'var(--card-ink)', mono: true })
         : modeMark(r.mode, 'var(--card-ink)'),
-      locked: !open,
-      onOpen: () => {
-        if (!open) {
-          toast(`Finish Chapter ${ch - 1} to open this one.`);
-          return;
-        }
-        app.go({ name: 'levels', mode: r.mode, chapter: ch });
-      },
+      onOpen: () => app.go({ name: 'levels', mode: r.mode, chapter: ch }),
     }));
   }
   scroll.appendChild(list);
@@ -116,7 +101,7 @@ export function levelsScreen(app: App, route: Route): { el: HTMLElement; dispose
       label: `Level ${i + 1}`,
       sub: isNext ? 'Play' : undefined,
       stars: solved ? rec!.stars : 0,
-      state: solved ? 'done' : isNext ? 'next' : 'locked',
+      state: solved ? 'done' : isNext ? 'next' : 'ahead',
       gem: l.gem,
       onOpen: () => enterLevel({
         view,
@@ -440,7 +425,6 @@ export function statsScreen(app: App): { el: HTMLElement } {
 export function settingsScreen(app: App): { el: HTMLElement } {
   const scroll = h('div', { class: 'scroll' });
   const el = h('div', { class: 'screen' }, topBar('Settings'), scroll);
-  const ctx = app.unlockCtx;
 
   const toggle = (
     label: string,
@@ -473,17 +457,12 @@ export function settingsScreen(app: App): { el: HTMLElement } {
 
   const themes = h('div', { class: 'collection', style: 'padding-left:var(--gutter)' },
     ...THEMES.map((t) => {
-      const open = themeUnlocked(app.save, t.id, ctx);
       return h('button', {
-        class: `swatch${open ? '' : ' locked'}${app.save.settings.theme === t.id ? ' on' : ''}`,
+        class: `swatch${app.save.settings.theme === t.id ? ' on' : ''}`,
         style: 'padding:0;overflow:hidden',
-        title: open ? t.name : t.unlock,
-        'aria-label': open ? `Theme ${t.name}` : `Locked: ${t.unlock}`,
+        title: t.name,
+        'aria-label': `Theme ${t.name}`,
         onclick: () => {
-          if (!open) {
-            toast(t.unlock);
-            return;
-          }
           app.save.settings.theme = t.id;
           app.applySettings();
           app.persist();
@@ -495,17 +474,12 @@ export function settingsScreen(app: App): { el: HTMLElement } {
 
   const skins = h('div', { class: 'collection', style: 'padding-left:var(--gutter)' },
     ...SKINS.map((sk, i) => {
-      const open = skinUnlocked(app.save, sk.id, ctx);
       return h('button', {
-        class: `swatch${open ? '' : ' locked'}${app.save.settings.skin === sk.id ? ' on' : ''}`,
+        class: `swatch${app.save.settings.skin === sk.id ? ' on' : ''}`,
         style: 'padding:0;overflow:hidden;background:var(--panel)',
-        title: open ? sk.name : sk.unlock,
-        'aria-label': open ? `Thread ${sk.name}` : `Locked: ${sk.unlock}`,
+        title: sk.name,
+        'aria-label': `Thread ${sk.name}`,
         onclick: () => {
-          if (!open) {
-            toast(sk.unlock);
-            return;
-          }
           app.save.settings.skin = sk.id;
           app.persist();
           app.go({ name: 'settings' });

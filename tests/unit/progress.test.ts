@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   starsFor, applyDailySolve, dailyArchive, shareGrid, shareText,
-  unlockedModes, shouldOfferEasier, collectionCount,
+  unlockedModes, themeUnlocked, skinUnlocked, MODE_UNLOCKS, shouldOfferEasier, collectionCount,
 } from '../../src/game/progress.js';
 import { emptySave, migrate, SCHEMA_VERSION } from '../../src/game/storage.js';
 import { validateLevel, parLength, type Level } from '../../src/core/level.js';
 import { makeRaster, rasterizeLoop, GRID } from '../../src/core/region.js';
+import { THEMES, SKINS } from '../../src/render/theme.js';
 
 const square = validateLevel({
   id: 'sq', mode: 'classic', chapter: 1,
@@ -96,27 +97,22 @@ describe('sharing', () => {
   });
 });
 
-describe('unlocks', () => {
-  it('locks the harder modes until they are earned', () => {
-    const s = emptySave();
-    const modes = unlockedModes(s, ctx);
-    expect(modes.has('classic')).toBe(true);
-    expect(modes.has('daily')).toBe(true);
-    expect(modes.has('onelife')).toBe(false);
-    expect(modes.has('assess')).toBe(false);
+describe('nothing is locked', () => {
+  it('opens every mode on an empty save', () => {
+    const modes = unlockedModes(emptySave(), ctx);
+    for (const rule of MODE_UNLOCKS) {
+      expect(modes.has(rule.id), `${rule.id} was not open`).toBe(true);
+    }
   });
-  it('opens Assessment at 15 solved and One Life at 20 perfected', () => {
+  it('opens every theme and every thread on an empty save', () => {
     const s = emptySave();
-    for (let i = 0; i < 15; i++) s.levels[`c${i}`] = { stars: 1, best: 1, attempts: 1, bestSimilarity: 1 };
-    expect(unlockedModes(s, ctx).has('assess')).toBe(true);
-    expect(unlockedModes(s, ctx).has('onelife')).toBe(false);
-    for (let i = 0; i < 20; i++) s.levels[`c${i}`] = { stars: 3, best: 1, attempts: 1, bestSimilarity: 1 };
-    expect(unlockedModes(s, ctx).has('onelife')).toBe(true);
+    for (const t of THEMES) expect(themeUnlocked(s, t.id, ctx), `theme ${t.id}`).toBe(true);
+    for (const sk of SKINS) expect(skinUnlocked(s, sk.id, ctx), `thread ${sk.id}`).toBe(true);
   });
-  it('counts the collection', () => {
+  it('counts the whole collection as owned from the start', () => {
     const c = collectionCount(emptySave(), ctx);
-    expect(c.have).toBeGreaterThanOrEqual(2);
     expect(c.total).toBe(14);
+    expect(c.have).toBe(c.total);
   });
 });
 

@@ -60,7 +60,7 @@ function downTurns(p: Pt2, n: number): Pt2 {
   return [p[0] + (n * G_PERIOD) / 2, p[1] + (n * G_PERIOD) / 2];
 }
 
-export type TileState = 'done' | 'next' | 'locked';
+export type TileState = 'done' | 'next' | 'ahead';
 
 export interface PathNode {
   label: string;
@@ -236,13 +236,12 @@ const stroked = (d: string, ink: string, w = 9) => svg('path', {
 });
 
 function glyphFor(state: TileState, gem: boolean, ink: string): SVGElement {
-  if (state === 'locked') {
-    const g = svg('g');
-    g.appendChild(svg('rect', { x: -13, y: -2, width: 26, height: 19, rx: 5, fill: ink }));
-    g.appendChild(stroked('M -7 -3 L -7 -10 A 7 7 0 0 1 7 -10 L 7 -3', ink, 6));
-    return g;
-  }
-  if (state === 'next') {
+  /*
+   * A tile you have not reached yet carries the same play mark as the one you
+   * are up to, only recessed. Nothing here is locked, so a padlock would be a
+   * lie about a tile that opens the moment you press it.
+   */
+  if (state === 'ahead' || state === 'next') {
     return svg('path', {
       d: 'M -8 -15 L 17 0 L -8 15 Z',
       fill: ink, stroke: ink, 'stroke-width': 7, 'stroke-linejoin': 'round',
@@ -255,8 +254,10 @@ function glyphFor(state: TileState, gem: boolean, ink: string): SVGElement {
 /**
  * Solved tiles are solid ink, the way a filled NYT pill is. The tile you are
  * up to is paper-white, the one thing on screen that is neither the chapter's
- * colour nor black. Locked tiles are that colour taken down a few steps —
- * recessed rather than greyed, and opaque, so the ribbon passes behind them.
+ * colour nor black. Tiles further up the path are that colour taken down a few
+ * steps — recessed rather than greyed, and opaque, so the ribbon passes behind
+ * them. They are recessed because you have not got there yet, not because they
+ * are shut: every one of them opens.
  */
 function faces(state: TileState, color: string) {
   if (state === 'done') return { top: '#242424', inner: '#3A3A3A', side: '#000000', ink: '#FFFFFF' };
@@ -393,9 +394,8 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
     const grp = svg('g', {
       class: `ptile ${node.state}`,
       role: 'listitem',
-      tabindex: node.state === 'locked' ? -1 : 0,
+      tabindex: 0,
       'aria-label': node.sub ? `${node.label}, ${node.sub}` : node.label,
-      'aria-disabled': node.state === 'locked' ? 'true' : 'false',
     });
 
     const parts: TileParts = {
@@ -439,7 +439,7 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
     }
     grp.appendChild(parts.text);
 
-    if (node.state !== 'locked') {
+    {
       grp.addEventListener('click', node.onOpen);
       grp.addEventListener('keydown', (e) => {
         const k = (e as KeyboardEvent).key;

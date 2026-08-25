@@ -9,13 +9,12 @@
  */
 
 import { h, svg } from './dom.js';
-import { miniature, sectionHeader, toast, themeSwatch, threadSwatch, gameCard } from './components.js';
+import { miniature, sectionHeader, themeSwatch, threadSwatch, gameCard } from './components.js';
 import { modeMark } from './icons.js';
 import { type App, MODE_BLURB, MODE_TITLE, type Route, isChapterMode, type ChapterMode } from './app.js';
 import { modeColor, chapterColor } from './palette.js';
 import { MODE_UNLOCKS, solvedCount, collectionCount } from '../game/progress.js';
 import { THEMES, SKINS, THREAD_COLORS } from '../render/theme.js';
-import { themeUnlocked, skinUnlocked } from '../game/progress.js';
 import { dailyLevel } from '../game/generate.js';
 import { estimateDifficulty } from '../core/difficulty.js';
 import { deriveTarget, objectiveOf, type Level } from '../core/level.js';
@@ -208,7 +207,6 @@ const HOME_ORDER = [
 ];
 
 function modeList(app: App): HTMLElement {
-  const unlocked = app.modes;
   const list = h('div', { class: 'cardlist' });
   const rules = [...MODE_UNLOCKS].sort(
     (a, b) => HOME_ORDER.indexOf(a.id) - HOME_ORDER.indexOf(b.id),
@@ -217,26 +215,16 @@ function modeList(app: App): HTMLElement {
   for (const rule of rules) {
     const id = rule.id;
     if (id === 'daily') continue; // it has a card of its own
-    const open = unlocked.has(id);
     const progress = progressFor(app, id);
 
     list.appendChild(gameCard({
       id,
       color: modeColor(id),
       title: rule.label,
-      // Locked modes still say what they are and what opens them. A visible
-      // goal is worth more than a mystery.
-      blurb: open ? MODE_BLURB[id] ?? '' : rule.condition,
-      foot: open ? progress.text : 'Locked',
+      blurb: MODE_BLURB[id] ?? '',
+      foot: progress.text,
       art: modeMark(id, 'var(--card-ink)'),
-      locked: !open,
-      onOpen: () => {
-        if (!open) {
-          toast(rule.condition);
-          return;
-        }
-        app.go(routeFor(id));
-      },
+      onOpen: () => app.go(routeFor(id)),
     }));
   }
   return list;
@@ -276,18 +264,13 @@ function collectionRow(app: App): HTMLElement {
   const row = h('div', { class: 'collection' });
 
   for (const t of THEMES) {
-    const open = themeUnlocked(app.save, t.id, ctx);
     const on = app.save.settings.theme === t.id;
     row.appendChild(h('button', {
-      class: `swatch${open ? '' : ' locked'}${on ? ' on' : ''}`,
+      class: `swatch${on ? ' on' : ''}`,
       style: 'padding:0;overflow:hidden',
-      title: open ? t.name : t.unlock,
-      'aria-label': open ? `Theme ${t.name}` : `Locked: ${t.unlock}`,
+      title: t.name,
+      'aria-label': `Theme ${t.name}`,
       onclick: () => {
-        if (!open) {
-          toast(t.unlock);
-          return;
-        }
         app.save.settings.theme = t.id;
         app.applySettings();
         app.persist();
@@ -298,18 +281,13 @@ function collectionRow(app: App): HTMLElement {
 
   for (let i = 0; i < SKINS.length; i++) {
     const sk = SKINS[i];
-    const open = skinUnlocked(app.save, sk.id, ctx);
     const on = app.save.settings.skin === sk.id;
     row.appendChild(h('button', {
-      class: `swatch${open ? '' : ' locked'}${on ? ' on' : ''}`,
+      class: `swatch${on ? ' on' : ''}`,
       style: 'padding:0;overflow:hidden;background:var(--panel)',
-      title: open ? sk.name : sk.unlock,
-      'aria-label': open ? `Thread ${sk.name}` : `Locked: ${sk.unlock}`,
+      title: sk.name,
+      'aria-label': `Thread ${sk.name}`,
       onclick: () => {
-        if (!open) {
-          toast(sk.unlock);
-          return;
-        }
         app.save.settings.skin = sk.id;
         app.persist();
         app.go({ name: 'home' });

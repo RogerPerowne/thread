@@ -425,28 +425,6 @@ button { font: inherit; color: inherit; }
   transition: transform 110ms var(--ease);
 }
 .swatch:active { transform: scale(0.92); }
-/* A locked chip still shows what it is, dimmed, with a small padlock so a
-   dark theme does not simply read as a grey block. */
-.swatch.locked { opacity: 0.4; }
-.swatch.locked::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--paper) 45%, transparent);
-}
-.swatch.locked::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 11px;
-  height: 9px;
-  transform: translate(-50%, -30%);
-  border-radius: 2px;
-  background: var(--ink);
-  box-shadow: 0 -5px 0 -2.5px var(--ink), -3.5px -4px 0 -2.5px var(--ink), 3.5px -4px 0 -2.5px var(--ink);
-}
 .swatch.on { outline: 2.5px solid var(--ink); outline-offset: 2px; }
 .swatch.new::after {
   content: '';
@@ -959,8 +937,6 @@ button { font: inherit; color: inherit; }
   font-size: 12.5px;
   font-weight: 600;
 }
-.row.locked { color: var(--mute); cursor: default; }
-.row.locked:active { background: none; }
 
 /* --- forms --------------------------------------------------------------- */
 
@@ -1138,21 +1114,6 @@ pre.share {
   text-align: right;
 }
 
-.gamecard.locked { cursor: default; }
-.gamecard.locked .cardhead, .gamecard.locked .cardfoot { opacity: 0.62; }
-.lockbadge {
-  position: absolute;
-  top: -9px;
-  left: -4px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--paper);
-  color: var(--ink);
-  display: grid;
-  place-items: center;
-  box-shadow: var(--shadow-1);
-}
 
 /* On a dark theme the cards stay coloured — draining them would cost the one
    thing they are for — but they are pulled back so they do not glare. */
@@ -1251,7 +1212,6 @@ pre.share {
 .plabel { font-size: 28px; font-weight: 650; }
 .pstars { color: var(--card-ink); }
 .psub { font-size: 25px; font-weight: 500; opacity: 0.68; }
-.ptile.locked .plabel, .ptile.locked .psub { opacity: 0.44; }
 .ptile.next .plabel { font-weight: 800; }
 
 /* The tile you are up to breathes, once every few seconds, and only if the

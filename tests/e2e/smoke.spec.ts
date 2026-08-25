@@ -29,12 +29,35 @@ test('the ambient header animates without rebuilding itself', async ({ page }) =
   expect(a).not.toBe(b);
 });
 
-test('locked modes state their unlock condition plainly', async ({ page }) => {
+test('nothing on the home screen is locked, and every mode opens', async ({ page }) => {
   await gotoApp(page);
-  const locked = page.locator('.gamecard.locked').first();
-  await expect(locked).toBeVisible();
-  await expect(locked.locator('.lockline')).toContainText(/Solve|Perfect|Finish/);
-  await expect(locked.locator('.lockbadge')).toBeVisible();
+  // A fresh save: no padlock, no dimmed card, no card that refuses a press.
+  expect(await page.locator('.gamecard.locked, .lockbadge, .lockline').count()).toBe(0);
+  for (const id of ['classic', 'shadow', 'par', 'corral', 'wire', 'weave', 'blitz', 'onelife', 'zen']) {
+    await gotoApp(page);
+    await page.locator(`[data-card="${id}"]`).click();
+    // Two .screen elements coexist mid-transition, so the URL is the claim:
+    // pressing the card took you somewhere rather than refusing.
+    await page.waitForFunction(
+      () => !/#\/home$|#\/?$/.test(location.href),
+      undefined,
+      { timeout: 10000 },
+    ).catch(() => { throw new Error(`${id} did not open`); });
+  }
+});
+
+test('every chapter and every level tile opens from a fresh save', async ({ page }) => {
+  await gotoApp(page, '#/chapters/classic');
+  expect(await page.locator('.gamecard.locked').count()).toBe(0);
+  // The last chapter, which used to need fourteen finished before it.
+  const cards = page.locator('.gamecard');
+  await cards.last().click();
+  await expect(page.locator('.ptile').first()).toBeVisible();
+  // And the tile furthest up the path, which used to carry a padlock.
+  const tiles = page.locator('.ptile');
+  expect(await page.locator('.ptile.locked').count()).toBe(0);
+  await tiles.last().locator('.top').click({ force: true });
+  await expect(page.locator('.board-svg').first()).toBeVisible({ timeout: 15000 });
 });
 
 test('the tabs move between home, gallery, stats and settings', async ({ page }) => {

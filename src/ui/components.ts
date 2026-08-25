@@ -423,7 +423,6 @@ export interface CardSpec {
   /** Bottom-right: quieter, a by-line or a count. */
   note?: string;
   art?: SVGElement | HTMLElement;
-  locked?: boolean;
   onOpen: () => void;
 }
 
@@ -432,13 +431,12 @@ export interface CardSpec {
  * NYT Games home screen. The colour does the work of an icon: you learn a
  * chapter by its colour long before you read its name.
  *
- * A locked card keeps its colour and gains a badge. Draining the colour out
- * would tell you less, not more — the point of showing a locked thing at all
- * is that you can see what you are heading for.
+ * Every card opens: nothing in Thread is locked, so there is no badge, no
+ * dimmed state and no card that answers a press with a refusal.
  */
 export function gameCard(spec: CardSpec): HTMLElement {
   const card = h('button', {
-    class: `gamecard${spec.locked ? ' locked' : ''}`,
+    class: 'gamecard',
     'data-card': spec.id ?? '',
     style: `--card:${spec.color}`,
     onclick: () => {
@@ -449,7 +447,7 @@ export function gameCard(spec: CardSpec): HTMLElement {
     h('div', { class: 'cardhead' },
       h('div', { class: 'cardtext' },
         h('h3', { class: 'display', text: spec.title }),
-        h('p', { class: spec.locked ? 'lockline' : '', text: spec.blurb }),
+        h('p', { text: spec.blurb }),
       ),
       spec.art ? h('span', { class: 'cardart', 'aria-hidden': 'true' }, spec.art) : null,
     ),
@@ -460,18 +458,6 @@ export function gameCard(spec: CardSpec): HTMLElement {
       )
       : null,
   );
-  if (spec.locked) {
-    card.appendChild(h('span', { class: 'lockbadge', 'aria-hidden': 'true' }, padlockGlyph()));
-  }
   return card;
 }
 
-function padlockGlyph(): SVGElement {
-  return svg('svg', { viewBox: '0 0 24 24', width: 15, height: 15, 'aria-hidden': 'true' },
-    svg('rect', { x: 4, y: 10.5, width: 16, height: 11, rx: 2.5, fill: 'currentColor' }),
-    svg('path', {
-      d: 'M8 10.5 V7.5 a4 4 0 0 1 8 0 v3', fill: 'none',
-      stroke: 'currentColor', 'stroke-width': 2.4, 'stroke-linecap': 'round',
-    }),
-  );
-}

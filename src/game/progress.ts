@@ -110,53 +110,33 @@ export const MODE_UNLOCKS: UnlockRule[] = [
   },
 ];
 
+/*
+ * Nothing in Thread is locked. Every mode, chapter, level, theme and thread is
+ * open from the first launch: the game is a set of puzzles to pick from, not a
+ * ladder to climb, and a player who wants to start with a clue board should
+ * not have to grind twenty-five classic levels for permission.
+ *
+ * MODE_UNLOCKS survives as the running order — home sorts the modes by it, and
+ * `condition` still reads as the intended difficulty arc — but `met` no longer
+ * decides anything.
+ */
 export function unlockedModes(save: Save, ctx: UnlockCtx): Set<string> {
-  const out = new Set<string>();
-  for (const rule of MODE_UNLOCKS) if (rule.met(save, ctx)) out.add(rule.id);
+  void ctx;
+  const out = new Set<string>(MODE_UNLOCKS.map((rule) => rule.id));
   for (const m of save.unlocks.modes) out.add(m);
   return out;
 }
 
+/** Open, like everything else. See `unlockedModes`. */
 export function themeUnlocked(save: Save, id: string, ctx: UnlockCtx): boolean {
-  if (id === 'paper') return true;
-  if (save.unlocks.themes.includes(id)) return true;
-  const idx = THEMES.findIndex((t) => t.id === id);
-  const chapterGates: Record<string, number> = { slate: 3, copper: 6, linen: 9, glass: 12, gold: 15 };
-  const ch = chapterGates[id];
-  if (ch !== undefined) {
-    const ids = ctx.chapterIds(ch);
-    return ids.length > 0 && solvedCount(save, ids) >= ids.length;
-  }
-  if (id === 'neon') return ctx.weaveIds.length > 0 && solvedCount(save, ctx.weaveIds) >= ctx.weaveIds.length;
-  return idx < 0;
+  void save; void id; void ctx;
+  return true;
 }
 
+/** Open, like everything else. See `unlockedModes`. */
 export function skinUnlocked(save: Save, id: string, ctx: UnlockCtx): boolean {
-  if (id === 'silk') return true;
-  if (save.unlocks.skins.includes(id)) return true;
-  const all = [...ctx.classicIds, ...ctx.weaveIds];
-  switch (id) {
-    case 'copper': return solvedCount(save, all) >= 25;
-    case 'neon': return perfectCount(save, all) >= 10;
-    case 'gold': return anyChapterPerfect(save, ctx);
-    case 'glass': return chapterDone(save, ctx, 10);
-    case 'dash': return solvedCount(save, all) >= 100;
-    case 'twine': return save.daily.best >= 14;
-    default: return false;
-  }
-}
-
-function chapterDone(save: Save, ctx: UnlockCtx, ch: number): boolean {
-  const ids = ctx.chapterIds(ch);
-  return ids.length > 0 && solvedCount(save, ids) >= ids.length;
-}
-
-function anyChapterPerfect(save: Save, ctx: UnlockCtx): boolean {
-  for (let ch = 1; ch <= 15; ch++) {
-    const ids = ctx.chapterIds(ch);
-    if (ids.length > 0 && perfectCount(save, ids) >= ids.length) return true;
-  }
-  return false;
+  void save; void id; void ctx;
+  return true;
 }
 
 export function collectionCount(save: Save, ctx: UnlockCtx): { have: number; total: number } {

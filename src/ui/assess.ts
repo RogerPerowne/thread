@@ -27,18 +27,12 @@ import { ticker } from '../render/tween.js';
 
 const ITEM_COUNT = 12;
 const ITEM_CAP_MS = 120_000;
-const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function assessScreen(app: App): { el: HTMLElement; dispose?: () => void } {
   const el = h('div', { class: 'screen', style: `--accent:${MODE_ACCENT.assess};--accent-ink:#fff` });
   const bodyEl = h('div', { class: 'playwrap' });
   el.append(topBar('Assessment', { onBack: () => app.go({ name: 'home' }) }), bodyEl);
 
-  const since = Date.now() - app.save.assess.lastAt;
-  if (app.save.assess.lastAt > 0 && since < COOLDOWN_MS) {
-    bodyEl.appendChild(cooldownCard(app, COOLDOWN_MS - since));
-    return { el };
-  }
   bodyEl.appendChild(introCard(app, () => {
     clear(bodyEl);
     runAssessment(app, bodyEl);
@@ -53,6 +47,10 @@ function introCard(app: App, start: () => void): HTMLElement {
     h('p', { style: 'color:var(--mute);font-size:14px;margin:0 0 4px', text: 'an IQ-style scale — not a clinical IQ test' }),
     h('p', { text: `${ITEM_COUNT} puzzles, about ten minutes. They get harder or easier as you go. No hints, and only your first closed loop on each one is scored.` }),
     h('p', { text: 'Correctness counts for roughly four times as much as speed, so there is no reward for rushing. Taking a long look before your first peg and then solving it cleanly is the strongest thing you can do.' }),
+    // Nothing here is gated, so the caveat has to carry itself: taking the
+    // same kind of test again soon inflates the score through practice, and an
+    // inflated number tells you nothing. Said plainly, and then left to you.
+    last ? h('p', { text: 'You have taken this before. Scores from a retest soon after tend to run high through practice rather than ability, so treat a fresh number with that in mind.' }) : null,
     last ? h('div', {},
       h('div', { class: 'label', text: 'Last time' }),
       statGrid([[last.score, 'Score'], [`±${last.margin}`, 'Margin'], [`${last.percentile}`, 'Percentile'], [app.save.assess.history.length, 'Taken']]),
@@ -64,24 +62,6 @@ function introCard(app: App, start: () => void): HTMLElement {
         b.classList.add('block');
         return b;
       })()),
-  );
-}
-
-function cooldownCard(app: App, remaining: number): HTMLElement {
-  const days = Math.ceil(remaining / (24 * 60 * 60 * 1000));
-  const last = app.save.assess.history.at(-1);
-  return h('div', { class: 'scroll', style: 'padding:22px 18px' },
-    h('h2', { class: 'display', style: 'font-size:26px;margin:0 0 6px', text: last ? `${last.score} ± ${last.margin}` : 'Not yet' }),
-    h('p', { style: 'color:var(--mute);font-size:14px;margin:0 0 14px', text: 'an IQ-style scale — not a clinical IQ test' }),
-    last ? radar([
-      ['Planning', last.profile.planning],
-      ['Precision', last.profile.precision],
-      ['Speed', last.profile.speed],
-      ['Spatial', last.profile.spatial],
-      ['Learning', last.profile.learning],
-    ], MODE_ACCENT.assess) : null,
-    h('p', { text: `You can take it again in ${days} day${days === 1 ? '' : 's'}. The wait is deliberate: taking the same kind of test repeatedly inflates the score through practice, and an inflated number would tell you nothing.` }),
-    h('div', { class: 'actions' }, pill('Back', () => history.back(), 'ghost')),
   );
 }
 
