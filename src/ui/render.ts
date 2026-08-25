@@ -16,6 +16,7 @@ import { svg } from './dom.js';
 import {
   type Compiled, POST_R, STRING_W, VIEW,
 } from '../core/board.js';
+import { tautPath } from '../core/taut.js';
 import type { Verdict, Attempt } from '../core/check.js';
 
 const SW = STRING_W * 2;
@@ -27,15 +28,25 @@ export type BoardView = {
   /** Board-space point from a client point, and the post nearest it. */
   at(clientX: number, clientY: number): { x: number; y: number };
   nearestPost(x: number, y: number, within: number): number;
+  /** A post has just been caught: give it a beat so the eye follows. */
+  flashPost(i: number): void;
+  /** Mark the keyboard cursor. */
+  markCursor(i: number): void;
+  /** The board is solved: run the string round once. */
+  celebrate(): void;
+  dispose(): void;
 };
 
 export function mountBoard(c: Compiled): BoardView {
   const board = c.board;
   const el = svg('svg', {
-    class: 'board',
+    class: 'board-svg',
     viewBox: `${VIEW.at} ${VIEW.at} ${VIEW.side} ${VIEW.side}`,
     preserveAspectRatio: 'xMidYMid meet',
     'aria-label': 'board',
+    // The solve animation grows the stroke from whatever it is, so the width
+    // lives in a variable rather than being repeated in the keyframes.
+    style: `--sw:${SW}`,
   });
 
   // --- blocks ---------------------------------------------------------------
@@ -88,6 +99,45 @@ export function mountBoard(c: Compiled): BoardView {
   el.append(gBlocks, gPosts, gClash, gStrings, gHeads);
 
   /*
+   * Animation is CSS class flips, never per-frame JavaScript. A caught post
+   * and a solved board both want a short, self-cancelling beat, and the
+   * compositor can run those without the main thread being involved at all —
+   * which is what keeps a drag at full rate while things are moving.
+   */
+  const flashes = new Map<number, number>();
+  function flashPost(i: number): void {
+    const node = postEl[i];
+    if (!node) return;
+    node.classList.remove('caught');
+    // Reading a layout property restarts the animation rather than letting the
+    // class removal and addition collapse into one frame with no change.
+    void node.getBoundingClientRect();
+    node.classList.add('caught');
+    clearTimeout(flashes.get(i));
+    flashes.set(i, window.setTimeout(() => node.classList.remove('caught'), 320));
+  }
+
+  function markCursor(i: number): void {
+    for (const p of postEl) p.classList.remove('cursor');
+    postEl[i]?.classList.add('cursor');
+  }
+
+  let celebrating = 0;
+  function celebrate(): void {
+    el.classList.remove('celebrate');
+    void el.getBoundingClientRect();
+    el.classList.add('celebrate');
+    clearTimeout(celebrating);
+    celebrating = window.setTimeout(() => el.classList.remove('celebrate'), 900);
+  }
+
+  function dispose(): void {
+    for (const t of flashes.values()) clearTimeout(t);
+    flashes.clear();
+    clearTimeout(celebrating);
+  }
+
+  /*
    * Pinned ends wear their string's colour from the start. On a Coloured board
    * that is the only instruction there is — two dots of a colour say "join
    * these" without a word of text.
@@ -104,19 +154,11 @@ export function mountBoard(c: Compiled): BoardView {
     }
   }
 
-  const buf: string[] = [];
-
   function update(attempt: Attempt, verdict: Verdict): void {
     for (let s = 0; s < strandEl.length; s++) {
-      const path = attempt[s] ?? [];
-      buf.length = 0;
-      for (let i = 0; i < path.length; i++) {
-        const [x, y] = board.posts[path[i]];
-        buf.push(`${i === 0 ? 'M' : 'L'}${x} ${y}`);
-      }
-      // A single post is a stub of string on the nail, not an empty path: it
-      // shows the strand has been started.
-      strandEl[s].setAttribute('d', path.length === 1 ? `${buf[0]}l0 0` : buf.join(''));
+      // Taut, so the string wraps every post it uses rather than running
+      // through the middle of it. See core/taut.ts.
+      strandEl[s].setAttribute('d', tautPath(board.posts, attempt[s] ?? []));
     }
 
     // Leftover posts are only worth pointing out once there is something to
@@ -172,5 +214,5 @@ export function mountBoard(c: Compiled): BoardView {
   }
 
   void c;
-  return { el, update, at, nearestPost };
+  return { el, update, at, nearestPost, flashPost, markCursor, celebrate, dispose };
 }

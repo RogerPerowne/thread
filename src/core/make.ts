@@ -35,7 +35,13 @@ export type Made = {
   readonly nodes: number;
 };
 
-const VERIFY_NODES = 300_000;
+/*
+ * The budget for proving a board unique. A board that cannot be settled inside
+ * it is thrown away rather than shipped: `search` reports an abandoned walk as
+ * exhausted, and `carve` refuses anything exhausted, so "unique" always means
+ * proven and never means "no second answer turned up in time".
+ */
+const VERIFY_NODES = 600_000;
 
 // ---------------------------------------------------------------------------
 // A path that covers a lattice
@@ -305,7 +311,7 @@ export function makeBoard(
     }));
 
     const base: Board = {
-      id, mode, posts, blocks: [], strands,
+      id, mode, chapter: 0, posts, blocks: [], strands,
       lattice: grid ? { cols: r.cols, rows: r.rows } : undefined,
       solution: cover,
     };

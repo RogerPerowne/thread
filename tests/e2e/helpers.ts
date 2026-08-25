@@ -33,7 +33,7 @@ export async function openBoard(page: Page, mode: string, n: number): Promise<Bo
   if (page.url().endsWith(want)) await page.reload();
   else await page.goto(`/${want}`);
   await page.waitForFunction(() => Boolean((window as never as { __thread?: unknown }).__thread));
-  await page.waitForSelector('.board');
+  await page.waitForSelector('.board-svg');
   return readBoard(page);
 }
 
@@ -60,7 +60,7 @@ const VIEW_AT = 8;
 const VIEW_SIDE = 84;
 
 export async function pointMapper(page: Page): Promise<(p: [number, number]) => { x: number; y: number }> {
-  const box = await page.locator('.board').first().boundingBox();
+  const box = await page.locator('.board-svg').first().boundingBox();
   if (!box) throw new Error('the board is not on screen');
   const side = Math.min(box.width, box.height);
   const ox = box.x + (box.width - side) / 2;

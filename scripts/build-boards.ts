@@ -17,6 +17,8 @@ import type { Board } from '../src/core/board.js';
 type Band = { readonly count: number } & Recipe;
 
 const SEED = process.env.SEED ?? 'thread-2';
+/** How long any one chapter may spend looking. */
+const BAND_SECONDS = Number(process.env.BAND_SECONDS ?? 150);
 
 /**
  * The ladders. Sizes stop around twenty-five posts: past that a board stops
@@ -25,23 +27,47 @@ const SEED = process.env.SEED ?? 'thread-2';
  */
 const LADDERS: Record<'classic' | 'coloured' | 'grid', Band[]> = {
   classic: [
-    { count: 8, cols: 3, rows: 3, strands: 1, shake: 4 },
-    { count: 8, cols: 4, rows: 3, strands: 1, shake: 4 },
-    { count: 12, cols: 4, rows: 4, strands: 1, shake: 4 },
-    { count: 12, cols: 5, rows: 4, strands: 1, shake: 3.5 },
+    { count: 10, cols: 3, rows: 3, strands: 1, shake: 3.5 },
+    { count: 10, cols: 4, rows: 3, strands: 1, shake: 3.5 },
+    { count: 10, cols: 4, rows: 4, strands: 1, shake: 3.2 },
+    { count: 10, cols: 5, rows: 4, strands: 1, shake: 3 },
+    { count: 10, cols: 5, rows: 5, strands: 1, shake: 2.6 },
+    { count: 10, cols: 6, rows: 5, strands: 1, shake: 2.2 },
   ],
   coloured: [
-    { count: 8, cols: 4, rows: 3, strands: 2, shake: 4 },
-    { count: 10, cols: 4, rows: 4, strands: 3, shake: 4 },
-    { count: 12, cols: 5, rows: 4, strands: 3, shake: 3.5 },
-    { count: 10, cols: 5, rows: 4, strands: 4, shake: 3.5 },
+    { count: 10, cols: 4, rows: 3, strands: 2, shake: 3.5 },
+    { count: 10, cols: 4, rows: 4, strands: 2, shake: 3.2 },
+    { count: 10, cols: 5, rows: 4, strands: 3, shake: 3 },
+    { count: 10, cols: 5, rows: 5, strands: 3, shake: 2.6 },
+    { count: 10, cols: 5, rows: 5, strands: 4, shake: 2.4 },
   ],
   grid: [
-    { count: 8, cols: 4, rows: 4, strands: 3, shake: 0 },
-    { count: 10, cols: 5, rows: 4, strands: 4, shake: 0 },
-    { count: 12, cols: 5, rows: 5, strands: 5, shake: 0 },
-    { count: 10, cols: 5, rows: 5, strands: 6, shake: 0 },
+    { count: 10, cols: 4, rows: 4, strands: 3, shake: 0 },
+    { count: 10, cols: 5, rows: 4, strands: 3, shake: 0 },
+    { count: 10, cols: 5, rows: 5, strands: 4, shake: 0 },
+    { count: 10, cols: 5, rows: 5, strands: 5, shake: 0 },
+    { count: 10, cols: 6, rows: 5, strands: 7, shake: 0 },
   ],
+};
+
+/**
+ * The board grows with the chapter, so the ladder is a real one: nine posts in
+ * chapter one, thirty by the last.
+ *
+ * Classic gets six chapters and the other two get five. That is not an
+ * oversight: past about thirty posts a Coloured or Grid board stops having one
+ * answer. Many short strings can be paired up more ways than few long ones, so
+ * the bigger those boards get the less likely it is that any cut of them is
+ * unique — and a board with two answers is not a puzzle. Rather than pad the
+ * ladder with boards that cannot be proven, those modes stop where the proof
+ * does. Difficulty inside a chapter is the
+ * search cost, which is measured; difficulty between chapters is the size,
+ * which is chosen.
+ */
+export const CHAPTER_NAMES: Record<string, string[]> = {
+  classic: ['First Nine', 'Wider', 'Sixteen', 'Twenty', 'Twenty-Five', 'The Long Way'],
+  coloured: ['Two Strings', 'Sharing', 'Three Strings', 'Crowded', 'Four Strings', 'Full House'],
+  grid: ['The Lattice', 'Wider Grid', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two'],
 };
 
 /**
@@ -68,8 +94,15 @@ function buildMode(mode: 'classic' | 'coloured' | 'grid'): Board[] {
     const wanted = band.count;
     let seed = 0;
     const cap = wanted * 60;
+    /*
+     * A wall-clock budget as well as an attempt count. Proving a big board
+     * unique is expensive and the cost is not knowable in advance, so without
+     * this a single unlucky band can grind for an hour. Better a short chapter
+     * that the log names than a build nobody can wait out.
+     */
+    const until = Date.now() + BAND_SECONDS * 1000;
 
-    while (made.length < wanted && seed < cap) {
+    while (made.length < wanted && seed < cap && Date.now() < until) {
       const rng = makeRng(`${SEED}/${mode}/${bandNo}/${seed++}`);
       const m = makeBoard(mode, 'pending', band, rng);
       if (!m) continue;
@@ -82,7 +115,9 @@ function buildMode(mode: 'classic' | 'coloured' | 'grid'): Board[] {
     made.sort((a, b) => a.nodes - b.nodes);
     for (const m of made) {
       const n = out.length + 1;
-      out.push({ ...m.board, id: `${mode[0]}-${n}` });
+      // The mode's whole name, not its initial: classic and coloured share
+      // a first letter, and two boards with one id share a solved mark.
+      out.push({ ...m.board, id: `${mode}-${n}`, chapter: bandNo });
     }
     const grade = made.length
       ? `${made[0].nodes}..${made[made.length - 1].nodes}`

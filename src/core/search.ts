@@ -181,7 +181,12 @@ function walk(st: State, s: number): void {
     unblock(st, run);
     path.pop();
     st.visited[next] = 0;
-    if (st.solutions.length >= st.cap || st.nodes >= st.maxNodes) return;
+    if (st.solutions.length >= st.cap) return;
+    // Running out of budget mid-loop means the rest of this subtree was never
+    // looked at. Without saying so here, the search can unwind all the way out
+    // and report a finished, exhaustive answer for a walk it abandoned — and a
+    // board would ship whose second answer simply had not been reached yet.
+    if (st.nodes >= st.maxNodes) { st.exhausted = true; return; }
   }
 }
 
@@ -204,7 +209,8 @@ function startStrand(st: State, s: number): void {
     walk(st, s);
     st.paths[s] = [];
     st.visited[p] = 0;
-    if (st.solutions.length >= st.cap || st.nodes >= st.maxNodes) return;
+    if (st.solutions.length >= st.cap) return;
+    if (st.nodes >= st.maxNodes) { st.exhausted = true; return; }
   }
 }
 

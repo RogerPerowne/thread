@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   compile, runIsLegal, runsConflict, segSegDist2, segPointDist2, segRectDist2,
-  turnAngle, POST_R, STRING_W, MIN_TURN_DEG, type Board, type Pt,
+  turnAngle, CLEAR_POST, MIN_TURN_DEG, type Board, type Pt,
 } from '../../src/core/board.js';
 import { judge } from '../../src/core/check.js';
 import { search } from '../../src/core/search.js';
 
 const board = (over: Partial<Board> = {}): Board => ({
-  id: 't', mode: 'classic', posts: [], blocks: [],
+  id: 't', mode: 'classic', chapter: 1, posts: [], blocks: [],
   strands: [{ from: -1, to: -1, color: '#000' }], solution: [], ...over,
 });
 
@@ -54,7 +54,7 @@ describe('what a run may do', () => {
   });
 
   it('lets a run past a post that is far enough off the line', () => {
-    const clear = POST_R + STRING_W + 0.5;
+    const clear = CLEAR_POST + 0.5;
     const b = board({ posts: [[20, 50], [50, 50 + clear], [80, 50]] });
     expect(runIsLegal(b, 0, 2)).toBe(true);
   });
@@ -219,5 +219,19 @@ describe('coloured boards', () => {
     expect(r.exhausted).toBe(false);
     expect(r.solutions.length).toBeGreaterThan(0);
     for (const s of r.solutions) expect(judge(c, s).solved).toBe(true);
+  });
+});
+
+describe('a search that ran out of budget says so', () => {
+  it('never reports an abandoned walk as an exhaustive one', () => {
+    // A board far too big to settle inside a handful of nodes. Whatever comes
+    // back, it must not claim to have looked everywhere — a board shipped on
+    // that claim would be one whose second answer was merely never reached.
+    const posts: Pt[] = [];
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) posts.push([12 + x * 15, 12 + y * 15]);
+    const b = board({ posts });
+    const r = search(compile(b), 2, 500);
+    expect(r.nodes).toBeLessThanOrEqual(500 + 1);
+    if (r.solutions.length < 2) expect(r.exhausted).toBe(true);
   });
 });

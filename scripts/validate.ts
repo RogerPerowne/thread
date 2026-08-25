@@ -19,10 +19,16 @@ import { judge } from '../src/core/check.js';
 import { search } from '../src/core/search.js';
 
 const MODES = ['classic', 'coloured', 'grid'] as const;
-const NODES = 400_000;
+/*
+ * The gate's budget has to be at least the designer's, or a board it proved
+ * legitimately gets thrown out here for taking longer than this allows.
+ */
+const NODES = 900_000;
 
 let bad = 0;
 let checked = 0;
+/** Every id in the game, so a clash between modes cannot slip through. */
+const allIds: string[] = [];
 const t0 = Date.now();
 
 console.log('Thread board gate\n');
@@ -31,6 +37,7 @@ console.log('-'.repeat(66));
 
 for (const mode of MODES) {
   const boards = JSON.parse(readFileSync(`boards/${mode}.json`, 'utf8')) as Board[];
+  for (const b of boards) allIds.push(b.id);
   let legal = 0;
   let unique = 0;
   let worst = 0;
@@ -88,6 +95,13 @@ for (const mode of MODES) {
 }
 
 console.log('-'.repeat(66));
+
+const dupes = allIds.filter((id, i) => allIds.indexOf(id) !== i);
+if (dupes.length) {
+  console.error(`\n  ids used by more than one board: ${[...new Set(dupes)].join(', ')}`);
+  bad += dupes.length;
+}
+
 console.log(`\n${checked} boards checked in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 if (bad > 0) {
   console.error(`\n${bad} problem${bad === 1 ? '' : 's'}. Nothing ships like this.`);

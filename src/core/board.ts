@@ -42,8 +42,8 @@ export const BOARD = 100;
 export const VIEW = { at: 8, side: BOARD - 16 };
 
 /** A post's radius, and the string's half-width, in board units. */
-export const POST_R = 2.4;
-export const STRING_W = 1.15;
+export const POST_R = 2.0;
+export const STRING_W = 1.0;
 
 /**
  * The sharpest turn a string may make at a post, in degrees. Below this it
@@ -65,6 +65,8 @@ export type Strand = {
 export type Board = {
   readonly id: string;
   readonly mode: 'classic' | 'coloured' | 'grid';
+  /** Which chapter it belongs to, 1-based. Chapters get bigger as you go. */
+  readonly chapter: number;
   readonly posts: readonly Pt[];
   readonly blocks: readonly Block[];
   /**
@@ -160,10 +162,33 @@ export function turnAngle(prev: Pt, mid: Pt, next: Pt): number {
 // Compiling a board
 // ---------------------------------------------------------------------------
 
-/** The clearances the rule is stated in, pre-squared for the inner loops. */
-const CLEAR_STRING2 = (2 * STRING_W) ** 2;
-const CLEAR_POST2 = (POST_R + STRING_W) ** 2;
-const CLEAR_BLOCK2 = STRING_W ** 2;
+/*
+ * The clearances the rule is stated in, pre-squared for the inner loops.
+ *
+ * These are measured between the straight lines through post centres, but the
+ * string is not drawn along those lines: it is drawn taut, wrapping each post
+ * it uses (see taut.ts). A taut string strays from the centre line by at most
+ * the wrap radius, POST_R + STRING_W, so every clearance carries that stray
+ * plus the string's own half-width.
+ *
+ * That makes the rule a little stricter than the picture rather than a little
+ * looser, which is the only direction it is safe to be wrong in: a string that
+ * looks clear is clear. `tests/unit/taut.test.ts` holds that by sampling the
+ * drawn shape of every shipped board and checking nothing touches.
+ */
+const STRAY = POST_R + STRING_W;
+const HALF_BODY = STRAY + STRING_W;
+
+/** How far apart two strings' centre lines have to stay. */
+export const CLEAR_STRING = 2 * HALF_BODY;
+/** How far a string has to stay from a post it does not use. */
+export const CLEAR_POST = POST_R + HALF_BODY;
+/** How far a string has to stay from a block. */
+export const CLEAR_BLOCK = HALF_BODY;
+
+const CLEAR_STRING2 = CLEAR_STRING ** 2;
+const CLEAR_POST2 = CLEAR_POST ** 2;
+const CLEAR_BLOCK2 = CLEAR_BLOCK ** 2;
 
 export type Run = { readonly a: number; readonly b: number };
 
