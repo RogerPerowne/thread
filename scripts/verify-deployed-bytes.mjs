@@ -65,46 +65,53 @@ const checks = [];
 const ok = (name, pass, detail = '') => checks.push({ name, pass, detail });
 
 await page.goto(base);
-await page.evaluate(() => localStorage.setItem('thread.seen-intro', '1'));
-await page.goto(base);
 await page.waitForSelector('.screen');
-ok('home renders', await page.locator('.wordmark, h1').first().isVisible());
+ok('home renders its masthead', (await page.locator('.wordmark').textContent()) === 'THREAD');
+ok('one card per mode', (await page.locator('.gamecard').count()) === 3);
 
 const fontOk = await page.evaluate(() => document.fonts.check('700 32px "Zilla Slab"'));
 ok('the slab wordmark font actually loaded', fontOk);
 
-for (const [mode, id, want] of [
-  ['shadow', 's-1-1', 'The order is not'],
-  ['par', 'p-1-1', 'pegs'],
-  ['corral', 'k-1-1', 'Fence in'],
-  ['wire', 'q-1-1', 'how many of its cell'],
-]) {
-  await page.goto(`${base}#/play/${mode}/${id}`);
-  await page.waitForSelector('.board-svg', { timeout: 15000 });
-  const ask = (await page.locator('.hud .ask').textContent()) ?? '';
-  ok(`${mode} board loads and states its ask`, ask.includes(want), ask);
-  if (mode === 'corral' || mode === 'wire') {
-    const g = page.locator('.target-ghost').first();
-    const fill = Number(await g.getAttribute('fill-opacity'));
-    const stroke = Number(await g.getAttribute('stroke-opacity'));
-    ok(`${mode} does not draw its own answer`, fill === 0 && stroke === 0, `fill ${fill} stroke ${stroke}`);
-  }
-}
+await page.goto(`${base}#/m/classic`);
+await page.waitForSelector('.gamecard');
+ok('classic has six chapters', (await page.locator('.gamecard').count()) === 6);
 
-// The one that matters: a level solved through real taps, on the live bundle.
-await page.goto(`${base}#/play/wire/q-1-1`);
-await page.waitForSelector('.board-svg');
-const level = await page.evaluate(() => window.__thread.current);
-const box = await page.locator('.board-svg').first().boundingBox();
-const size = Math.min(box.width, box.height);
-const at = (p) => ({ x: box.x + (box.width - size) / 2 + (p[0] / 100) * size,
-                     y: box.y + (box.height - size) / 2 + (p[1] / 100) * size });
-for (const i of level.threads[0].sol) { const q = at(level.pegs[i]); await page.mouse.click(q.x, q.y); }
-const last = at(level.pegs[level.threads[0].sol.at(-1)]);
-await page.mouse.click(last.x, last.y);
-await page.waitForTimeout(600);
-ok('a wire level is solved by real taps on the deployed bundle',
-   await page.evaluate(() => window.__thread.current?.solved === true));
+await page.goto(`${base}#/c/classic/1`);
+await page.waitForSelector('.ptile');
+ok('the chapter path draws its tiles', (await page.locator('.ptile').count()) === 10);
+ok('the tile you are up to carries its light', (await page.locator('.halo').count()) === 1);
+
+// The one that matters: a board solved through real drags, on the shipped
+// bundle, with the string drawn taut around every post.
+for (const [mode, n] of [['classic', 30], ['coloured', 25], ['grid', 20]]) {
+  await page.goto(`${base}#/p/${mode}/${n}`);
+  await page.waitForSelector('.board-svg', { timeout: 15000 });
+  const board = await page.evaluate(() => window.__thread.board());
+  ok(`${mode} ${n} loaded`, !!board && board.mode === mode);
+  const box = await page.locator('.board-svg').boundingBox();
+  const side = Math.min(box.width, box.height);
+  const at = (p) => ({
+    x: box.x + (box.width - side) / 2 + ((p[0] - 8) / 84) * side,
+    y: box.y + (box.height - side) / 2 + ((p[1] - 8) / 84) * side,
+  });
+  for (const path of board.solution) {
+    const f = at(board.posts[path[0]]);
+    await page.mouse.move(f.x, f.y);
+    await page.mouse.down();
+    for (let i = 1; i < path.length; i++) {
+      const a = at(board.posts[path[i - 1]]);
+      const c = at(board.posts[path[i]]);
+      for (let s = 1; s <= 3; s++) {
+        await page.mouse.move(a.x + (c.x - a.x) * s / 3, a.y + (c.y - a.y) * s / 3);
+      }
+    }
+    await page.mouse.up();
+  }
+  ok(`${mode} ${n} solved by real drags on the deployed bundle`,
+     (await page.locator('.screen.play.won').count()) > 0);
+  const d = await page.locator('.string').first().getAttribute('d');
+  ok(`${mode} ${n} draws its string taut, wrapping the posts`, (d ?? '').includes('A'));
+}
 
 ok('no page errors and no failed requests', errs.length === 0, errs.join(' | '));
 
