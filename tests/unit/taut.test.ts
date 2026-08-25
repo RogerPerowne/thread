@@ -19,6 +19,46 @@ describe('the shape a taut string takes', () => {
     expect(t.from[1]).toBeCloseTo(t.to[1]);
   });
 
+  /*
+   * The one that matters. A string pulled taut round a corner presses on the
+   * OUTSIDE of it. Pressing on the inside is a position no real string can
+   * hold, and it is exactly what an inverted normal or an inverted sweep flag
+   * produces — while still looking, at a glance, like a string that wraps.
+   */
+  it('presses on the outside of the corner, never the inside', () => {
+    const corners: [Pt, Pt, Pt][] = [
+      [[0, 40], [40, 40], [40, 0]],
+      [[0, 40], [40, 40], [40, 80]],
+      [[80, 40], [40, 40], [40, 0]],
+      [[20, 20], [50, 40], [20, 70]],
+    ];
+    for (const [prev, mid, next] of corners) {
+      // The inside of the corner is where the two arms point, added together.
+      const norm = (p: Pt): Pt => {
+        const L = Math.hypot(p[0], p[1]);
+        return [p[0] / L, p[1] / L];
+      };
+      const a = norm([prev[0] - mid[0], prev[1] - mid[1]]);
+      const b = norm([next[0] - mid[0], next[1] - mid[1]]);
+      const inside = norm([a[0] + b[0], a[1] + b[1]]);
+
+      // The furthest the string gets from the corner post is its wrap point.
+      const pts = tautSamples([prev, mid, next], [0, 1, 2], 24);
+      let far: Pt = pts[0];
+      let best = -Infinity;
+      for (const q of pts) {
+        const d = Math.hypot(q[0] - mid[0], q[1] - mid[1]);
+        if (d <= WRAP_R + 1e-6 && d > best - 1e9) {
+          // Only points actually on the wrap arc.
+          const dot = (q[0] - mid[0]) * inside[0] + (q[1] - mid[1]) * inside[1];
+          if (-dot > best) { best = -dot; far = q; }
+        }
+      }
+      const away = (far[0] - mid[0]) * inside[0] + (far[1] - mid[1]) * inside[1];
+      expect(away, `corner ${JSON.stringify(mid)} wrapped the inside`).toBeLessThan(0);
+    }
+  });
+
   it('crosses between the posts when they wrap opposite ways', () => {
     const t = tangent([0, 0], [20, 0], 1, -1);
     // One tangent point above the line, the other below.

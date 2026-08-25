@@ -86,9 +86,17 @@ export function tangent(a: Pt, b: Pt, sa: number, sb: number, r = WRAP_R): Tange
   const uy = d.y / dist;
 
   if (sa === sb) {
-    // Both the same way round: offset the line by r, on the wrap side.
-    const nx = uy * sa;
-    const ny = -ux * sa;
+    /*
+     * Both the same way round: offset the line by r, on the wrap side.
+     *
+     * In a y-down space the left-hand normal of a heading is (-uy, ux), and a
+     * clockwise wrap (s = -1) puts the string on the heading's left. Getting
+     * this the wrong way round is not a cosmetic slip: it presses the string
+     * against the INSIDE of every corner, which is a position no real string
+     * can hold.
+     */
+    const nx = -uy * sa;
+    const ny = ux * sa;
     return {
       from: [a[0] + nx * r, a[1] + ny * r],
       to: [b[0] + nx * r, b[1] + ny * r],
@@ -100,8 +108,8 @@ export function tangent(a: Pt, b: Pt, sa: number, sb: number, r = WRAP_R): Tange
   const sin = Math.min(1, (2 * r) / dist);
   const cos = Math.sqrt(Math.max(0, 1 - sin * sin));
   // Rotate the perpendicular towards b by that angle.
-  const px = uy * sa;
-  const py = -ux * sa;
+  const px = -uy * sa;
+  const py = ux * sa;
   const nx = px * cos + ux * sin;
   const ny = py * cos + uy * sin;
   return {
@@ -141,9 +149,10 @@ export function tautPath(posts: readonly Pt[], path: readonly number[]): string 
   for (let i = 0; i < legs.length; i++) {
     out.push(`L${at(legs[i].to)}`);
     if (i + 1 < legs.length) {
-      // Wrap the post between this leg and the next. Anticlockwise in a y-down
-      // space is sweep 0.
-      const sweep = signs[i + 1] === 1 ? 1 : 0;
+      // Wrap the post between this leg and the next. SVG's sweep flag 1 is the
+      // positive-angle direction, which in a y-down space is clockwise — so an
+      // anticlockwise wrap (s = +1) is sweep 0.
+      const sweep = signs[i + 1] === 1 ? 0 : 1;
       out.push(`A${WRAP_R} ${WRAP_R} 0 0 ${sweep} ${at(legs[i + 1].from)}`);
     }
   }
@@ -176,7 +185,9 @@ export function tautSamples(
       const next = tangent(p(i + 1), p(i + 2), signs[i + 1], signs[i + 2]);
       const a0 = Math.atan2(leg.to[1] - c[1], leg.to[0] - c[0]);
       let a1 = Math.atan2(next.from[1] - c[1], next.from[0] - c[0]);
-      const dir = signs[i + 1] === 1 ? 1 : -1;
+      // atan2 grows clockwise in a y-down space, so an anticlockwise wrap runs
+      // the angle backwards.
+      const dir = signs[i + 1] === 1 ? -1 : 1;
       while (dir * (a1 - a0) < 0) a1 += dir * 2 * Math.PI;
       for (let s = 0; s <= perLeg; s++) {
         const a = a0 + ((a1 - a0) * s) / perLeg;

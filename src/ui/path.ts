@@ -125,6 +125,40 @@ function groundOfTile(i: number, count: number): Pt2 {
   return slotAt(count - 1 - i);
 }
 
+/**
+ * Cut a polyline at the point on it nearest `at`, and hand back the two halves
+ * with the cut point in both, so they meet exactly.
+ *
+ * This is what tells walked from ahead. The obvious alternative — clip the
+ * ribbon at the current tile's HEIGHT — is wrong, and visibly so: the meander
+ * doubles back on itself as it descends, so a horizontal line through the tile
+ * you are up to also crosses stretches of path you walked ten levels ago and
+ * stretches you have not reached. Position along the run is the only thing
+ * that says which is which.
+ */
+function splitPolyline(pts: Pt2[], at: Pt2): { before: Pt2[]; after: Pt2[] } {
+  let bestI = 0;
+  let bestT = 0;
+  let bestD = Infinity;
+  let bestQ: Pt2 = pts[0];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i];
+    const [bx, by] = pts[i + 1];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((at[0] - ax) * dx + (at[1] - ay) * dy) / len2));
+    const q: Pt2 = [ax + dx * t, ay + dy * t];
+    const d = Math.hypot(q[0] - at[0], q[1] - at[1]);
+    if (d < bestD) { bestD = d; bestI = i; bestT = t; bestQ = q; }
+  }
+  void bestT;
+  return {
+    before: [...pts.slice(0, bestI + 1), bestQ],
+    after: [bestQ, ...pts.slice(bestI + 1)],
+  };
+}
+
 function meanderGround(count: number): Pt2[] {
   const turns = Math.ceil(count / PER_TURN) + 1;
   const pts: Pt2[] = [];
@@ -364,10 +398,6 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
   const maskBot = svg('rect', { x: -80, width: VIEW_W + 200, fill: 'url(#pathfadebot)' });
   mask.append(maskTop, maskMid, maskBot);
   defs.appendChild(mask);
-  const clip = svg('clipPath', { id: 'pathdone' });
-  const clipRect = svg('rect', { x: -80, width: VIEW_W + 200 });
-  clip.appendChild(clipRect);
-  defs.appendChild(clip);
 
   /*
    * The ribbon: a slab, not a line. Grey ahead, ink behind, cut at the level
@@ -376,39 +406,48 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
    * of background at every corner, where the two round joins bulge apart.
    */
   const ground = meanderGround(count);
+  /** The tile you are up to, which is where walked stops and ahead begins. */
+  const currentIndex = nodes.findIndex((n) => n.state === 'next');
+  /*
+   * Where the run stops being walked. The meander is ordered down the screen
+   * and level one is at the bottom, so everything from the tile you are up to
+   * onwards is behind you.
+   */
+  const cutAt = currentIndex === -1
+    ? groundOfTile(count - 1, count)
+    : groundOfTile(currentIndex, count);
+  const halves = splitPolyline(ground, cutAt);
+
   const SWEEP_STEP = 1.5;
   const ribbon = svg('g', { mask: 'url(#pathends)' });
-  const layers: { el: SVGElement; z: number }[] = [];
-  const addRun = (stroke: string, z: number, clipped: boolean) => {
+  const layers: { el: SVGElement; z: number; pts: Pt2[] }[] = [];
+  const addRun = (stroke: string, z: number, pts: Pt2[]) => {
     const el = svg('polyline', {
       fill: 'none', stroke, 'stroke-width': PATH_W,
       'stroke-linejoin': 'round', 'stroke-linecap': 'round',
-      ...(clipped ? { 'clip-path': 'url(#pathdone)' } : {}),
     });
-    layers.push({ el, z });
+    layers.push({ el, z, pts });
     ribbon.appendChild(el);
     return el;
   };
   // The ribbon lies on the same ground as the tiles: its underside is level
   // with their bases, so the two share a floor instead of the path hovering.
-  const sweep = (stroke: string, clipped: boolean) => {
+  const sweep = (stroke: string, pts: Pt2[]) => {
     const step = (SWEEP_STEP / RIBBON_D) * G_RIBBON_D;
-    for (let z = 0; z < G_RIBBON_D; z += step) addRun(stroke, BOT_Z + z, clipped);
+    for (let z = 0; z < G_RIBBON_D; z += step) addRun(stroke, BOT_Z + z, pts);
   };
-  sweep(PATH_AHEAD_SIDE, false);
-  addRun(PATH_AHEAD, BOT_Z + G_RIBBON_D, false);
-  sweep(PATH_WALKED_SIDE, true);
-  addRun(PATH_WALKED, BOT_Z + G_RIBBON_D, true);
+  sweep(PATH_AHEAD_SIDE, halves.before);
+  addRun(PATH_AHEAD, BOT_Z + G_RIBBON_D, halves.before);
+  sweep(PATH_WALKED_SIDE, halves.after);
+  addRun(PATH_WALKED, BOT_Z + G_RIBBON_D, halves.after);
   root.appendChild(ribbon);
 
   const tiles: TileParts[] = [];
   let currentY = 0;
-  let currentIndex = -1;
 
   nodes.forEach((node, i) => {
     const g = groundOfTile(i, count);
     const f = faces(node.state, color);
-    if (node.state === 'next') currentIndex = i;
 
     const grp = svg('g', {
       class: `ptile ${node.state}`,
@@ -477,13 +516,14 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
   // -- drawing ---------------------------------------------------------------
 
   function draw(cam: Cam): void {
-    const runs = ground.map((p) => project(cam, p[0], p[1], 0));
-    for (const { el, z } of layers) {
+    for (const { el, z, pts } of layers) {
       const dz = z * lift(cam);
-      el.setAttribute(
-        'points',
-        runs.map((p) => `${p[0].toFixed(1)},${(p[1] - dz).toFixed(1)}`).join(' '),
-      );
+      let out = '';
+      for (const g of pts) {
+        const q = project(cam, g[0], g[1], 0);
+        out += `${q[0].toFixed(1)},${(q[1] - dz).toFixed(1)} `;
+      }
+      el.setAttribute('points', out);
     }
 
     const yTop = project(cam, top[0], top[1], 0)[1];
@@ -495,11 +535,6 @@ export function chapterPath(nodes: PathNode[], color: string): PathView {
     maskMid.setAttribute('height', String(span + 80));
     maskBot.setAttribute('y', String(yBot + 40));
     maskBot.setAttribute('height', String(span * 4));
-
-    const cutG = currentIndex === -1 ? top : groundOfTile(currentIndex, count);
-    const cutY = project(cam, cutG[0], cutG[1], 0)[1];
-    clipRect.setAttribute('y', String(cutY));
-    clipRect.setAttribute('height', String(Math.max(0, yBot - cutY + span + 200)));
 
     const r = cornerR(cam);
     const inset = 0.675;
