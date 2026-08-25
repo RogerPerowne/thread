@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
 import {
   gotoApp, openBoard, solveByDragging, dragStrand, isSolved, solvedIds, pointMapper,
+  findTurn, findFold,
 } from './helpers.js';
 
 const MODES = ['classic', 'coloured', 'grid'] as const;
-const PER_MODE: Record<string, number> = { classic: 60, coloured: 47, grid: 50 };
+const PER_MODE: Record<string, number> = { classic: 60, coloured: 48, grid: 50 };
 
 test('home is the masthead and one card per mode', async ({ page }) => {
   await gotoApp(page);
@@ -47,24 +48,52 @@ for (const mode of MODES) {
   });
 }
 
-test('a warning appears the moment it is true and goes the moment it is not', async ({ page }) => {
+test('an unfinished board is never shown as a broken one', async ({ page }) => {
   const board = await openBoard(page, 'coloured', 1);
   const note = page.locator('.hud .ask');
 
-  // Lay a string that stops short: the board is unfinished, and says so.
+  /*
+   * Half a string laid, nothing wrong with it. This used to go red and say
+   * "each string has to join its own two ends" — true, and true of every board
+   * from the moment it opens until the moment it is solved, so the board was
+   * red for the whole game and the warning could never be seen to go. That is
+   * what "warnings don't disappear" looks like from the player's chair.
+   */
   await dragStrand(page, board, board.solution[0].slice(0, 2));
+  await expect(note).not.toHaveClass(/bad/);
+  expect((await note.textContent()) ?? '').toMatch(/to go|Join/);
+
+  await solveByDragging(page, board);
+  await expect(note).toHaveText('Solved');
+  await expect(note).not.toHaveClass(/bad/);
+});
+
+test('a warning appears the moment a rule is broken and goes when it is undone', async ({ page }) => {
+  // A fold sharp enough to lie on itself is the one break a player can make by
+  // dragging alone: every other illegal run is simply refused.
+  const found = await findFold(page);
+  const note = page.locator('.hud .ask');
+
+  await dragStrand(page, found.board, found.turn);
   await expect(note).toHaveClass(/bad/);
-  const warned = (await note.textContent()) ?? '';
-  expect(warned.length).toBeGreaterThan(0);
+  expect((await note.textContent()) ?? '').toContain('too tight');
 
   // Take it back off. The warning has to go with it — a warning that outlives
   // its cause teaches the wrong thing.
-  await page.locator('.pill', { hasText: 'Clear' }).click();
+  await page.locator('.pill', { hasText: 'Undo' }).click();
   await expect(note).not.toHaveClass(/bad/);
+});
 
-  // And the whole answer clears it for good.
-  await solveByDragging(page, board);
-  await expect(note).toHaveText('Solved');
+test('the string may go back on itself', async ({ page }) => {
+  /*
+   * The turn that used to be refused. Anything under 55 degrees was called a
+   * fold and warned about, which ruled out most of the ways round a board that
+   * a player would actually reach for. Now the two legs are measured past the
+   * nail, so a turn is refused only when the string really does lie on itself.
+   */
+  const found = await findTurn(page, 30, 54);
+  const note = page.locator('.hud .ask');
+  await dragStrand(page, found.board, found.turn);
   await expect(note).not.toHaveClass(/bad/);
 });
 

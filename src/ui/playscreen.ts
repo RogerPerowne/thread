@@ -9,9 +9,12 @@
  * feel like admin.
  *
  * The rule is checked on every change rather than at the end. A string that is
- * already touching another will still be touching it when you let go, and the
+ * already lying on another will still be lying on it when you let go, and the
  * end is the worst possible moment to find that out. A warning appears the
- * instant it is true and goes the instant it is not.
+ * instant it is true and goes the instant it is not — which is only possible
+ * because a warning here means a rule BROKEN. How much is left to do is not a
+ * warning and is never shown as one: it would be true from the first move to
+ * the last, and a red line that is always on is one nobody can read.
  *
  * Nothing here reflows. The line carrying the warning holds its height whether
  * or not it has anything in it, and Next holds its place from the start — a
@@ -23,7 +26,7 @@ import { h } from './dom.js';
 import { topBar, pill } from './components.js';
 import { mountBoard } from './render.js';
 import { compile, runBetween, segPointDist2, type Board } from '../core/board.js';
-import { judge, firstFault } from '../core/check.js';
+import { judge, firstBreak, whatIsLeft } from '../core/check.js';
 import * as haptics from '../render/haptics.js';
 
 /** How close a thumb has to get to catch a post, in board units. */
@@ -99,9 +102,18 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     count.textContent = `${used} of ${c.n} posts`;
     meter.style.width = `${Math.round(v.progress * 100)}%`;
 
-    const fault = laid ? firstFault(v) : '';
-    note.textContent = v.solved ? 'Solved' : (fault || (laid ? '' : 'Drag from a coloured post'));
-    note.classList.toggle('bad', !v.solved && fault !== '');
+    /*
+     * Red is for something that is WRONG, and nothing else. "Posts left over"
+     * and "ends not joined" are true from the moment a board opens until the
+     * moment it is solved, so showing them as warnings put the board in red for
+     * the whole game — and a warning that never goes cannot be acted on, or
+     * even noticed. They are said quietly, as what is left to do, and the line
+     * turns red only for a rule the player has actually broken.
+     */
+    const broken = laid ? firstBreak(v) : '';
+    const left = laid ? whatIsLeft(v) : 'Drag from a coloured post';
+    note.textContent = v.solved ? 'Solved' : (broken || left);
+    note.classList.toggle('bad', !v.solved && broken !== '');
     note.classList.toggle('good', v.solved);
 
     if (v.solved && !solved) {

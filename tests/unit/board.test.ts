@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   compile, runIsLegal, runsConflict, segSegDist2, segPointDist2, segRectDist2,
-  turnAngle, CLEAR_POST, MIN_TURN_DEG, type Board, type Pt,
+  turnAngle, CLEAR_POST, CLEAR_STRING, MIN_TURN_DEG, MIN_RUN, WRAP,
+  type Board, type Pt,
 } from '../../src/core/board.js';
-import { judge } from '../../src/core/check.js';
+import { judge, firstBreak, whatIsLeft } from '../../src/core/check.js';
 import { search } from '../../src/core/search.js';
 
 const board = (over: Partial<Board> = {}): Board => ({
@@ -87,12 +88,70 @@ describe('when two runs cannot share a board', () => {
     expect(runsConflict(b, { a: 0, b: 1 }, { a: 2, b: 3 })).toBe(false);
   });
 
-  it('judges runs that meet at a post by the sharpness of the turn', () => {
-    // A hairpin: out and almost straight back.
-    const posts: Pt[] = [[50, 50], [90, 50], [90 * Math.cos(0.1), 50 + 40 * Math.sin(0.1)]];
-    const b = board({ posts });
-    const sharp = turnAngle(posts[1], posts[0], posts[2]) < MIN_TURN_DEG;
-    expect(runsConflict(b, { a: 0, b: 1 }, { a: 0, b: 2 })).toBe(sharp);
+  /*
+   * A hairpin at post 0: two legs of length 40 leaving it `deg` apart. This is
+   * the shape the whole fold rule is about — a string going back on itself.
+   */
+  const hairpin = (deg: number): Board => {
+    const r = (deg * Math.PI) / 360;
+    return board({
+      posts: [
+        [50, 50],
+        [50 + 40 * Math.cos(-r), 50 + 40 * Math.sin(-r)],
+        [50 + 40 * Math.cos(r), 50 + 40 * Math.sin(r)],
+      ],
+    });
+  };
+  const folds = (deg: number) => runsConflict(hairpin(deg), { a: 0, b: 1 }, { a: 0, b: 2 });
+
+  it('lets a string go back on itself', () => {
+    // The complaint this rule exists to answer: a turn far sharper than a
+    // right angle is a perfectly good move, and used to be refused outright.
+    expect(folds(90)).toBe(false);
+    expect(folds(60)).toBe(false);
+    expect(folds(45)).toBe(false);
+    expect(folds(35)).toBe(false);
+  });
+
+  it('refuses a fold that lies along itself', () => {
+    // Past the nail the two legs are still on top of each other. That is not
+    // going back on yourself, it is drawing the same string twice.
+    expect(folds(20)).toBe(true);
+    expect(folds(10)).toBe(true);
+    expect(folds(1)).toBe(true);
+  });
+
+  it('turns over exactly where the geometry says it should', () => {
+    // MIN_TURN_DEG is derived from WRAP and the string width, and nothing
+    // reads it to make a decision — so this is a real check that the
+    // measurement and the stated number are the same rule, not a restatement.
+    expect(MIN_TURN_DEG).toBeCloseTo(28.955, 2);
+    expect(folds(MIN_TURN_DEG + 0.05)).toBe(false);
+    expect(folds(MIN_TURN_DEG - 0.05)).toBe(true);
+  });
+
+  it('measures the fold rather than reading the angle off a table', () => {
+    // Same turn, longer legs: the answer must not change. It is the distance
+    // between the two pieces of string that decides, and that is set at the
+    // edge of the wrap, not at the far ends.
+    const wide = board({
+      posts: [[50, 50], [50 + 90 * Math.cos(-0.3), 50 + 90 * Math.sin(-0.3)],
+        [50 + 90 * Math.cos(0.3), 50 + 90 * Math.sin(0.3)]],
+    });
+    const deg = turnAngle(wide.posts[1], wide.posts[0], wide.posts[2]);
+    expect(runsConflict(wide, { a: 0, b: 1 }, { a: 0, b: 2 })).toBe(deg < MIN_TURN_DEG);
+  });
+
+  it('keeps a measured middle in every run', () => {
+    // The wrap allowance is a hole in the contact test, and MIN_RUN is what
+    // stops it becoming a hole in the rule: a run shorter than two wraps would
+    // be excused at both ends at once and never checked anywhere.
+    expect(MIN_RUN).toBeGreaterThan(2 * WRAP);
+    expect(MIN_RUN - 2 * WRAP).toBeGreaterThanOrEqual(CLEAR_STRING);
+    const close = board({ posts: [[50, 50], [50 + MIN_RUN - 0.5, 50]] });
+    expect(runIsLegal(close, 0, 1)).toBe(false);
+    const clear = board({ posts: [[50, 50], [50 + MIN_RUN + 0.5, 50]] });
+    expect(runIsLegal(clear, 0, 1)).toBe(true);
   });
 });
 
@@ -193,6 +252,36 @@ describe('judging says what is wrong, not just that something is', () => {
       strands: [{ from: 0, to: 2, color: '#a' }, { from: 1, to: 3, color: '#b' }],
     });
     expect(judge(compile(two), [[0, 2], [1, 3]], true).faults).toContain('touch');
+  });
+
+  /*
+   * The split that decides what turns red. A board that is merely unfinished
+   * is unfinished from the first move to the last, so if that showed as a
+   * warning the warning would be on for the whole game and could never be seen
+   * to go — which is exactly what "warnings don't disappear" means from the
+   * player's chair.
+   */
+  it('does not call an unfinished board a broken one', () => {
+    const v = judge(c, [[0, 1]]);
+    expect(v.faults).toContain('unused');
+    expect(v.broken).toEqual([]);
+    expect(firstBreak(v)).toBe('');
+    expect(whatIsLeft(v)).toBe('2 posts to go');
+  });
+
+  it('calls a broken board broken, and stops the moment it is mended', () => {
+    const bad = judge(c, [[0, 1, 2, 1]]);
+    expect(bad.broken).toContain('reuse');
+    expect(firstBreak(bad)).not.toBe('');
+    // The same board with the repeat taken back off: the warning has to go
+    // with its cause, and nothing else may take its place.
+    const mended = judge(c, [[0, 1, 2]]);
+    expect(mended.broken).toEqual([]);
+    expect(firstBreak(mended)).toBe('');
+  });
+
+  it('says nothing at all once every post is used and nothing is wrong', () => {
+    expect(whatIsLeft(judge(c, [[0, 1, 2, 3]]))).toBe('');
   });
 });
 

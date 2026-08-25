@@ -12,23 +12,45 @@
 
 import { type Compiled, type Board, runBetween, conflicts } from './board.js';
 
-export type Fault =
+/**
+ * Something the player has done wrong. A break is a thing on the board that
+ * should not be there, it has a place you can point at, and undoing the move
+ * that caused it makes it go.
+ */
+export type Break =
   /** A post appears on more than one strand, or twice on one. */
   | 'reuse'
   /** A run that cannot exist: it clips a post it does not use, or a block. */
   | 'blocked'
   /** Two runs are closer than the string is thick. */
   | 'touch'
-  /** The string folds back on itself at a post. */
-  | 'fold'
+  /** A turn so tight the string lies along itself past the nail. */
+  | 'fold';
+
+/**
+ * Something the player has not done yet. This is NOT a fault and must never be
+ * shown as one: it is true of every board from the moment it opens until the
+ * moment it is solved, so a warning about it would be on the whole game and
+ * could never go. It is the state of play, and the post counter already says
+ * it.
+ */
+export type Missing =
   /** Every strand is laid, but posts are left over. */
   | 'unused'
   /** A strand does not start and end where it is pinned. */
   | 'ends';
 
+export type Fault = Break | Missing;
+
+const BREAKS: readonly Break[] = ['touch', 'fold', 'blocked', 'reuse'];
+
 export type Verdict = {
   readonly solved: boolean;
   readonly faults: readonly Fault[];
+  /** The faults that are the player's doing, in the order worth saying. */
+  readonly broken: readonly Break[];
+  /** What is left to do. Never a warning. */
+  readonly missing: readonly Missing[];
   /** Posts no strand uses. Drives the count on screen and the ghost ring. */
   readonly unused: readonly number[];
   /** Post pairs whose run cannot exist. */
@@ -123,6 +145,8 @@ export function judge(c: Compiled, attempt: Attempt, partial = false): Verdict {
   return {
     solved: !partial && faults.size === 0,
     faults: [...faults],
+    broken: BREAKS.filter((f) => faults.has(f)),
+    missing: (['ends', 'unused'] as const).filter((f) => faults.has(f)),
     unused,
     badRuns,
     clashes,
@@ -134,22 +158,36 @@ export function judge(c: Compiled, attempt: Attempt, partial = false): Verdict {
 export const FAULT_TEXT: Record<Fault, string> = {
   reuse: 'A post can only be used once',
   blocked: 'The string cannot pass there',
-  touch: 'The strings are touching',
-  fold: 'The string folds back on itself',
+  touch: 'The strings are lying on each other',
+  fold: 'That turn is too tight — the string lies on itself',
   unused: 'Every post has to be used',
   ends: 'Each string has to join its own two ends',
 };
 
 /**
- * The single thing to say about a board that is not solved.
+ * The one thing that is WRONG with the board, or nothing.
  *
- * Ordered by what the player can act on soonest: a touch is right in front of
- * them, leftover posts are a whole-board problem. Saying one thing plainly
- * beats listing four.
+ * Ordered by what the player can act on soonest, and saying one thing plainly
+ * rather than listing four. Empty when the board is merely unfinished — which
+ * is the whole point of the split: a warning that is true for the entire game
+ * is not a warning, and a player who has been shown red since their first move
+ * has no way to tell when they have fixed something.
  */
-export function firstFault(v: Verdict): string {
-  const order: Fault[] = ['touch', 'fold', 'blocked', 'reuse', 'ends', 'unused'];
-  for (const f of order) if (v.faults.includes(f)) return FAULT_TEXT[f];
+export function firstBreak(v: Verdict): string {
+  const f = v.broken[0];
+  return f ? FAULT_TEXT[f] : '';
+}
+
+/**
+ * What is left to do, said quietly, or nothing. Only reached when there is
+ * nothing wrong — otherwise the board has a real problem and that is the more
+ * useful sentence.
+ */
+export function whatIsLeft(v: Verdict): string {
+  if (v.broken.length > 0) return '';
+  const left = v.unused.length;
+  if (left > 0) return left === 1 ? 'One post to go' : `${left} posts to go`;
+  if (v.missing.includes('ends')) return 'Join each string to its own two ends';
   return '';
 }
 

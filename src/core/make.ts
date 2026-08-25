@@ -229,13 +229,22 @@ function blockAcross(
  * Returns null rather than a compromise: a board with two answers is not a
  * puzzle, and a board whose answer the blocks broke is a bug.
  *
- * The budget is generous because it has to be. With the string running through
- * post centres rather than round them, a run only has to clear a post by the
- * string's own width — so far more runs are legal than when it wrapped, the
- * graph is much denser, and a big board needs a dozen blocks before one answer
- * is left standing. Blocks are cheap to look at; a second answer is not.
+ * The budget is generous because it has to be, and it got more generous when
+ * the string was allowed to go back on itself. Two things widened the graph:
+ * running through post centres rather than round them, so a run only has to
+ * clear a post by the string's own width; and dropping the old refusal of any
+ * turn under 55 degrees, which had been quietly ruling out a third of the
+ * routes on every board. Measured on 5x5 and 6x5 boards, the same recipes that
+ * needed at most fourteen blocks now need twenty to thirty.
+ *
+ * That is a real cost — a board with thirty blocks on it is a busier picture
+ * than one with ten — and it is the right way to pay for the looser rule.
+ * Blocks are part of the game and they are honest: they say what they do. The
+ * alternative was keeping a turn limit that refused moves which look perfectly
+ * fine, and a rule that refuses what the picture allows is the one thing this
+ * game cannot afford.
  */
-export function carve(base: Board, intended: number[][], rng: Rng, maxBlocks = 14): Made | null {
+export function carve(base: Board, intended: number[][], rng: Rng, maxBlocks = 32): Made | null {
   const keep = runsOf(intended);
   let blocks = [...base.blocks];
 

@@ -102,3 +102,73 @@ export async function solveByDragging(page: Page, board: Board): Promise<void> {
 export async function isSolved(page: Page): Promise<boolean> {
   return page.locator('.screen.play.won').count().then((n) => n > 0);
 }
+
+/**
+ * Hunt the shipped boards for a turn the player can actually make.
+ *
+ * A test that hard-codes three post numbers is a test that breaks the next
+ * time the boards are rebuilt, and worse, one that stops testing what it
+ * claims to. So the turn is found by looking.
+ *
+ * It has to be a move a THUMB could make, not just a shape the geometry
+ * allows: a string can only be started at one of its pinned ends, so the route
+ * runs along the board's own answer as far as some post and then turns off it
+ * by the angle we are after. That is why this returns a whole path rather than
+ * three posts.
+ */
+async function turnBetween(
+  page: Page, lo: number, hi: number,
+): Promise<{ board: Board; turn: number[] }> {
+  const boards: [string, number][] = [
+    ['classic', 20], ['classic', 6], ['classic', 35], ['classic', 50],
+    ['classic', 12], ['classic', 44], ['classic', 55], ['classic', 28],
+    ['classic', 60], ['classic', 3],
+  ];
+  for (const [mode, n] of boards) {
+    const board = await openBoard(page, mode, n);
+    const turn = await page.evaluate(
+      ([low, high]) => {
+        const t = (window as never as {
+          __thread: {
+            board(): { posts: [number, number][]; solution: number[][] };
+            runIsLegal(a: number, b: number): boolean;
+          };
+        }).__thread;
+        const bd = t.board();
+        const P = bd.posts;
+        const answer = bd.solution[0];
+        const angle = (p: number[], m: number[], q: number[]) => {
+          const ax = p[0] - m[0], ay = p[1] - m[1], bx = q[0] - m[0], by = q[1] - m[1];
+          const c = (ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by));
+          return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
+        };
+        for (let k = 1; k < answer.length; k++) {
+          const prev = answer[k - 1];
+          const head = answer[k];
+          const sofar = answer.slice(0, k + 1);
+          for (let q = 0; q < P.length; q++) {
+            if (sofar.includes(q) || !t.runIsLegal(head, q)) continue;
+            const a = angle(P[prev], P[head], P[q]);
+            if (a >= low && a < high) return [...sofar, q];
+          }
+        }
+        return null;
+      },
+      [lo, hi] as const,
+    );
+    if (turn) return { board, turn };
+  }
+  throw new Error(`no shipped board offers a turn between ${lo} and ${hi} degrees`);
+}
+
+/** A turn between `lo` and `hi` degrees that the rule allows. */
+export async function findTurn(
+  page: Page, lo: number, hi: number,
+): Promise<{ board: Board; turn: number[] }> {
+  return turnBetween(page, lo, hi);
+}
+
+/** A turn tight enough that the string would lie on itself. */
+export async function findFold(page: Page): Promise<{ board: Board; turn: number[] }> {
+  return turnBetween(page, 1, 28.9);
+}

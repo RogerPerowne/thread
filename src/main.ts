@@ -8,6 +8,7 @@
 
 import './ui/styles.css';
 import { App } from './ui/shell.js';
+import { compile, runBetween } from './core/board.js';
 
 /*
  * Pinch and double-tap zoom, shut off at the source. The viewport meta asks
@@ -29,5 +30,13 @@ if (root) {
   (window as unknown as { __thread: unknown }).__thread = {
     solved: () => [...app.solved],
     board: () => app.board,
+    /*
+     * Whether a run exists between two posts, which is what the harness needs
+     * to pick a move a player could actually make rather than hard-coding post
+     * numbers that go stale the next time the boards are built. It reads the
+     * same compiled board the game plays on and decides nothing.
+     */
+    runIsLegal: (a: number, b: number) =>
+      app.board !== null && runBetween(compile(app.board), a, b) >= 0,
   };
 }
