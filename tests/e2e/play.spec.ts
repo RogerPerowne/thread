@@ -410,3 +410,63 @@ test('every string on a board has a colour of its own', async ({ page }) => {
     expect(new Set(painted).size).toBe(inks.size);
   }
 });
+
+test('a string can be built from both ends and joined in the middle', async ({ page }) => {
+  /*
+   * Working inwards from both pinned ends is how anyone actually solves a long
+   * string, and with one path per strand it was impossible: starting at the
+   * far end either did nothing or ran the string you were holding into
+   * somebody else's anchor.
+   */
+  const board = await openBoard(page, 'coloured', 12);
+  const answer = board.solution[0];
+  const half = Math.floor(answer.length / 2);
+
+  // From the start, part way.
+  await dragStrand(page, board, answer.slice(0, half));
+  // From the far end, backwards, until it reaches where the first part stops.
+  await dragStrand(page, board, [...answer.slice(half - 1)].reverse());
+
+  // Two pieces of one string, now joined: one drawn path, the whole answer.
+  const drawn = await page.evaluate(
+    () => [...document.querySelectorAll('.string')].map((p) => p.getAttribute('d')).filter(Boolean),
+  );
+  expect(drawn.length, 'the two halves did not become one string').toBe(1);
+  await expect(page.locator('.hud .num')).toContainText(`${answer.length} of`);
+});
+
+test('changing a bit in the middle keeps the rest, and rejoins it', async ({ page }) => {
+  /*
+   * The distinction the player never has to make: a tap on a post ends the
+   * string there, a DRAG from the same post keeps what is past it standing on
+   * the board, ready to join back on. Nobody is asked which they meant — the
+   * difference is whether they went anywhere.
+   */
+  const board = await openBoard(page, 'coloured', 20);
+  const at = await pointMapper(page);
+  const answer = board.solution[0];
+  await dragStrand(page, board, answer);
+  await expect(page.locator('.hud .num')).toContainText(`${answer.length} of`);
+
+  // Grab the middle and pull it back off its route. What is past it must still
+  // be on the board — two pieces now, not one string and a lost half.
+  const mid = Math.floor(answer.length / 2);
+  const from = at(board.posts[answer[mid]]);
+  const away = at(board.posts[answer[mid - 1]]);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(away.x, away.y, { steps: 8 });
+  const pieces = () => page.evaluate(
+    () => [...document.querySelectorAll('.string')].map((p) => p.getAttribute('d')).filter(Boolean).length,
+  );
+  expect(await pieces(), 'the far part of the string was thrown away').toBeGreaterThan(1);
+
+  // Go back the way we came. Reaching the kept part is what joins them — the
+  // same rule as everywhere else, so nothing snaps together behind your back.
+  await page.mouse.move(from.x, from.y, { steps: 8 });
+  const meet = at(board.posts[answer[mid + 1]]);
+  await page.mouse.move(meet.x, meet.y, { steps: 8 });
+  await page.mouse.up();
+  expect(await pieces(), 'the two pieces did not join back up').toBe(1);
+  await expect(page.locator('.hud .num')).toContainText(`${answer.length} of`);
+});

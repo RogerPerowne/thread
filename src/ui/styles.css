@@ -646,13 +646,15 @@ button { font: inherit; color: inherit; }
  * lights up red, staggered from the loose end backwards, so the answer says
  * both that the game heard the move and which string it is talking about.
  *
- * The light is what carries it. A post is two board units across and the
- * board can hold thirty of them, so a post that only changes colour is a dot
- * changing shade under the very hand that is covering it — easy to miss and
- * easy to mistake for nothing having happened, which is the one thing this
- * has to be told apart from. The halo is nearly four times the post's own
- * width and swells outward, so it reads from the far side of the screen and
- * from under a thumb.
+ * A ring, not a glow. A post is two board units across and the board can hold
+ * sixty of them, so a post that only changes colour is a dot changing shade
+ * under the very hand covering it — easy to miss, and easy to mistake for
+ * nothing having happened, which is the one thing it has to be told apart
+ * from. So it needs size. But a soft gradient was the only gradient anywhere
+ * in this game: everything else is flat ink on paper, solid strokes and solid
+ * fills, and the halo read as though it had come from a different app. This
+ * is the same ring the pinned ends wear, in the same weight, thrown outwards
+ * and thinning as it goes.
  *
  * A pinned end wears its strand's colour as a presentation attribute, and any
  * CSS rule beats one of those — so the two ends light with the rest rather
@@ -663,21 +665,18 @@ button { font: inherit; color: inherit; }
   pointer-events: none;
   transform-box: fill-box;
   transform-origin: center;
+  fill: none;
+  stroke: var(--bad, #cf3520);
+  stroke-width: 1.6;
 }
-/* The stops live in <defs>, not inside the circle that uses them, so they are
-   reached from the board rather than through .glow. */
-.board-svg .g0, .board-svg .g1, .board-svg .g2 { stop-color: var(--bad, #cf3520); }
-.board-svg .g0 { stop-opacity: 0.9; }
-.board-svg .g1 { stop-opacity: 0.45; }
-.board-svg .g2 { stop-opacity: 0; }
 .glow.refused {
-  animation: refuseglow 620ms var(--ease);
+  animation: refusering 560ms var(--ease);
   animation-delay: calc(var(--step, 0) * 26ms);
 }
-@keyframes refuseglow {
-  0% { opacity: 0; transform: scale(0.4); }
-  30% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(var(--swell, 1.15)); }
+@keyframes refusering {
+  0% { opacity: 0; transform: scale(0.34); stroke-width: 2.6; }
+  26% { opacity: 1; }
+  100% { opacity: 0; transform: scale(var(--swell, 1.15)); stroke-width: 0.7; }
 }
 
 .post.refused {

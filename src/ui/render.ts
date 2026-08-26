@@ -16,14 +16,18 @@ import { svg } from './dom.js';
 import {
   type Compiled, POST_R, STRING_W, GLOW_R, GLOW_SWELL, viewOf,
 } from '../core/board.js';
-import type { Verdict, Attempt } from '../core/check.js';
+import type { Verdict } from '../core/check.js';
+
+/** A contiguous run of string, and the strand it belongs to. */
+export type Piece = { readonly strand: number; readonly posts: readonly number[] };
+export type Pieces = readonly Piece[];
 
 const SW = STRING_W * 2;
 
 export type BoardView = {
   readonly el: SVGSVGElement;
-  /** Repaint from an attempt and its verdict. Allocates nothing per call. */
-  update(attempt: Attempt, verdict: Verdict): void;
+  /** Repaint from the pieces on the board and their verdict. */
+  update(pieces: Pieces, verdict: Verdict): void;
   /** Board-space point from a client point, and the post nearest it. */
   at(clientX: number, clientY: number): { x: number; y: number };
   nearestPost(x: number, y: number, within: number): number;
@@ -69,21 +73,6 @@ export function mountBoard(c: Compiled): BoardView {
     style: `--sw:${SW};--swell:${GLOW_SWELL}`,
   });
 
-  /*
-   * The soft red a refused post wears. It is a radial gradient rather than a
-   * blur filter: one gradient serves every post on the board, and a filter on
-   * thirty circles is real work for the compositor at exactly the moment the
-   * player is mid-drag. This is a glow that costs a fill.
-   */
-  const defs = svg('defs');
-  const glowFill = svg('radialGradient', { id: `refuseglow-${board.id}` });
-  glowFill.append(
-    svg('stop', { offset: '0%', class: 'g0' }),
-    svg('stop', { offset: '38%', class: 'g1' }),
-    svg('stop', { offset: '100%', class: 'g2' }),
-  );
-  defs.appendChild(glowFill);
-
   // --- blocks ---------------------------------------------------------------
   const gBlocks = svg('g', { class: 'blocks' });
   for (const b of board.blocks) {
@@ -107,7 +96,6 @@ export function mountBoard(c: Compiled): BoardView {
     const [x, y] = board.posts[i];
     const glow = svg('circle', {
       cx: x, cy: y, r: GLOW_R, class: 'glow',
-      fill: `url(#refuseglow-${board.id})`,
     });
     gGlow.appendChild(glow);
     glowEl.push(glow);
@@ -125,12 +113,16 @@ export function mountBoard(c: Compiled): BoardView {
   // --- the strings ----------------------------------------------------------
   const gStrings = svg('g', { class: 'strings' });
   const strandEl: SVGPathElement[] = [];
+  /* New pieces are inserted before this, so the loose end and the recoils stay
+     on top of the string rather than being buried by it. */
+  const waitingAnchor = svg('g');
+  gStrings.appendChild(waitingAnchor);
   for (const s of board.strands) {
     const p = svg('path', {
       class: 'string', fill: 'none', stroke: s.color, 'stroke-width': SW,
       'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     });
-    gStrings.appendChild(p);
+    gStrings.insertBefore(p, waitingAnchor);
     strandEl.push(p);
   }
 
@@ -155,7 +147,7 @@ export function mountBoard(c: Compiled): BoardView {
     headEl.push(head);
   }
 
-  el.append(defs, gGlow, gBlocks, gPosts, gClash, gStrings, gHeads);
+  el.append(gGlow, gBlocks, gPosts, gClash, gStrings, gHeads);
 
   /*
    * Animation is CSS class flips, never per-frame JavaScript. A caught post
@@ -310,17 +302,38 @@ export function mountBoard(c: Compiled): BoardView {
 
   const buf: string[] = [];
 
-  function update(attempt: Attempt, verdict: Verdict): void {
-    for (let s = 0; s < strandEl.length; s++) {
-      const path = attempt[s] ?? [];
+  /*
+   * One drawn path per piece of string. A strand is not always one piece while
+   * it is being built — you can start at both its pinned ends and join them in
+   * the middle, and grabbing the middle of a finished string breaks it in two
+   * until your new route meets the far part again — so the pool grows to
+   * whatever the board currently holds and the spares are emptied rather than
+   * removed. Nothing is created during a drag once the pool is warm.
+   */
+  function update(pieces: Pieces, verdict: Verdict): void {
+    while (strandEl.length < pieces.length) {
+      const p = svg('path', {
+        class: 'string', fill: 'none', 'stroke-width': SW,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      });
+      gStrings.insertBefore(p, waitingAnchor);
+      strandEl.push(p);
+    }
+    for (let i = 0; i < strandEl.length; i++) {
+      const piece = pieces[i];
+      if (!piece || piece.posts.length === 0) {
+        strandEl[i].setAttribute('d', '');
+        continue;
+      }
       buf.length = 0;
-      for (let i = 0; i < path.length; i++) {
-        const [x, y] = board.posts[path[i]];
-        buf.push(`${i === 0 ? 'M' : 'L'}${x} ${y}`);
+      for (let k = 0; k < piece.posts.length; k++) {
+        const [x, y] = board.posts[piece.posts[k]];
+        buf.push(`${k === 0 ? 'M' : 'L'}${x} ${y}`);
       }
       // A single post is a stub of string on the nail, not an empty path: it
-      // shows the strand has been started.
-      strandEl[s].setAttribute('d', path.length === 1 ? `${buf[0]}l0 0` : buf.join(''));
+      // shows the piece has been started.
+      strandEl[i].setAttribute('d', piece.posts.length === 1 ? `${buf[0]}l0 0` : buf.join(''));
+      strandEl[i].setAttribute('stroke', board.strands[piece.strand]?.color ?? '#888');
     }
 
     // Leftover posts are only worth pointing out once there is something to
