@@ -143,6 +143,35 @@ test('the rail swaps chapters', async ({ page }) => {
   expect(await at()).toBeGreaterThan(0);
 });
 
+test('the rail names the chapter you are actually looking at', async ({ page }) => {
+  /*
+   * At either limit of the scroll the view is clamped, so a chapter's band
+   * cannot sit where a jump would have put it — and a reading line taken from
+   * where the band WOULD have been ends up on the wrong side of it and names
+   * the chapter you have just left. Both ends are checked, because that is
+   * where the two lines come apart.
+   */
+  await gotoApp(page, '#/g/thread');
+  const chapters = await page.locator('.chaprail .mark').count();
+  const named = async (): Promise<number> => {
+    const t = await page.locator('.chaprail').getAttribute('aria-valuenow');
+    return Number(t);
+  };
+  const scrollTo = async (where: 'top' | 'bottom') => {
+    await page.evaluate((w) => {
+      const s = document.querySelector('.pathscroll') as HTMLElement;
+      s.scrollTop = w === 'top' ? 0 : s.scrollHeight;
+    }, where);
+    await page.waitForTimeout(120);
+  };
+
+  // The path climbs, so its top is the last chapter and its foot is the first.
+  await scrollTo('top');
+  expect(await named()).toBe(chapters);
+  await scrollTo('bottom');
+  expect(await named()).toBe(1);
+});
+
 test('an unknown route lands somewhere real rather than on nothing', async ({ page }) => {
   await gotoApp(page, '#/g/nosuchgame/nosuchpuzzle');
   await expect(page.locator('.masthead .wordmark')).toBeVisible();

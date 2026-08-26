@@ -543,11 +543,24 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
     flag.style.top = `${((bandY[c] ?? 0) / BED) * 100}%`;
   };
 
+  /*
+   * Two lines, and they are different on purpose.
+   *
+   * FOOT is where a chapter's band is put when you jump to it — low, so the
+   * chapter's own tiles fill the screen above it. EYE is where the screen is
+   * READ from, and it has to be higher than that: at either end of the scroll
+   * the view is clamped and the band cannot sit at FOOT any more, so a reading
+   * line down at FOOT ends up below the band and names the chapter you have
+   * just left.
+   */
+  const FOOT = 0.78;
+  const EYE = 0.5;
+
   /** Where the scroller has to be for chapter `c` to be at the foot of the view. */
   const targetOf = (c: number): number => {
     const k = root.clientWidth / VIEW_W || 1;
     const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    return Math.max(0, Math.min(max, (bandY[c] ?? 0) * k - scroller.clientHeight * 0.78));
+    return Math.max(0, Math.min(max, (bandY[c] ?? 0) * k - scroller.clientHeight * FOOT));
   };
 
   const goTo = (c: number, behavior: ScrollBehavior) => {
@@ -566,7 +579,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
    */
   const chapterInView = (): number => {
     const k = root.clientWidth / VIEW_W || 1;
-    const line = scroller.scrollTop + scroller.clientHeight * 0.78;
+    const line = scroller.scrollTop + scroller.clientHeight * EYE;
     let c = 0;
     for (let i = 0; i < chapters.length; i++) if ((bandY[i] ?? 0) * k >= line) c = i;
     return c;
