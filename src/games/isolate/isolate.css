@@ -1,0 +1,82 @@
+/**
+ * Isolate's board.
+ *
+ * Walls are the design. Everything else — the cells, the faint lines a wall
+ * could go on, the circles and their numbers — is drawn light enough that a
+ * board half solved reads as a set of rooms rather than as a grid with some
+ * marks on it.
+ *
+ * A drawn wall and a given one look the same weight on purpose: they do the
+ * same job, and a player working out a room does not care which of them was
+ * there first. What tells them apart is colour — the board's own ink for the
+ * ones it came with, the game's accent for the ones you drew.
+ */
+
+.iso-cell {
+  fill: var(--paper-2);
+  transition: fill var(--fast) var(--ease);
+}
+.iso-cell.cursor { fill: var(--wash); }
+.iso-cell.lookhere {
+  fill: var(--wash-2);
+  animation: lookhere var(--look) var(--ease) infinite;
+}
+/* A room the player has walled off that breaks a rule. The only red here, and
+   it can only appear round walls they drew themselves. */
+.iso-cell.wrong { fill: color-mix(in srgb, var(--bad) 16%, var(--paper)); }
+
+/* The lines a wall could be drawn on: paper, not ink. */
+.iso-line {
+  stroke: var(--line);
+  stroke-width: 0.4;
+}
+
+/* The outside of the board is a wall everywhere, and says so. */
+.iso-rim {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+
+.iso-wall {
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+.iso-wall.on { opacity: 1; }
+/* The board's own walls: the same weight, the board's own ink. */
+.iso-wall.given { stroke: var(--ink); }
+
+/* --- the circles ---------------------------------------------------------- */
+.iso-ring {
+  fill: var(--paper);
+  stroke: var(--ink-2);
+  stroke-width: 0.9;
+}
+.iso-dot.numbered .iso-ring { fill: var(--paper); stroke: var(--ink); stroke-width: 1.2; }
+.iso-num {
+  fill: var(--ink);
+  font-family: var(--num);
+  font-size: 7px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* --- the crosses ---------------------------------------------------------- */
+/*
+ * A corner where at least two walls have to meet. It fades once it has them,
+ * because a clue that has done its work has no reason to keep asking to be
+ * read — the same rule Shape Up's clues follow.
+ */
+.iso-cross line {
+  stroke: var(--ink-2);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  transition: stroke var(--fast) var(--ease);
+}
+.iso-cross.done line { stroke: var(--line-2); }
+.iso-cross.lookhere line { stroke: var(--accent); stroke-width: 1.6; }

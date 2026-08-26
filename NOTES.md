@@ -34,6 +34,20 @@ because it is the one nobody has to be told. `leftToRight` is implemented and
 unit-tested; it travels in the puzzle data, so a future family can use it
 without the engine guessing.
 
+## Isolate, and what a clue costs
+
+**The designer adds clues blindly and then takes them back off.** Reaching one
+answer that can also be reasoned out took, on a six by six, every corner
+crossed and a couple of dozen walls drawn — a board so pre-solved there was
+nothing to do on it. Adding clues cannot be done knowing which one did the
+work, so each is lifted afterwards and put back only if the board stops having
+one answer or stops being reasonable without it. That took the six by six from
+twenty-five crosses and twenty-six walls to two and eight.
+
+**A clue that rules nothing out is worse than no clue**: it is a promise that
+there was something to see there. That is the whole argument for paying for
+the thinning pass.
+
 ## Refused, with the measurement
 
 **A twelve-by-twelve Grid.** Asked for; not deliverable. A 144-cell lattice
@@ -131,9 +145,6 @@ construction. They are here so the next change does not undo the fix.
 
 - **Tutorials.** Every game declares `tutorial: []`. The `TutorialStep`
   contract exists; no steps do.
-- **One more game**: Isolate. It needs a model, a validator, a real solver, a
-  generator that works answer-first, a difficulty analyser that measures
-  deduction rather than size, a serializer and unit tests.
 - **On a lattice, two runs can never lie across each other.** Every run is one
   step long, so two of them either share a post or are a whole cell apart. The
   `touch` fault therefore cannot fire on any shipped board; the check stays

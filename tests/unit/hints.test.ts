@@ -11,6 +11,8 @@ import { ShapeSession } from '../../src/games/shape/session.js';
 import type { Board as ShapeBoard } from '../../src/games/shape/model.js';
 import { HexSession } from '../../src/games/hex/session.js';
 import type { Hex } from '../../src/games/hex/model.js';
+import { IsolateSession } from '../../src/games/isolate/session.js';
+import { edgeBetween, type Board as IsolateBoard } from '../../src/games/isolate/model.js';
 import type { Hint } from '../../src/platform/types.js';
 
 /**
@@ -36,6 +38,13 @@ const zig = JSON.parse(readFileSync('puzzles/zigzag.json', 'utf8')) as Zig[];
 const nine = JSON.parse(readFileSync('puzzles/nine.json', 'utf8')) as Nine[];
 const shape = JSON.parse(readFileSync('puzzles/shape.json', 'utf8')) as ShapeBoard[];
 const hex = JSON.parse(readFileSync('puzzles/hex.json', 'utf8')) as Hex[];
+const isolate = JSON.parse(readFileSync('puzzles/isolate.json', 'utf8')) as IsolateBoard[];
+
+/* Isolate's own geometry, imported rather than copied — a harness that works
+   out where an edge is from a copy of the arithmetic is a harness that drifts. */
+function isolateEdge(board: IsolateBoard, a: number, b: number): number {
+  return edgeBetween(board.w, board.h, a, b);
+}
 
 function wellFormed(hint: Hint | null, where: string): asserts hint is Hint {
   expect(hint, `${where} had nothing to say`).not.toBeNull();
@@ -43,7 +52,7 @@ function wellFormed(hint: Hint | null, where: string): asserts hint is Hint {
   expect(hint!.reason.trim().endsWith('.'), `${where} is not a sentence`).toBe(true);
   expect(hint!.focus.length, `${where} points at nothing`).toBeGreaterThan(0);
   for (const f of hint!.focus) {
-    expect(f, `${where} points at "${f}"`).toMatch(/^(cell|post|tile):\d+$/);
+    expect(f, `${where} points at "${f}"`).toMatch(/^(cell|post|tile|corner):\d+$/);
   }
 }
 
@@ -231,6 +240,44 @@ describe('Hexagony', () => {
   });
 });
 
+describe('Isolate', () => {
+  it('only ever names a line the answer agrees about', () => {
+    /*
+     * The strongest thing that can be asked of it: every hint here says either
+     * "this line is a wall" or "this line stays open", and the shipped answer
+     * has to agree. A hint that told you to wall a line the answer leaves open
+     * would send a player to a board that cannot be finished.
+     */
+    let said = 0;
+    for (const board of isolate.slice(0, 16)) {
+      const answer = new Set(board.answer);
+      for (const share of [0, 0.4, 0.8]) {
+        const s = new IsolateSession(board);
+        const take = Math.round(board.answer.length * share);
+        for (let i = 0; i < take; i++) s.set(board.answer[i], true);
+        const hint = s.hint();
+        wellFormed(hint, 'isolate');
+        if (!hint.move) continue;
+        const cells = hint.focus.filter((f) => f.startsWith('cell:')).map((f) => Number(f.slice(5)));
+        if (cells.length !== 2) continue;
+        const edge = isolateEdge(board, cells[0], cells[1]);
+        if (edge < 0) continue;
+        said++;
+        const wall = /Draw a wall/.test(hint.move);
+        expect(answer.has(edge), 'a hint the answer disagrees with').toBe(wall);
+      }
+    }
+    expect(said, 'no hint named a line at all').toBeGreaterThan(0);
+  });
+
+  it('has nothing to say once every wall is drawn', () => {
+    const s = new IsolateSession(isolate[0]);
+    for (const edge of isolate[0].answer) s.set(edge, true);
+    expect(s.verdict().solved).toBe(true);
+    expect(s.hint()).toBeNull();
+  });
+});
+
 describe('every game', () => {
   it('keeps the move off the first rung', () => {
     /*
@@ -244,6 +291,7 @@ describe('every game', () => {
       new NineSession(nine[0]),
       new ShapeSession(shape[0]),
       new HexSession(hex[0]),
+      new IsolateSession(isolate[0]),
     ];
     for (const s of sessions) {
       const hint = s.hint();

@@ -206,6 +206,22 @@ for (const game of games) {
       await page.mouse.move(t.x, t.y);
       await page.mouse.up();
     }
+  } else if (game === 'isolate') {
+    const svg = page.locator('.iso-svg');
+    const box = await svg.boundingBox();
+    const v = handle.view;
+    const side = Math.min(box.width / v.W, box.height / v.H);
+    const left = box.x + (box.width - side * v.W) / 2;
+    const top = box.y + (box.height - side * v.H) / 2;
+    const at = (x, y) => ({ x: left + x * side, y: top + y * side });
+    for (const edge of handle.isolate.answer) {
+      if (handle.isolate.given.includes(edge)) continue;
+      const spot = await page.evaluate((e) => window.__puzzles.board().edgeSpot(e), edge);
+      const q = at(spot.x, spot.y);
+      await page.mouse.move(q.x, q.y);
+      await page.mouse.down();
+      await page.mouse.up();
+    }
   } else {
     /*
      * A game with no driver here is a game this check silently stops checking.

@@ -411,3 +411,73 @@ export async function tapTileInto(page: Page, tile: number, at: number): Promise
 export async function solveHex(page: Page, board: HexBoard): Promise<void> {
   for (let at = 0; at < board.answer.length; at++) await dragTile(page, board.answer[at], at);
 }
+
+// ---------------------------------------------------------------------------
+// Isolate
+// ---------------------------------------------------------------------------
+
+export type IsolateBoard = {
+  w: number; h: number;
+  dots: number[];
+  sizes: Record<number, number>;
+  crosses: number[];
+  given: number[];
+  answer: number[];
+};
+
+type IsolateHandle = {
+  isolate: IsolateBoard;
+  walls(): number[];
+  edgeSpot(edge: number): { x: number; y: number };
+  edgeBetween(a: number, b: number): number;
+  cellBox(cell: number): { x: number; y: number; size: number };
+  view: { W: number; H: number };
+};
+
+export async function isolateBoard(page: Page): Promise<IsolateBoard> {
+  return page.evaluate(() => (window.__puzzles.board() as IsolateHandle).isolate as never);
+}
+
+export async function isolateMapper(page: Page): Promise<(x: number, y: number) => { x: number; y: number }> {
+  const box = await page.locator('.iso-svg').boundingBox();
+  if (!box) throw new Error('the board is not on screen');
+  const v = await page.evaluate(() => (window.__puzzles.board() as IsolateHandle).view);
+  const side = Math.min(box.width / v.W, box.height / v.H);
+  const left = box.x + (box.width - side * v.W) / 2;
+  const top = box.y + (box.height - side * v.H) / 2;
+  return (x, y) => ({ x: left + x * side, y: top + y * side });
+}
+
+/** Press the line between two cells, the way a thumb would. */
+export async function tapWall(page: Page, edge: number): Promise<void> {
+  const at = await isolateMapper(page);
+  const spot = await page.evaluate((e) => (window.__puzzles.board() as IsolateHandle).edgeSpot(e), edge);
+  const q = at(spot.x, spot.y);
+  await page.mouse.move(q.x, q.y);
+  await page.mouse.down();
+  await page.mouse.up();
+}
+
+/** Draw a run of walls in one sweep, which is the other way in. */
+export async function dragWalls(page: Page, edges: number[]): Promise<void> {
+  const at = await isolateMapper(page);
+  const spots = await page.evaluate(
+    (list) => list.map((e) => (window.__puzzles.board() as IsolateHandle).edgeSpot(e)),
+    edges,
+  );
+  const first = at(spots[0].x, spots[0].y);
+  await page.mouse.move(first.x, first.y);
+  await page.mouse.down();
+  for (const s of spots.slice(1)) {
+    const q = at(s.x, s.y);
+    await page.mouse.move(q.x, q.y, { steps: 3 });
+  }
+  await page.mouse.up();
+}
+
+export async function solveIsolate(page: Page, board: IsolateBoard): Promise<void> {
+  for (const edge of board.answer) {
+    if (board.given.includes(edge)) continue;
+    await tapWall(page, edge);
+  }
+}

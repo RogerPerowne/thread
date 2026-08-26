@@ -18,7 +18,8 @@
     "zigzag": "tsx scripts/build-zigzag.ts",
     "nine": "tsx scripts/build-nine.ts",
     "shape": "tsx scripts/build-shape.ts",
-    "hex": "tsx scripts/build-hex.ts"
+    "hex": "tsx scripts/build-hex.ts",
+    "isolate": "tsx scripts/build-isolate.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",

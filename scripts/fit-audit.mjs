@@ -45,6 +45,7 @@ const ROUTES = [
   ['archive nine', '#/g/nine'],
   ['archive shape', '#/g/shape'],
   ['archive hex', '#/g/hex'],
+  ['archive isolate', '#/g/isolate'],
   ['thread small', '#/g/thread/thread-1'],
   ['thread middle', '#/g/thread/thread-30'],
   ['thread biggest', '#/g/thread/thread-56'],
@@ -56,6 +57,8 @@ const ROUTES = [
   ['shape last', '#/g/shape/shape-66'],
   ['hex first', '#/g/hex/hex-1'],
   ['hex last', '#/g/hex/hex-68'],
+  ['isolate first', '#/g/isolate/isolate-1'],
+  ['isolate last', '#/g/isolate/isolate-48'],
 ];
 
 /*

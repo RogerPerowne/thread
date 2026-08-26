@@ -23,12 +23,14 @@ import { zigzag } from './games/zigzag/index.js';
 import { nine } from './games/nine/index.js';
 import { shape } from './games/shape/index.js';
 import { hex } from './games/hex/index.js';
+import { isolate } from './games/isolate/index.js';
 
 register(thread);
 register(zigzag);
 register(nine);
 register(shape);
 register(hex);
+register(isolate);
 
 /*
  * Pinch and double-tap zoom, shut off at the source. The viewport meta asks
