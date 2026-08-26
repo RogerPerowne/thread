@@ -71,19 +71,23 @@ test('going back several posts takes them off, and shows them going', async ({ p
   await openPuzzle(page, 'thread', ids[50]);
   const board = await threadBoard(page);
   const at = await threadMapper(page);
-  const path = board.solution[0];
+  /* The longest string on the board, so there is something to wind back. */
+  const path = [...board.solution].sort((a, b) => b.length - a.length)[0];
+  const strand = board.solution.indexOf(path);
+  const take = Math.min(8, path.length);
 
   const first = at(board.posts[path[0]]);
   await page.mouse.move(first.x, first.y);
   await page.mouse.down();
-  for (const p of path.slice(1, 8)) {
+  for (const p of path.slice(1, take)) {
     const q = at(board.posts[p]);
     await page.mouse.move(q.x, q.y, { steps: 4 });
   }
   const laid = await page.evaluate(
-    () => (window.__puzzles.board() as { paths(): number[][] }).paths()[0].length,
+    (s) => (window.__puzzles.board() as { paths(): number[][] }).paths()[s].length,
+    strand,
   );
-  expect(laid).toBe(8);
+  expect(laid).toBe(take);
 
   // Straight back to the third post, skipping four. Reversing over every post
   // in turn is precision a thumb on a moving board cannot deliver.
@@ -92,7 +96,8 @@ test('going back several posts takes them off, and shows them going', async ({ p
   const recoiling = await page.locator('.recoil.go').count();
   await page.mouse.up();
   const after = await page.evaluate(
-    () => (window.__puzzles.board() as { paths(): number[][] }).paths()[0].length,
+    (s) => (window.__puzzles.board() as { paths(): number[][] }).paths()[s].length,
+    strand,
   );
   expect(after).toBe(3);
   expect(recoiling, 'nothing was drawn coming back off').toBeGreaterThan(0);

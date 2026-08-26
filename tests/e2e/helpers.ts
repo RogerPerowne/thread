@@ -87,14 +87,17 @@ export async function threadMapper(page: Page): Promise<(p: [number, number]) =>
   if (!box) throw new Error('the board is not on screen');
   const vb = (await svg.getAttribute('viewBox'))?.split(/\s+/).map(Number);
   if (!vb || vb.length !== 4) throw new Error('the board has no viewBox');
-  const [vx, vy, vw] = vb;
-  const side = Math.min(box.width, box.height);
-  const ox = box.x + (box.width - side) / 2;
-  const oy = box.y + (box.height - side) / 2;
-  return (p) => ({
-    x: ox + ((p[0] - vx) / vw) * side,
-    y: oy + ((p[1] - vy) / vw) * side,
-  });
+  const [vx, vy, vw, vh] = vb;
+  /*
+   * The drawing is fitted inside the element with xMidYMid meet, so the scale
+   * is the smaller of the two ratios and what is left over is split evenly
+   * either side. This used to assume the window was square, which it was until
+   * the board started taking its shape from what it holds.
+   */
+  const scale = Math.min(box.width / vw, box.height / vh);
+  const ox = box.x + (box.width - scale * vw) / 2;
+  const oy = box.y + (box.height - scale * vh) / 2;
+  return (p) => ({ x: ox + (p[0] - vx) * scale, y: oy + (p[1] - vy) * scale });
 }
 
 /** Lay one string the way a thumb would. */

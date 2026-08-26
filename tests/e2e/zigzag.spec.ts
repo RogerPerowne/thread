@@ -156,7 +156,8 @@ test('a stretch taken back winds off rather than vanishing', async ({ page }) =>
   const grab = at(run[3]);
   await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
-  // Caught mid-flight: the animation is 320ms and this looks well inside it.
-  await expect(page.locator('.zig-recoil.go')).not.toHaveCount(0);
+  // Caught mid-flight: the wind-off is the platform's --slow and this looks
+  // well inside it.
+  await expect(page.locator('.zig-path.recoil.go')).not.toHaveCount(0);
   await page.mouse.up();
 });
