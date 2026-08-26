@@ -115,8 +115,40 @@
   padding: var(--s3);
   border-top: var(--edge);
   background: var(--paper);
+  /* The row measures itself, so what follows asks about the space the buttons
+     actually have rather than about the window. On a folding phone or beside a
+     landscape notch those are not the same number. */
+  container-type: inline-size;
 }
-.controls .btn { flex: 1 1 0; padding: 0 var(--s2); }
+.controls .btn {
+  flex: 1 1 0;
+  padding: 0 var(--s2);
+  /* A flex item will not shrink past its own content unless told it may. */
+  min-width: 0;
+  overflow: hidden;
+}
+.controls .btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Four controls with a glyph and a word each do not fit a 320-pixel phone.
+ * The glyph is what goes: a word says which button this is and a glyph only
+ * hints at it, so between the two it is the word that has to survive.
+ *
+ * 384px is measured, not guessed. The slots are equal width — that is what
+ * makes Hint and Next swapping places not move the other three — so what has
+ * to fit is four of the WIDEST button, not the sum of four different ones:
+ * 4 x 90 for "Restart" plus three 8px gaps. A container query measures the
+ * content box, so that is the number to compare with. If the type ever
+ * changes, re-measure rather than nudge: set the buttons to `width:
+ * max-content` and take the largest.
+ */
+@container (max-width: 383px) {
+  .controls .btn svg { display: none; }
+}
 
 /* --- the note line above a board ------------------------------------------
    Holds its height whether or not it has anything in it. A board that jumps

@@ -160,6 +160,17 @@ for (const [vname, w, h] of VIEWPORTS) {
           out.push(`${named(el)} is ${Math.round(b.width)}x${Math.round(b.height)}, under 44`);
         }
 
+        /*
+         * A label cut off mid-word. This is what a row of controls does when
+         * it is one button wider than the phone: nothing runs off the edge,
+         * nothing is too small to press, and "Restart" reads "Resta…".
+         */
+        for (const t of el.querySelectorAll('span')) {
+          if (t.scrollWidth > t.clientWidth + 1 && t.clientWidth > 0) {
+            out.push(`${named(el)} has its label clipped ("${t.textContent.trim()}")`);
+          }
+        }
+
         const offscreen = b.bottom > vh + 1 || b.top < -1;
         const cx = b.x + b.width / 2;
         const cy = b.y + b.height / 2;
