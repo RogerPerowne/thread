@@ -18,16 +18,15 @@ import {
 } from './board.js';
 import type { Verdict } from './check.js';
 
-/** A contiguous run of string, and the strand it belongs to. */
-export type Piece = { readonly strand: number; readonly posts: readonly number[] };
-export type Pieces = readonly Piece[];
+/** One run of posts per strand, in the order the string passes through them. */
+export type Paths = readonly (readonly number[])[];
 
 const SW = STRING_W * 2;
 
 export type BoardView = {
   readonly el: SVGSVGElement;
-  /** Repaint from the pieces on the board and their verdict. */
-  update(pieces: Pieces, verdict: Verdict): void;
+  /** Repaint from the strings on the board and their verdict. */
+  update(paths: Paths, verdict: Verdict): void;
   /** Board-space point from a client point, and the post nearest it. */
   at(clientX: number, clientY: number): { x: number; y: number };
   nearestPost(x: number, y: number, within: number): number;
@@ -184,34 +183,58 @@ export function mountBoard(c: Compiled): BoardView {
    * string you took back; a line that simply stops being there reads as a bug,
    * and on a board you are still dragging across it is easy to miss entirely.
    *
-   * Several of them, cycled, because winding back over five posts takes five
-   * stretches off in one sweep and each deserves its own recoil rather than
-   * cutting the one before it short.
+   * ONE recoil per strand, and a new one that carries on from where the last
+   * finished is JOINED to it rather than started beside it. Winding back over
+   * five posts in one sweep is five cuts in as many frames, and five separate
+   * animations of the same piece of string overlapping each other is the
+   * flicker this used to have. Merged, it is one stretch of string coming off
+   * — which is also what actually happened.
    */
-  const recoils: SVGPathElement[] = [];
-  for (let i = 0; i < 6; i++) {
+  const recoilEl: SVGPathElement[] = [];
+  /** The run each strand is currently winding off, loose end LAST. */
+  const recoilRun: number[][] = [];
+  board.strands.forEach((s, i) => {
     const p = svg('path', {
-      class: 'recoil', fill: 'none', 'stroke-width': SW,
+      class: 'recoil', fill: 'none', stroke: s.color, 'stroke-width': SW,
       'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     });
+    /* The stylesheet owns how long the wind-off takes; nothing here has a
+       copy of that number to fall out of step with. */
+    p.addEventListener('animationend', () => {
+      recoilRun[i] = [];
+      p.classList.remove('go');
+      p.setAttribute('d', '');
+    });
     gStrings.appendChild(p);
-    recoils.push(p);
-  }
-  let nextRecoil = 0;
+    recoilEl.push(p);
+    recoilRun.push([]);
+  });
 
   function retract(strand: number, path: readonly number[]): void {
-    if (path.length < 2) return;
-    const node = recoils[nextRecoil];
-    nextRecoil = (nextRecoil + 1) % recoils.length;
-    const d = path.map((p, i) => {
-      const [x, y] = board.posts[p];
-      return `${i === 0 ? 'M' : 'L'}${x} ${y}`;
-    }).join('');
+    const node = recoilEl[strand];
+    if (!node || path.length < 2) return;
+
+    /*
+     * `path` arrives with the post the string now ends at first. If the last
+     * wind-off started where this one ends, the two are one continuous stretch
+     * and are drawn as one.
+     */
+    const run = [...path];
+    const held = recoilRun[strand];
+    if (held.length > 0 && held[0] === run[run.length - 1]) run.push(...held.slice(1));
+    recoilRun[strand] = run;
+
+    let d = '';
+    for (let i = 0; i < run.length; i++) {
+      const [x, y] = board.posts[run[i]];
+      d += `${i === 0 ? 'M' : 'L'}${x} ${y}`;
+    }
     node.setAttribute('d', d);
-    node.setAttribute('stroke', board.strands[strand]?.color ?? '#888');
     node.classList.remove('go');
     // Measuring the path is what makes the dash exactly its own length, so the
-    // recoil ends at the new head rather than somewhere near it.
+    // recoil ends at the new head rather than somewhere near it; reading it
+    // also restarts the animation rather than letting the removal and the
+    // addition collapse into one frame with no change.
     const len = node.getTotalLength();
     node.style.setProperty('--len', String(len));
     node.setAttribute('stroke-dasharray', String(len));
@@ -302,71 +325,28 @@ export function mountBoard(c: Compiled): BoardView {
     }
   }
 
-  /*
-   * The number on a pinned end.
-   *
-   * Colour on its own cannot do this job. A twelve-strand lattice needs twelve
-   * pairs told apart, and twelve inks that a person with ordinary colour vision
-   * can separate collapse to two or three under dichromacy — the palette's
-   * worst pair differs by 1.02:1 in lightness, so hue is carrying all of it.
-   * No re-ordering fixes that; a second channel is the only thing that does.
-   *
-   * It is a number rather than a dash pattern on the string, because a dashed
-   * string would break the one promise this board makes: what is drawn is
-   * exactly the set of points the string occupies. The number goes where the
-   * nail head goes — on top, so laid string passes behind it — and it appears
-   * only when there is more than one strand, because with one there is nothing
-   * to tell apart and the board is better without it.
-   */
-  const numbered = board.strands.length > 1;
-  if (numbered) {
-    board.strands.forEach((s, i) => {
-      if (s.from < 0) return;
-      for (const p of [s.from, s.to]) {
-        const [x, y] = board.posts[p];
-        headEl[p].remove();
-        gHeads.appendChild(svg('text', {
-          class: 'endnum', x, y, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-          'aria-hidden': 'true', text: String(i + 1),
-        }));
-      }
-    });
-  }
-
   const buf: string[] = [];
+  const EMPTY: readonly number[] = [];
 
   /*
-   * One drawn path per piece of string. A strand is not always one piece while
-   * it is being built — you can start at both its pinned ends and join them in
-   * the middle, and grabbing the middle of a finished string breaks it in two
-   * until your new route meets the far part again — so the pool grows to
-   * whatever the board currently holds and the spares are emptied rather than
-   * removed. Nothing is created during a drag once the pool is warm.
+   * One drawn path per strand, made once when the board is mounted.
+   *
+   * There is exactly one string per colour and there always was one to draw,
+   * so nothing here is created, moved or replaced while the board is being
+   * played: a drag sets a handful of `d` attributes and touches nothing else.
    */
-  function update(pieces: Pieces, verdict: Verdict): void {
-    while (strandEl.length < pieces.length) {
-      const p = svg('path', {
-        class: 'string', fill: 'none', 'stroke-width': SW,
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-      });
-      gStrings.insertBefore(p, waitingAnchor);
-      strandEl.push(p);
-    }
-    for (let i = 0; i < strandEl.length; i++) {
-      const piece = pieces[i];
-      if (!piece || piece.posts.length === 0) {
-        strandEl[i].setAttribute('d', '');
-        continue;
-      }
+  function update(paths: Paths, verdict: Verdict): void {
+    for (let s = 0; s < strandEl.length; s++) {
+      const path = paths[s] ?? EMPTY;
+      if (path.length === 0) { strandEl[s].setAttribute('d', ''); continue; }
       buf.length = 0;
-      for (let k = 0; k < piece.posts.length; k++) {
-        const [x, y] = board.posts[piece.posts[k]];
+      for (let k = 0; k < path.length; k++) {
+        const [x, y] = board.posts[path[k]];
         buf.push(`${k === 0 ? 'M' : 'L'}${x} ${y}`);
       }
       // A single post is a stub of string on the nail, not an empty path: it
-      // shows the piece has been started.
-      strandEl[i].setAttribute('d', piece.posts.length === 1 ? `${buf[0]}l0 0` : buf.join(''));
-      strandEl[i].setAttribute('stroke', board.strands[piece.strand]?.color ?? '#888');
+      // shows the string has been started.
+      strandEl[s].setAttribute('d', path.length === 1 ? `${buf[0]}l0 0` : buf.join(''));
     }
 
     // Leftover posts are only worth pointing out once there is something to

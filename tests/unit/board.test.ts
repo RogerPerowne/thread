@@ -1,17 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import {
-  compile, runIsLegal, runsConflict, segSegDist2, segPointDist2, segRectDist2,
+  compile, runIsLegal, runClears, runsConflict, segSegDist2, segPointDist2, segRectDist2,
   turnAngle, CLEAR_POST, viewOf, DRAW_R, type Board, type Pt,
 } from '../../src/games/thread/board.js';
 import { judge, firstBreak, whatIsLeft } from '../../src/games/thread/check.js';
 import { search } from '../../src/games/thread/search.js';
 
 const board = (over: Partial<Board> = {}): Board => ({
-  id: 't', mode: 'classic', chapter: 1, posts: [], blocks: [],
-  strands: [{ from: -1, to: -1, color: '#000' }], solution: [], ...over,
+  id: 't', chapter: 1, posts: [], blocks: [],
+  strands: [{ from: 0, to: 1, color: '#000' }], solution: [],
+  lattice: { cols: 1, rows: 1 }, ...over,
 });
 
-const SQUARE: Pt[] = [[20, 20], [80, 20], [80, 80], [20, 80]];
+/*
+ * Four posts in lattice order: across the top row, then across the bottom.
+ * Post indices ARE lattice positions, so a fixture that lays them out any
+ * other way is a fixture testing runs the game cannot make.
+ */
+const SQUARE: Pt[] = [[20, 20], [80, 20], [20, 80], [80, 80]];
+const SQ = { cols: 2, rows: 2 };
 
 describe('distance, which the whole rule rests on', () => {
   it('measures a point against a segment, including past its ends', () => {
@@ -49,14 +56,14 @@ describe('what a run may do', () => {
   it('refuses a run that would clip a post it does not use', () => {
     // Three in a row: the outer two cannot run straight through the middle.
     const b = board({ posts: [[20, 50], [50, 50], [80, 50]] });
-    expect(runIsLegal(b, 0, 2)).toBe(false);
-    expect(runIsLegal(b, 0, 1)).toBe(true);
+    expect(runClears(b, 0, 2)).toBe(false);
+    expect(runClears(b, 0, 1)).toBe(true);
   });
 
   it('lets a run past a post that is far enough off the line', () => {
     const clear = CLEAR_POST + 0.5;
     const b = board({ posts: [[20, 50], [50, 50 + clear], [80, 50]] });
-    expect(runIsLegal(b, 0, 2)).toBe(true);
+    expect(runClears(b, 0, 2)).toBe(true);
   });
 
   it('refuses a run that crosses a block', () => {
@@ -64,12 +71,12 @@ describe('what a run may do', () => {
       posts: [[20, 50], [80, 50]],
       blocks: [{ x: 45, y: 40, w: 10, h: 20 }],
     });
-    expect(runIsLegal(b, 0, 1)).toBe(false);
+    expect(runClears(b, 0, 1)).toBe(false);
   });
 
-  it('holds a grid board to its lattice', () => {
+  it('holds every board to its lattice', () => {
     const posts: Pt[] = [[20, 20], [50, 20], [20, 50], [50, 50]];
-    const b = board({ mode: 'grid', posts, lattice: { cols: 2, rows: 2 } });
+    const b = board({ posts, lattice: { cols: 2, rows: 2 } });
     expect(runIsLegal(b, 0, 1)).toBe(true);   // along a row
     expect(runIsLegal(b, 0, 2)).toBe(true);   // down a column
     expect(runIsLegal(b, 0, 3)).toBe(false);  // the diagonal is not a lattice run
@@ -78,7 +85,7 @@ describe('what a run may do', () => {
 
 describe('when two runs cannot share a board', () => {
   it('calls two runs that cross a conflict', () => {
-    const b = board({ posts: SQUARE });
+    const b = board({ posts: [[20, 20], [80, 20], [80, 80], [20, 80]] });
     expect(runsConflict(b, { a: 0, b: 2 }, { a: 1, b: 3 })).toBe(true);
   });
 
@@ -114,7 +121,7 @@ describe('when two runs cannot share a board', () => {
   });
 
   it('still refuses two runs that lie across each other', () => {
-    const b = board({ posts: SQUARE });
+    const b = board({ posts: [[20, 20], [80, 20], [80, 80], [20, 80]] });
     expect(runsConflict(b, { a: 0, b: 2 }, { a: 1, b: 3 })).toBe(true);
   });
 
@@ -126,11 +133,11 @@ describe('when two runs cannot share a board', () => {
      * rather than a number anybody chose.
      */
     const flat = hairpin(3);
-    expect(runIsLegal(flat, 0, 1)).toBe(false);
-    expect(runIsLegal(flat, 0, 2)).toBe(false);
+    expect(runClears(flat, 0, 1)).toBe(false);
+    expect(runClears(flat, 0, 2)).toBe(false);
     const open = hairpin(20);
-    expect(runIsLegal(open, 0, 1)).toBe(true);
-    expect(runIsLegal(open, 0, 2)).toBe(true);
+    expect(runClears(open, 0, 1)).toBe(true);
+    expect(runClears(open, 0, 2)).toBe(true);
     // And where it gives way depends on how long the legs are, which is what
     // makes it geometry rather than a limit in disguise: the same angle on
     // shorter legs puts the far post closer to the line.
@@ -203,16 +210,17 @@ describe('the window on the board', () => {
 
 describe('the searcher agrees with judging every ordering by hand', () => {
   const cases: [string, Board][] = [
-    ['four in a square', board({ posts: SQUARE })],
-    ['five with one in the middle', board({
-      posts: [[20, 20], [80, 20], [80, 80], [20, 80], [50, 50]],
+    ['four in a square', board({ posts: SQUARE, lattice: SQ })],
+    ['six in two rows', board({
+      posts: [[20, 20], [50, 20], [80, 20], [20, 60], [50, 60], [80, 60]],
+      lattice: { cols: 3, rows: 2 },
+      strands: [{ from: 0, to: 5, color: '#000' }],
     })],
-    ['six, two of them close together', board({
-      posts: [[15, 25], [50, 15], [85, 25], [85, 75], [50, 88], [15, 75]],
-    })],
-    ['five with a block through the middle', board({
-      posts: [[15, 20], [85, 20], [85, 80], [15, 80], [50, 90]],
-      blocks: [{ x: 40, y: 30, w: 20, h: 40 }],
+    ['six with a wall across the middle', board({
+      posts: [[20, 20], [50, 20], [80, 20], [20, 60], [50, 60], [80, 60]],
+      lattice: { cols: 3, rows: 2 },
+      blocks: [{ x: 48, y: 30, w: 4, h: 20 }],
+      strands: [{ from: 0, to: 5, color: '#000' }],
     })],
   ];
 
@@ -230,11 +238,13 @@ describe('the searcher agrees with judging every ordering by hand', () => {
 });
 
 describe('judging says what is wrong, not just that something is', () => {
-  const b = board({ posts: SQUARE });
+  const b = board({
+    posts: SQUARE, lattice: SQ, strands: [{ from: 0, to: 2, color: '#000' }],
+  });
   const c = compile(b);
 
-  it('accepts the perimeter', () => {
-    expect(judge(c, [[0, 1, 2, 3]]).solved).toBe(true);
+  it('accepts a run that covers the board and ends where it is pinned', () => {
+    expect(judge(c, [[0, 1, 3, 2]]).solved).toBe(true);
   });
 
   it('names the leftover posts', () => {
@@ -246,30 +256,27 @@ describe('judging says what is wrong, not just that something is', () => {
   });
 
   it('names a post used twice', () => {
-    expect(judge(c, [[0, 1, 2, 1]]).faults).toContain('reuse');
+    expect(judge(c, [[0, 1, 3, 1]]).faults).toContain('reuse');
   });
 
-  it('names two strings that touch', () => {
+  it('names a post two strings both want', () => {
+    /*
+     * On a lattice two runs can never lie ACROSS each other — every run is one
+     * step long, so two of them either share a post or are a whole cell apart.
+     * What is left of "nothing touching" is this: a post belongs to one string
+     * and to one string only.
+     */
     const two = board({
-      posts: SQUARE,
-      strands: [{ from: 0, to: 2, color: '#a' }, { from: 1, to: 3, color: '#b' }],
+      posts: SQUARE, lattice: SQ,
+      strands: [{ from: 0, to: 1, color: '#a' }, { from: 2, to: 3, color: '#b' }],
     });
-    const cc = compile(two);
-    const v = judge(cc, [[0, 2], [1, 3]]);
-    expect(v.faults).toContain('touch');
-    expect(v.clashes.length).toBeGreaterThan(0);
+    const v = judge(compile(two), [[0, 1, 3], [2, 3]]);
+    expect(v.faults).toContain('reuse');
+    expect(v.solved).toBe(false);
   });
 
   it('says nothing about leftover posts while a string is still being drawn', () => {
     expect(judge(c, [[0, 1]], true).faults).not.toContain('unused');
-  });
-
-  it('still refuses a touch while a string is being drawn', () => {
-    const two = board({
-      posts: SQUARE,
-      strands: [{ from: 0, to: 2, color: '#a' }, { from: 1, to: 3, color: '#b' }],
-    });
-    expect(judge(compile(two), [[0, 2], [1, 3]], true).faults).toContain('touch');
   });
 
   /*
@@ -288,26 +295,25 @@ describe('judging says what is wrong, not just that something is', () => {
   });
 
   it('calls a broken board broken, and stops the moment it is mended', () => {
-    const bad = judge(c, [[0, 1, 2, 1]]);
+    const bad = judge(c, [[0, 1, 3, 1]]);
     expect(bad.broken).toContain('reuse');
     expect(firstBreak(bad)).not.toBe('');
     // The same board with the repeat taken back off: the warning has to go
     // with its cause, and nothing else may take its place.
-    const mended = judge(c, [[0, 1, 2]]);
+    const mended = judge(c, [[0, 1, 3]]);
     expect(mended.broken).toEqual([]);
     expect(firstBreak(mended)).toBe('');
   });
 
   it('says nothing at all once every post is used and nothing is wrong', () => {
-    expect(whatIsLeft(judge(c, [[0, 1, 2, 3]]))).toBe('');
+    expect(whatIsLeft(judge(c, [[0, 1, 3, 2]]))).toBe('');
   });
 });
 
-describe('coloured boards', () => {
+describe('boards with more than one string', () => {
   it('needs each string to join its own two ends', () => {
     const b = board({
-      mode: 'coloured',
-      posts: [[15, 20], [85, 20], [15, 80], [85, 80]],
+      posts: SQUARE, lattice: SQ,
       strands: [{ from: 0, to: 1, color: '#a' }, { from: 2, to: 3, color: '#b' }],
     });
     const c = compile(b);
@@ -315,11 +321,11 @@ describe('coloured boards', () => {
     expect(judge(c, [[0, 2], [1, 3]]).faults).toContain('ends');
   });
 
-  it('finds the one way to cover a board with two strings', () => {
+  it('finds the ways to cover a board with two strings', () => {
     const b = board({
-      mode: 'coloured',
-      posts: [[15, 20], [85, 20], [15, 80], [85, 80], [50, 20], [50, 80]],
-      strands: [{ from: 0, to: 1, color: '#a' }, { from: 2, to: 3, color: '#b' }],
+      posts: [[20, 20], [50, 20], [80, 20], [20, 60], [50, 60], [80, 60]],
+      lattice: { cols: 3, rows: 2 },
+      strands: [{ from: 0, to: 2, color: '#a' }, { from: 3, to: 5, color: '#b' }],
     });
     const c = compile(b);
     const r = search(c, 50, 2_000_000);
@@ -336,7 +342,7 @@ describe('a search that ran out of budget says so', () => {
     // that claim would be one whose second answer was merely never reached.
     const posts: Pt[] = [];
     for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) posts.push([12 + x * 15, 12 + y * 15]);
-    const b = board({ posts });
+    const b = board({ posts, lattice: { cols: 6, rows: 6 }, strands: [{ from: 0, to: 35, color: '#000' }] });
     const r = search(compile(b), 2, 500);
     expect(r.nodes).toBeLessThanOrEqual(500 + 1);
     if (r.solutions.length < 2) expect(r.exhausted).toBe(true);

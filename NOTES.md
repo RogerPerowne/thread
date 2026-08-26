@@ -44,16 +44,37 @@ seven, which is the largest size that still reads. Raising the ink count is not
 the fix either: twenty-five hues that a person can tell apart at post size do
 not exist.
 
-## Done since, worth remembering
+## Thread is one ladder now, and the measurement is why
 
-**Pinned ends are numbered.** Colour alone could not pair twelve strands: the
-ink palette's worst pair differs by 1.02:1 in lightness, so hue was carrying
-all of it, and under dichromacy twelve hues collapse to two or three. No
-re-ordering of the palette fixes that — a second channel is the only thing that
-does. The number goes where the nail head goes, on top of laid string, and only
-on boards with more than one strand. A dash pattern on the string was the
-obvious alternative and is wrong: it breaks the promise that what is drawn is
-exactly the set of points the string occupies.
+**Free-form boards could not be reasoned out.** Thread had three ladders —
+Classic and Coloured on shaken posts, Grid on a lattice. Playing the deduction
+on all 190 shipped boards (`reason.ts`, the same crossing-out a player does)
+says: the lattice boards fall to reasoning alone in 19 cases out of 20, and the
+free-form ones in about 1 in 20. A board that only a search can settle is not a
+hard puzzle, it is a maze — so the free-form ladders are gone and every board
+is a lattice board, laddered by measured deduction like every other game here.
+Fifty-six boards where there were a hundred and ninety.
+
+**Obstacles are walls on the lattice**, placed by the designer across a run a
+rival answer wanted and the intended one does not. A wall costs nothing; a cut
+costs a colour. So the designer reaches for a wall first and only cuts when no
+wall will fit, which is what keeps the colour count down.
+
+**The numbers on pinned ends are gone, and six inks is why.** Colour alone
+could not pair twelve strands: measured as colour difference across ordinary
+vision, deuteranopia and protanopia, the worst pair of that palette came to
+2.1 — the same ink twice. The number was the patch. The palette is Okabe and
+Ito's six now, whose worst pair measures 19 the same way, and a board needs at
+most five of them. So colour carries the instruction on its own again.
+
+**One string per colour, always.** A strand used to be able to exist as several
+loose pieces — start at both pinned ends, join them in the middle. It made the
+state something the player had to keep track of and the drawing something that
+could disagree with it. A strand is now one array of posts that always starts
+at one of its own pins, so "point at a post the string already passes through"
+is the only way back and there is nothing else to explain.
+
+## Done since, worth remembering
 
 - **"One answer" and "one so far" are different things.** A search that runs
   out of budget has found one answer and stopped looking. Shape Up's clue
@@ -102,16 +123,16 @@ construction. They are here so the next change does not undo the fix.
 
 ## Outstanding
 
-- **Tutorials.** Both games declare `tutorial: []`. The `TutorialStep` contract
-  exists; no steps do.
-- **Two more games**: Hexagony and Isolate. Each needs a model, a validator, a
-  real solver, a generator that works answer-first, a difficulty analyser that
-  measures deduction rather than size, a serializer and unit tests. One to Nine
-  and Shape Up are done.
-- **Thread still pins both ends of every strand.** A purer puzzle leaves them
-  free, but with no ends given it takes six or seven blocks to pin the answer
-  down, and a board that cluttered is worse to look at than the free ends are
-  worth. `Recipe.freeEnds` exists and is unused.
+- **Tutorials.** Every game declares `tutorial: []`. The `TutorialStep`
+  contract exists; no steps do.
+- **One more game**: Isolate. It needs a model, a validator, a real solver, a
+  generator that works answer-first, a difficulty analyser that measures
+  deduction rather than size, a serializer and unit tests.
+- **On a lattice, two runs can never lie across each other.** Every run is one
+  step long, so two of them either share a post or are a whole cell apart. The
+  `touch` fault therefore cannot fire on any shipped board; the check stays
+  because it is cheap and it is the engine's guarantee, but the rules card no
+  longer claims it, because a rule nobody can break is not a rule.
 - **No entry animation into a puzzle.** The path used to fly the camera down
   onto the tile you pressed and turn its face into the board. `camera.ts` still
   carries everything that needs — `lerpCam`, the pitch and yaw — but the flight

@@ -84,27 +84,23 @@ export const GRAB_MAX = 7;
 export type Block = { x: number; y: number; w: number; h: number };
 
 export type Strand = {
-  /** Index into `Board.posts`. */
+  /** Index into `Board.posts`. Both ends of a string are always pinned. */
   readonly from: number;
   readonly to: number;
-  /** Ink. Classic has one strand and one colour; Coloured has several. */
+  /** Ink. One per strand, never shared: the colour IS the instruction. */
   readonly color: string;
 };
 
 export type Board = {
   readonly id: string;
-  readonly mode: 'classic' | 'coloured' | 'grid';
   /** Which chapter it belongs to, 1-based. Chapters get bigger as you go. */
   readonly chapter: number;
   readonly posts: readonly Pt[];
   readonly blocks: readonly Block[];
-  /**
-   * The strands to lay, each with its two ends already pinned. Classic pins
-   * nothing, so it has one strand with from = to = -1: any post may be an end.
-   */
+  /** The strings to lay, each with its two ends already pinned. */
   readonly strands: readonly Strand[];
-  /** Grid boards run post to post along the lattice only. */
-  readonly lattice?: { cols: number; rows: number };
+  /** Posts sit on this lattice, and string runs from one post to the next. */
+  readonly lattice: { cols: number; rows: number };
   /** The answer, as one ordered post list per strand. */
   readonly solution: readonly (readonly number[])[];
 };
@@ -311,20 +307,39 @@ export type Compiled = {
 };
 
 /**
- * Is a direct run from post a to post b legal in isolation? It must clear
- * every other post, clear every block, and — on a grid board — join lattice
- * neighbours rather than cutting across.
+ * Is a direct run from post a to post b legal in isolation? It must join
+ * lattice neighbours rather than cutting across, clear every other post, and
+ * clear every wall.
  */
 export function runIsLegal(board: Board, a: number, b: number): boolean {
+  return a !== b && onLattice(board, a, b) && runClears(board, a, b);
+}
+
+/**
+ * Do these two posts sit next to each other on the lattice?
+ *
+ * Posts are numbered along the lattice, so this is arithmetic rather than
+ * geometry — and it is what keeps every run one step long, which is what makes
+ * the board readable at a glance.
+ */
+export function onLattice(board: Board, a: number, b: number): boolean {
+  const { cols } = board.lattice;
+  const ax = a % cols, ay = (a / cols) | 0;
+  const bx = b % cols, by = (b / cols) | 0;
+  return Math.abs(ax - bx) + Math.abs(ay - by) === 1;
+}
+
+/**
+ * Does the straight run from a to b clear every post it does not use, and
+ * every wall?
+ *
+ * The geometry half of the rule, on its own, so that it can be asked — and
+ * tested — without the lattice answering first.
+ */
+export function runClears(board: Board, a: number, b: number): boolean {
   if (a === b) return false;
   const pa = board.posts[a];
   const pb = board.posts[b];
-  if (board.lattice) {
-    const { cols } = board.lattice;
-    const ax = a % cols, ay = (a / cols) | 0;
-    const bx = b % cols, by = (b / cols) | 0;
-    if (Math.abs(ax - bx) + Math.abs(ay - by) !== 1) return false;
-  }
   for (let i = 0; i < board.posts.length; i++) {
     if (i === a || i === b) continue;
     if (segPointDist2(pa, pb, board.posts[i]) < CLEAR_POST2) return false;

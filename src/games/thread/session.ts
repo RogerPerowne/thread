@@ -1,12 +1,13 @@
 /**
  * Thread's live puzzle: what is on the board, and everything you can do to it.
  *
- * The board holds PIECES of string, each a contiguous run of posts belonging
- * to a known strand. A strand is one piece when it is finished, and can be
- * more than one while it is being built — start at one pinned end, start at
- * the other, join them in the middle; or grab the middle of a finished string
- * and break it in two while you reroute. Nothing is ever hidden: what is drawn
- * is the whole state.
+ * ONE STRING PER COLOUR. The board holds exactly one run of posts per strand,
+ * and that run always begins at one of the strand's two pinned ends. There is
+ * no way to have two loose pieces of one colour lying about, because there is
+ * nowhere to put a second one — which is the whole reason this is a single
+ * array per strand rather than a list of pieces. A puzzle where a colour can
+ * be in two places at once asks the player to keep track of something the
+ * puzzle never needed.
  *
  * No DOM here. The view drives this and draws it; this decides what is legal
  * and what it means.
@@ -19,29 +20,30 @@ import { judge, firstBreak, whatIsLeft } from './check.js';
 import { Effort } from '../../platform/signature.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
 
-export type Piece = { strand: number; posts: number[] };
-export type ThreadState = { pieces: Piece[] };
+/** One run of posts per strand, in the order the string passes through them. */
+export type Paths = number[][];
+export type ThreadState = { paths: Paths };
 
-const clone = (ps: readonly Piece[]): Piece[] =>
-  ps.map((p) => ({ strand: p.strand, posts: p.posts.slice() }));
+const clone = (ps: Paths): Paths => ps.map((p) => p.slice());
 
 export class ThreadSession implements Session<ThreadState> {
   readonly board: Board;
   readonly c: Compiled;
-  pieces: Piece[] = [];
+  paths: Paths;
   readonly effort = new Effort();
 
-  private past: Piece[][] = [];
-  private future: Piece[][] = [];
+  private past: Paths[] = [];
+  private future: Paths[] = [];
   private snapped = false;
 
   constructor(board: Board) {
     this.board = board;
     this.c = compile(board);
+    this.paths = board.strands.map(() => []);
   }
 
   get state(): ThreadState {
-    return { pieces: this.pieces };
+    return { paths: this.paths };
   }
 
   /**
@@ -54,7 +56,7 @@ export class ThreadSession implements Session<ThreadState> {
   mark(): void {
     if (this.snapped) return;
     this.snapped = true;
-    this.past.push(clone(this.pieces));
+    this.past.push(clone(this.paths));
     if (this.past.length > 120) this.past.shift();
     this.future.length = 0;
   }
@@ -62,29 +64,35 @@ export class ThreadSession implements Session<ThreadState> {
   /** Called by the view when a gesture begins and ends. */
   openGesture(): void { this.snapped = false; }
 
-  /**
-   * The pieces as an attempt the judge can read: one entry per strand, plus
-   * any extra pieces on the end. A strand with two pieces cannot have both its
-   * ends joined yet, so the ends check fails on it — which is correct, and
-   * reads as "not finished" rather than as a fault.
-   */
-  attempt(): number[][] {
-    const out: number[][] = this.board.strands.map(() => []);
-    const extra: number[][] = [];
-    const taken = new Uint8Array(this.board.strands.length);
-    for (const piece of this.pieces) {
-      if (!taken[piece.strand]) {
-        taken[piece.strand] = 1;
-        out[piece.strand] = piece.posts;
-      } else extra.push(piece.posts);
+  /** Which strand's string passes through this post, or -1. */
+  strandAt(post: number): number {
+    for (let s = 0; s < this.paths.length; s++) {
+      if (this.paths[s].includes(post)) return s;
     }
-    return [...out, ...extra];
+    return -1;
+  }
+
+  /** The strand this post is a pinned end of, or -1. */
+  pinAt(post: number): number {
+    for (let s = 0; s < this.board.strands.length; s++) {
+      const spec = this.board.strands[s];
+      if (spec.from === post || spec.to === post) return s;
+    }
+    return -1;
+  }
+
+  /** The far end of a strand: the pin its string has not started from. */
+  target(strand: number): number {
+    const spec = this.board.strands[strand];
+    const path = this.paths[strand];
+    if (path.length === 0) return -1;
+    return path[0] === spec.from ? spec.to : spec.from;
   }
 
   /** The engine's own verdict, with the parts only the board needs. */
   raw(): ReturnType<typeof judge> {
-    const laid = this.pieces.some((p) => p.posts.length > 1);
-    return judge(this.c, this.attempt(), !laid);
+    const laid = this.paths.some((p) => p.length > 1);
+    return judge(this.c, this.paths, !laid);
   }
 
   verdict(): Verdict {
@@ -93,7 +101,7 @@ export class ThreadSession implements Session<ThreadState> {
      * answer. Otherwise the first thing a player is told, before they have
      * done anything at all, is that they have broken a rule.
      */
-    const laid = this.pieces.some((p) => p.posts.length > 1);
+    const laid = this.paths.some((p) => p.length > 1);
     const v = this.raw();
     const fault = laid ? firstBreak(v) : '';
     const left = laid ? whatIsLeft(v) : 'Drag from a coloured post';
@@ -112,8 +120,8 @@ export class ThreadSession implements Session<ThreadState> {
   undo(): boolean {
     const prev = this.past.pop();
     if (!prev) return false;
-    this.future.push(clone(this.pieces));
-    this.pieces = prev;
+    this.future.push(clone(this.paths));
+    this.paths = prev;
     this.effort.undid();
     return true;
   }
@@ -121,14 +129,14 @@ export class ThreadSession implements Session<ThreadState> {
   redo(): boolean {
     const next = this.future.pop();
     if (!next) return false;
-    this.past.push(clone(this.pieces));
-    this.pieces = next;
+    this.past.push(clone(this.paths));
+    this.paths = next;
     return true;
   }
 
   restart(): void {
     this.mark();
-    this.pieces = [];
+    this.paths = this.board.strands.map(() => []);
     this.snapped = false;
   }
 
@@ -140,28 +148,34 @@ export class ThreadSession implements Session<ThreadState> {
    * against a different puzzle is refused rather than half-applied.
    */
   save(): string {
-    const body = this.pieces.map((p) => `${p.strand}:${p.posts.join(',')}`).join('|');
-    return `1;${this.board.id};${this.effort.freeze().join(',')};${body}`;
+    const body = this.paths.map((p) => p.join(',')).join('|');
+    return `2;${this.board.id};${this.effort.freeze().join(',')};${body}`;
   }
 
   load(saved: string): boolean {
     const [version, id, effort, body] = saved.split(';');
-    if (version !== '1' || id !== this.board.id) return false;
-    const pieces: Piece[] = [];
-    for (const chunk of (body ?? '').split('|').filter(Boolean)) {
-      const [s, posts] = chunk.split(':');
-      const strand = Number(s);
-      const list = posts.split(',').filter((x) => x !== '').map(Number);
-      if (!Number.isInteger(strand) || strand < 0 || strand >= this.board.strands.length) return false;
+    if (version !== '2' || id !== this.board.id) return false;
+    const chunks = (body ?? '').split('|');
+    if (chunks.length !== this.board.strands.length) return false;
+    const paths: Paths = [];
+    for (const chunk of chunks) {
+      const list = chunk.split(',').filter((x) => x !== '').map(Number);
       if (list.some((n) => !Number.isInteger(n) || n < 0 || n >= this.board.posts.length)) return false;
       // A saved run that is not actually layable means the board changed under
       // the save. Refusing is better than restoring something illegal.
       for (let i = 0; i + 1 < list.length; i++) {
         if (runBetween(this.c, list[i], list[i + 1]) < 0) return false;
       }
-      if (list.length > 0) pieces.push({ strand, posts: list });
+      paths.push(list);
     }
-    this.pieces = pieces;
+    /* A string always starts at one of its own pinned ends. Anything else is
+       not a state this game can produce. */
+    for (let s = 0; s < paths.length; s++) {
+      if (paths[s].length === 0) continue;
+      const spec = this.board.strands[s];
+      if (paths[s][0] !== spec.from && paths[s][0] !== spec.to) return false;
+    }
+    this.paths = paths;
     this.effort.thaw((effort ?? '').split(',').map(Number));
     this.past.length = 0;
     this.future.length = 0;
@@ -187,7 +201,7 @@ export class ThreadSession implements Session<ThreadState> {
    */
   hint(): Hint | null {
     const used = new Set<number>();
-    for (const piece of this.pieces) for (const p of piece.posts) used.add(p);
+    for (const path of this.paths) for (const p of path) used.add(p);
 
     let tightest = -1;
     let fewest = Infinity;
@@ -199,14 +213,14 @@ export class ThreadSession implements Session<ThreadState> {
     }
     if (tightest < 0) return null;
 
-    const pinned = this.board.strands.some((s) => s.from === tightest || s.to === tightest);
+    const pinned = this.pinAt(tightest) >= 0;
     if (fewest === 1) {
       return {
         focus: [`post:${tightest}`],
         reason: pinned
           ? 'This end has only one way out left, so that run has to be laid.'
           : 'Only one run still reaches this post, so it has to be the end of a string.',
-        move: `Lay string between post ${tightest} and its one remaining neighbour.`,
+        move: 'Lay string between this post and its one remaining neighbour.',
       };
     }
     return {

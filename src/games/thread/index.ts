@@ -12,63 +12,40 @@ import { mountThread } from './play.js';
 import type { Board } from './board.js';
 import type { Band, GamePackage, Puzzle } from '../../platform/types.js';
 import type { ThreadState } from './session.js';
-import classicRaw from '../../../boards/classic.json';
-import colouredRaw from '../../../boards/coloured.json';
-import gridRaw from '../../../boards/grid.json';
+import raw from '../../../boards/thread.json';
 import './thread.css';
 
-// JSON widens the point pairs to number[], so the cast goes through unknown.
-// The build script wrote these and the gate re-proves them, so the shape is
-// known and this is the one place it is asserted.
-const MODES = [
-  { key: 'classic', name: 'Classic', raw: classicRaw },
-  { key: 'coloured', name: 'Coloured', raw: colouredRaw },
-  { key: 'grid', name: 'Grid', raw: gridRaw },
-] as const;
+type Shipped = Board & { score: number; band: Band };
 
 /*
- * The chapter names. Each mode climbs its own ladder and the names say what
- * changes as you climb — the size, or the number of strings — rather than
- * being decoration.
+ * JSON widens the point pairs to number[], so the cast goes through unknown.
+ * The build script wrote these and the gate re-proves them, so the shape is
+ * known and this is the one place it is asserted.
  */
-const CHAPTER_NAMES: Record<string, string[]> = {
-  classic: ['First Nine', 'Wider', 'Sixteen', 'Twenty', 'Twenty-Five', 'The Long Way'],
-  coloured: ['Two Strings', 'Sharing', 'Three Strings', 'Crowded', 'Four Strings'],
-  grid: [
-    'The Lattice', 'Twenty', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two',
-    'Seven Square', 'Fifty-Six',
-  ],
-};
-
-const ALL: Board[] = MODES.flatMap((m) => m.raw as unknown as Board[]);
-
-/**
- * The band a board lands in.
- *
- * From the measured search cost, not from the size. A nine-post board that
- * takes three thousand nodes to prove unique is a harder puzzle than a
- * thirty-post board that takes three hundred, and telling a player otherwise
- * because one has more dots on it would be a lie the ladder tells itself.
- */
-function bandOf(nodes: number): Band {
-  if (nodes < 400) return 'gentle';
-  if (nodes < 4000) return 'steady';
-  if (nodes < 40000) return 'tricky';
-  return 'severe';
-}
+const ALL = raw as unknown as Shipped[];
 
 /*
- * The shipped boards carry no node count — the gate has it, the JSON does not.
- * Until the designer writes it out, the chapter stands in for it: chapters are
- * ordered by measured difficulty within a mode, so the mapping is honest even
- * though it is coarser than the real number.
+ * The chapter names say what changes as you climb: the size of the lattice,
+ * which is also — measured — what makes a board harder to reason out.
+ */
+const CHAPTER_NAMES = [
+  'Sixteen', 'Twenty', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two',
+  'Seven Square',
+];
+
+/*
+ * The band is the one the designer measured and wrote into the board, from how
+ * far the crossing-out has to be carried — not from how many posts there are.
+ * A small board that takes eight passes of reasoning is a harder puzzle than a
+ * big one that falls out in three, and telling a player otherwise because one
+ * has more dots on it would be a lie the ladder tells itself.
  */
 const puzzles: Puzzle<Board>[] = ALL.map((board) => ({
   id: board.id,
   game: 'thread',
   seed: board.id,
-  band: bandOf([120, 900, 3000, 9000, 30000, 60000, 90000, 120000][board.chapter - 1] ?? 3000),
-  effort: board.chapter,
+  band: board.band,
+  effort: board.score,
   data: board,
 }));
 
@@ -128,25 +105,18 @@ export const thread: GamePackage<Board, ThreadState> = {
     rules: [
       'Use every post on the board.',
       'String never lies across other string, or across itself.',
-      'String never crosses a block.',
+      'String never crosses a wall.',
       'A string may go back on itself as sharply as you like — a turn at a post is a wrap round a nail, and a wrap is not a fault.',
-      'On a coloured board, each string has to join its own two ends. Two dots of one colour say which.',
+      'Each string has to join its own two ends. Two dots of one colour say which.',
     ],
   },
   puzzles: () => puzzles,
   chapters: () => {
-    const out: { name: string; puzzles: Puzzle<Board>[] }[] = [];
-    for (const mode of MODES) {
-      const mine = puzzles.filter((p) => p.data.mode === mode.key);
-      const numbers = [...new Set(mine.map((p) => p.data.chapter))].sort((a, b) => a - b);
-      for (const n of numbers) {
-        out.push({
-          name: `${mode.name} · ${CHAPTER_NAMES[mode.key][n - 1] ?? `Chapter ${n}`}`,
-          puzzles: mine.filter((p) => p.data.chapter === n),
-        });
-      }
-    }
-    return out;
+    const numbers = [...new Set(puzzles.map((p) => p.data.chapter))].sort((a, b) => a - b);
+    return numbers.map((n) => ({
+      name: CHAPTER_NAMES[n - 1] ?? `Chapter ${n}`,
+      puzzles: puzzles.filter((p) => p.data.chapter === n),
+    }));
   },
   begin: (puzzle) => new ThreadSession(puzzle.data),
   mount: (host, session, view) => mountThread(host, session as ThreadSession, view),

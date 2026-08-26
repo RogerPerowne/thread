@@ -7,8 +7,8 @@
  *
  *   1. Is the answer it ships with actually legal?
  *   2. Is it the ONLY answer?
- *   3. Is every post reachable at all, so the board is not quietly impossible?
- *   4. Is it the right size and shape for the mode it claims to be?
+ *   3. Can it be REASONED out, rather than only searched out?
+ *   4. Is every post reachable at all, so the board is not quietly impossible?
  *   5. Can a thumb actually draw the answer without snatching up other posts,
  *      and does every string have a colour of its own to be known by?
  *
@@ -21,8 +21,9 @@ import {
 } from '../src/games/thread/board.js';
 import { judge } from '../src/games/thread/check.js';
 import { search } from '../src/games/thread/search.js';
+import { analyse, scoreOf } from '../src/games/thread/reason.js';
 
-const MODES = ['classic', 'coloured', 'grid'] as const;
+type Shipped = Board & { score: number; band: string };
 /*
  * The gate's budget has to be at least the designer's, or a board it proved
  * legitimately gets thrown out here for taking longer than this allows.
@@ -52,23 +53,22 @@ const allIds: string[] = [];
 const t0 = Date.now();
 
 console.log('Thread board gate\n');
-console.log('           boards   answer legal   only answer   nodes to prove');
+console.log('  chapter   boards   answer legal   only answer   reasoned out');
 console.log('-'.repeat(66));
 
-for (const mode of MODES) {
-  const boards = JSON.parse(readFileSync(`boards/${mode}.json`, 'utf8')) as Board[];
+const all = JSON.parse(readFileSync('boards/thread.json', 'utf8')) as Shipped[];
+const chapters = [...new Set(all.map((b) => b.chapter))].sort((a, b) => a - b);
+const ids = new Set<string>();
+
+for (const chapter of chapters) {
+  const boards = all.filter((b) => b.chapter === chapter);
   for (const b of boards) allIds.push(b.id);
   let legal = 0;
   let unique = 0;
-  let worst = 0;
-  const ids = new Set<string>();
+  let reasoned = 0;
 
   for (const board of boards) {
     checked++;
-    if (board.mode !== mode) {
-      console.error(`  ${board.id}: claims mode "${board.mode}" in ${mode}.json`);
-      bad++;
-    }
     if (ids.has(board.id)) {
       console.error(`  ${board.id}: duplicate id`);
       bad++;
@@ -89,7 +89,6 @@ for (const mode of MODES) {
       bad++;
     } else if (found.solutions.length === 1) {
       unique++;
-      worst = Math.max(worst, found.nodes);
     } else {
       console.error(`  ${board.id}: has ${found.solutions.length} answers, not one`);
       bad++;
@@ -129,13 +128,28 @@ for (const mode of MODES) {
       bad++;
     }
 
+    /*
+     * And the question that decides whether it is a puzzle or a maze: does
+     * crossing-out alone finish it? A board that only a search can settle is
+     * one the player can only guess at.
+     */
+    const reading = analyse(c);
+    if (reading.byReason) reasoned++;
+    else {
+      console.error(`  ${board.id}: cannot be reasoned out — ${reading.stuck} runs left undecided`);
+      bad++;
+    }
+    if (Math.abs(scoreOf(reading) - board.score) > 0.11) {
+      console.error(`  ${board.id}: scores ${scoreOf(reading).toFixed(1)}, ships as ${board.score}`);
+      bad++;
+    }
   }
 
   console.log(
-    `${mode.padEnd(10)} ${String(boards.length).padStart(5)}` +
+    `  ${String(chapter).padStart(7)} ${String(boards.length).padStart(8)}` +
     `   ${String(legal).padStart(11)}/${boards.length}` +
     `   ${String(unique).padStart(9)}/${boards.length}` +
-    `   ${String(worst).padStart(12)}`,
+    `   ${String(reasoned).padStart(9)}/${boards.length}`,
   );
 }
 

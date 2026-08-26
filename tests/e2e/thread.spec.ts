@@ -27,7 +27,7 @@ for (let from = 0; from < 190; from += CHUNK) {
 test('an unfinished board is never shown as a broken one', async ({ page }) => {
   await gotoApp(page);
   const ids = await puzzleIds(page, 'thread');
-  await openPuzzle(page, 'thread', ids[70]);
+  await openPuzzle(page, 'thread', ids[40]);
   const board = await threadBoard(page);
 
   /*
@@ -49,18 +49,19 @@ test('a fast sweep does not skip posts', async ({ page }) => {
   await openPuzzle(page, 'thread', ids[50]);
   const board = await threadBoard(page);
   const at = await threadMapper(page);
-  const path = board.solution[0];
 
   // One pointer move per post, no interpolation — which is what a quick finger
   // looks like, and what used to lose the posts in between.
-  const first = at(board.posts[path[0]]);
-  await page.mouse.move(first.x, first.y);
-  await page.mouse.down();
-  for (const p of path.slice(1)) {
-    const q = at(board.posts[p]);
-    await page.mouse.move(q.x, q.y);
+  for (const path of board.solution) {
+    const first = at(board.posts[path[0]]);
+    await page.mouse.move(first.x, first.y);
+    await page.mouse.down();
+    for (const p of path.slice(1)) {
+      const q = at(board.posts[p]);
+      await page.mouse.move(q.x, q.y);
+    }
+    await page.mouse.up();
   }
-  await page.mouse.up();
   expect(await isSolved(page), 'a coarse sweep of the answer did not solve it').toBe(true);
 });
 
@@ -80,7 +81,7 @@ test('going back several posts takes them off, and shows them going', async ({ p
     await page.mouse.move(q.x, q.y, { steps: 4 });
   }
   const laid = await page.evaluate(
-    () => (window.__puzzles.board() as { pieces(): { posts: number[] }[] }).pieces()[0].posts.length,
+    () => (window.__puzzles.board() as { paths(): number[][] }).paths()[0].length,
   );
   expect(laid).toBe(8);
 
@@ -91,7 +92,7 @@ test('going back several posts takes them off, and shows them going', async ({ p
   const recoiling = await page.locator('.recoil.go').count();
   await page.mouse.up();
   const after = await page.evaluate(
-    () => (window.__puzzles.board() as { pieces(): { posts: number[] }[] }).pieces()[0].posts.length,
+    () => (window.__puzzles.board() as { paths(): number[][] }).paths()[0].length,
   );
   expect(after).toBe(3);
   expect(recoiling, 'nothing was drawn coming back off').toBeGreaterThan(0);
@@ -103,11 +104,13 @@ test('a board can be solved by tapping alone', async ({ page }) => {
   await openPuzzle(page, 'thread', ids[19]);
   const board = await threadBoard(page);
   const at = await threadMapper(page);
-  for (const p of board.solution[0]) {
-    const q = at(board.posts[p]);
-    await page.mouse.move(q.x, q.y);
-    await page.mouse.down();
-    await page.mouse.up();
+  for (const strand of board.solution) {
+    for (const p of strand) {
+      const q = at(board.posts[p]);
+      await page.mouse.move(q.x, q.y);
+      await page.mouse.down();
+      await page.mouse.up();
+    }
   }
   expect(await isSolved(page), 'tapping the answer post by post did not solve it').toBe(true);
 });
@@ -115,7 +118,7 @@ test('a board can be solved by tapping alone', async ({ page }) => {
 test('the board never draws outside its own surface', async ({ page }) => {
   await gotoApp(page);
   const ids = await puzzleIds(page, 'thread');
-  for (const id of [ids[50], ids[60], ids[150]]) {
+  for (const id of [ids[50], ids[35], ids[55]]) {
     await openPuzzle(page, 'thread', id);
     const bleed = await page.evaluate(() => {
       const svg = document.querySelector('.board-svg') as SVGSVGElement;
@@ -141,7 +144,7 @@ test('undo takes back a gesture, and redo puts it on again', async ({ page }) =>
   await dragStrand(page, board, board.solution[0].slice(0, 4));
 
   const posts = () => page.evaluate(
-    () => ((window.__puzzles.board() as { pieces(): { posts: number[] }[] }).pieces()[0]?.posts.length ?? 0),
+    () => ((window.__puzzles.board() as { paths(): number[][] }).paths()[0]?.length ?? 0),
   );
   /*
    * The row of controls never changes shape. Hiding a control the moment it
@@ -177,40 +180,41 @@ test('a half-finished board comes back after a reload', async ({ page }) => {
   await page.reload();
   await page.waitForSelector('.board-svg');
   const back = await page.evaluate(
-    () => ((window.__puzzles.board() as { pieces(): { posts: number[] }[] }).pieces()[0]?.posts.length ?? 0),
+    () => ((window.__puzzles.board() as { paths(): number[][] }).paths()[0]?.length ?? 0),
   );
   expect(back, 'the board did not come back as it was left').toBe(5);
 });
 
-test('a strand can be told from its neighbour without seeing colour', async ({ page }) => {
+test('a strand can be told from its neighbour by colour alone', async ({ page }) => {
   /*
-   * Twelve inks that separate cleanly for one player collapse to two or three
-   * for another: the palette's worst pair differs by 1.02:1 in lightness, so
-   * hue is carrying all of it. Every pinned end therefore carries its strand's
-   * number, and this is the check that it does — on every board that has more
-   * than one strand, both ends of every strand, and nothing on a board where
-   * there is only one pair and nothing to tell apart.
+   * There used to be a NUMBER on every pinned end, because twelve inks cannot
+   * be told apart: measured as colour difference, the worst pair of that set
+   * came to 2.1 under a simulation of common colour blindness — the same ink
+   * twice. The palette is six now, chosen for exactly this, and the worst pair
+   * is 19 in ordinary vision, deuteranopia and protanopia alike. So the
+   * numbers are gone, and this is the check that colour is carrying the job on
+   * its own: every string's ends wear its colour, no two strings share one,
+   * and there is no numeral anywhere on the board.
    */
   await gotoApp(page);
   const ids = await puzzleIds(page, 'thread');
 
-  for (const id of [ids[0], ids[64], ids[187]]) {
+  for (const id of [ids[0], ids[30], ids[50]]) {
     await openPuzzle(page, 'thread', id);
     const board = await threadBoard(page);
-    const pinned = board.strands.filter((s) => s.from >= 0);
-    const want = pinned.length > 1 ? pinned.length * 2 : 0;
-    await expect(page.locator('.endnum')).toHaveCount(want);
-    if (want === 0) continue;
 
-    // Each number appears exactly twice — once at each end of its strand.
-    const seen = await page.evaluate(
-      () => [...document.querySelectorAll('.endnum')].map((t) => t.textContent),
+    expect(await page.locator('.board-svg text').count(), 'the board is drawing type').toBe(0);
+
+    const inks = new Set(board.strands.map((s) => s.color));
+    expect(inks.size, `${id} uses one colour for two strings`).toBe(board.strands.length);
+
+    /* And the ends are actually wearing it, rather than all being dark dots. */
+    const worn = await page.evaluate(
+      () => [...document.querySelectorAll('.post.end')]
+        .map((el) => (el as SVGElement).style.getPropertyValue('--ink')),
     );
-    const counts = new Map<string, number>();
-    for (const n of seen) counts.set(n!, (counts.get(n!) ?? 0) + 1);
-    expect([...counts.keys()].sort((a, b) => Number(a) - Number(b)))
-      .toEqual(pinned.map((_, i) => String(i + 1)));
-    for (const [n, c] of counts) expect(c, `strand ${n} does not have two ends`).toBe(2);
+    expect(worn.length).toBe(board.strands.length * 2);
+    expect(new Set(worn).size).toBe(board.strands.length);
   }
 });
 

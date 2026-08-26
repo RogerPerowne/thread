@@ -1,91 +1,50 @@
 /**
- * Build the shipped boards.
- *
- * Each mode is a ladder of recipes that get bigger and busier. Inside a band
- * the boards are ordered by the honest difficulty signal — how many search
- * nodes it takes to prove the answer unique — so the ramp is measured rather
- * than asserted.
+ * Build Thread's boards.
  *
  *   npx tsx scripts/build-boards.ts
+ *
+ * One ladder, six chapters, deterministic from one seed. Every board is
+ * re-proved from what is about to be written rather than from what the
+ * designer remembers: its own answer has to satisfy it, no second answer may
+ * exist, and it has to be reasonable — finishable by crossing-out rather than
+ * by trying routes and seeing. The spread the bands are cut from is printed,
+ * because a threshold nobody can re-measure is a threshold nobody can check.
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { makeRng } from '../src/platform/rng.js';
-import { makeBoard, type Recipe } from '../src/games/thread/make.js';
-import type { Board } from '../src/games/thread/board.js';
+import { makeBoard, INKS, type Recipe } from '../src/games/thread/make.js';
+import { compile, type Board } from '../src/games/thread/board.js';
+import { judge } from '../src/games/thread/check.js';
+import { search } from '../src/games/thread/search.js';
+import { analyse, scoreOf } from '../src/games/thread/reason.js';
+import type { Band } from '../src/platform/types.js';
 
-type Band = { readonly count: number } & Recipe;
-
-const SEED = process.env.SEED ?? 'thread-2';
+const SEED = process.env.SEED ?? 'thread-3';
 /** How long any one chapter may spend looking. */
-const BAND_SECONDS = Number(process.env.BAND_SECONDS ?? 150);
+const CHAPTER_SECONDS = Number(process.env.CHAPTER_SECONDS ?? 180);
+
+type Chapter = { readonly name: string; readonly count: number } & Recipe;
 
 /**
- * The ladders. Sizes stop around twenty-five posts: past that a board stops
- * fitting a thumb, and proving uniqueness starts costing seconds rather than
- * milliseconds — the two limits happen to agree.
+ * The ladder.
+ *
+ * Sixteen posts to forty-two, and fewer boards than there used to be by a
+ * factor of four. Every board on it can be reasoned out from what is drawn —
+ * which the boards that came before could not: measured, the free-form ones
+ * fell to crossing-out alone in one case in twenty, and the lattice ones in
+ * nineteen out of twenty. That is the whole argument for the lattice, and it
+ * is why there is only one ladder now instead of three.
  */
-const LADDERS: Record<'classic' | 'coloured' | 'grid', Band[]> = {
-  classic: [
-    { count: 10, cols: 3, rows: 3, strands: 1, shake: 3.5 },
-    { count: 10, cols: 4, rows: 3, strands: 1, shake: 3.5 },
-    { count: 10, cols: 4, rows: 4, strands: 1, shake: 3.2 },
-    { count: 10, cols: 5, rows: 4, strands: 1, shake: 3 },
-    { count: 10, cols: 5, rows: 5, strands: 1, shake: 2.6 },
-    { count: 10, cols: 6, rows: 5, strands: 1, shake: 2.2 },
-  ],
-  coloured: [
-    { count: 10, cols: 4, rows: 3, strands: 2, shake: 3.5 },
-    { count: 10, cols: 4, rows: 4, strands: 2, shake: 3.2 },
-    { count: 10, cols: 5, rows: 4, strands: 3, shake: 3 },
-    { count: 10, cols: 5, rows: 5, strands: 3, shake: 2.6 },
-    { count: 10, cols: 5, rows: 5, strands: 4, shake: 2.4 },
-  ],
-  /*
-   * Grid grows the furthest, because a lattice board is nothing but its size
-   * and its pinned pairs — and the designer now finds the pairs for itself
-   * (see `refine`), so a chapter can ask for a bigger lattice and be told how
-   * much pinning it takes rather than having to guess. Sixteen cells to
-   * fifty-six across seven chapters.
-   */
-  grid: [
-    { count: 10, cols: 4, rows: 4, strands: 3, shake: 0 },
-    { count: 10, cols: 5, rows: 4, strands: 4, shake: 0 },
-    { count: 10, cols: 5, rows: 5, strands: 4, shake: 0 },
-    { count: 10, cols: 6, rows: 5, strands: 5, shake: 0 },
-    { count: 10, cols: 6, rows: 6, strands: 6, shake: 0 },
-    { count: 10, cols: 7, rows: 6, strands: 7, shake: 0 },
-    { count: 10, cols: 7, rows: 7, strands: 8, shake: 0 },
-    { count: 10, cols: 8, rows: 7, strands: 9, shake: 0 },
-  ],
-};
-
-/**
- * The board grows with the chapter, so the ladder is a real one: nine posts in
- * chapter one, thirty by the last.
- *
- * Classic gets six chapters, Coloured five and Grid eight. That is not an
- * oversight in either direction, it is where the proof runs out in each case.
- *
- * Coloured stops at about thirty posts: many short strings can be paired up
- * more ways than few long ones, so past that no cut of the board is unique.
- * Grid goes much further because the designer can keep pinning pairs until it
- * is — but every pair needs a colour a player can tell from the others, and
- * there are twelve of those. Fifty-six cells is where a lattice starts needing
- * a thirteenth. Twelve by twelve would want somewhere north of twenty-five,
- * which is not a puzzle, it is a colour-matching exam.
- *
- * Difficulty inside a chapter is the search cost, which is measured;
- * difficulty between chapters is the size, which is chosen.
- */
-export const CHAPTER_NAMES: Record<string, string[]> = {
-  classic: ['First Nine', 'Wider', 'Sixteen', 'Twenty', 'Twenty-Five', 'The Long Way'],
-  coloured: ['Two Strings', 'Sharing', 'Three Strings', 'Crowded', 'Four Strings', 'Full House'],
-  grid: [
-    'The Lattice', 'Twenty', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two',
-    'Seven Square', 'Fifty-Six',
-  ],
-};
+const LADDER: Chapter[] = [
+  { name: 'Sixteen', count: 8, cols: 4, rows: 4, strands: 2 },
+  { name: 'Twenty', count: 8, cols: 5, rows: 4, strands: 2 },
+  { name: 'Five Square', count: 8, cols: 5, rows: 5, strands: 3 },
+  { name: 'Thirty', count: 8, cols: 6, rows: 5, strands: 3 },
+  { name: 'Thirty-Six', count: 8, cols: 6, rows: 6, strands: 4 },
+  { name: 'Forty-Two', count: 8, cols: 7, rows: 6, strands: 4 },
+  { name: 'Seven Square', count: 8, cols: 7, rows: 7, strands: 5 },
+];
 
 /**
  * Two boards with the same answer shape are the same puzzle wearing different
@@ -100,63 +59,118 @@ function fingerprint(b: Board): string {
   return `${b.posts.length}|${norm.sort().join('/')}`;
 }
 
-function buildMode(mode: 'classic' | 'coloured' | 'grid'): Board[] {
-  const out: Board[] = [];
-  const seen = new Set<string>();
-  let bandNo = 0;
+/*
+ * The bands, from the measured spread rather than from the size of the board.
+ * scripts/build-boards.ts prints the spread on every run; if the score ever
+ * changes these are re-measured rather than nudged.
+ */
+export function bandOf(score: number): Band {
+  if (score < 46) return 'gentle';
+  if (score < 50) return 'steady';
+  if (score < 54) return 'tricky';
+  return 'severe';
+}
 
-  for (const band of LADDERS[mode]) {
-    bandNo++;
-    const made: { board: Board; nodes: number }[] = [];
-    const wanted = band.count;
-    let seed = 0;
-    const cap = wanted * 60;
-    /*
-     * A wall-clock budget as well as an attempt count. Proving a big board
-     * unique is expensive and the cost is not knowable in advance, so without
-     * this a single unlucky band can grind for an hour. Better a short chapter
-     * that the log names than a build nobody can wait out.
-     */
-    const until = Date.now() + BAND_SECONDS * 1000;
+type Shipped = Board & { readonly score: number; readonly band: Band };
 
-    while (made.length < wanted && seed < cap && Date.now() < until) {
-      const rng = makeRng(`${SEED}/${mode}/${bandNo}/${seed++}`);
-      const m = makeBoard(mode, 'pending', band, rng);
-      if (!m) continue;
-      const fp = fingerprint(m.board);
-      if (seen.has(fp)) continue;
-      seen.add(fp);
-      made.push(m);
-    }
+console.log(`Building Thread with seed "${SEED}"\n`);
+const t0 = Date.now();
+const out: Shipped[] = [];
+const seen = new Set<string>();
+let no = 0;
 
-    made.sort((a, b) => a.nodes - b.nodes);
-    for (const m of made) {
-      const n = out.length + 1;
-      // The mode's whole name, not its initial: classic and coloured share
-      // a first letter, and two boards with one id share a solved mark.
-      out.push({ ...m.board, id: `${mode}-${n}`, chapter: bandNo });
-    }
-    const grade = made.length
-      ? `${made[0].nodes}..${made[made.length - 1].nodes}`
-      : '-';
-    console.log(
-      `  ${mode.padEnd(9)} band ${bandNo}  ${band.cols}x${band.rows}` +
-      `/${band.strands}  ${String(made.length).padStart(2)}/${wanted}` +
-      `  nodes ${grade}`,
-    );
+LADDER.forEach((chapter, ci) => {
+  const made: { board: Board; score: number; walls: number; inks: number }[] = [];
+  let seed = 0;
+  const cap = chapter.count * 200;
+  const until = Date.now() + CHAPTER_SECONDS * 1000;
+
+  while (made.length < chapter.count && seed < cap && Date.now() < until) {
+    const rng = makeRng(`${SEED}/${ci + 1}/${seed++}`);
+    const m = makeBoard('pending', chapter, rng);
+    if (!m) continue;
+    const fp = fingerprint(m.board);
+    if (seen.has(fp)) continue;
+    seen.add(fp);
+    made.push({
+      board: m.board,
+      score: scoreOf(m.reading),
+      walls: m.board.blocks.length,
+      inks: m.board.strands.length,
+    });
   }
-  return out;
+
+  /* Inside a chapter the boards climb by the measured score, so the ramp is
+     the measurement rather than the order they happened to be found in. */
+  made.sort((a, b) => a.score - b.score);
+  for (const m of made) {
+    no++;
+    out.push({
+      ...m.board,
+      id: `thread-${no}`,
+      chapter: ci + 1,
+      score: Math.round(m.score * 10) / 10,
+      band: bandOf(m.score),
+    });
+  }
+  const walls = made.map((m) => m.walls);
+  const inks = made.map((m) => m.inks);
+  const range = (xs: number[]) => (xs.length ? `${Math.min(...xs)}..${Math.max(...xs)}` : '-');
+  console.log(
+    `  ${chapter.name.padEnd(12)} ${chapter.cols}x${chapter.rows}`
+    + `  ${String(made.length).padStart(2)}/${chapter.count}`
+    + `  score ${made.length ? `${made[0].score.toFixed(0)}..${made[made.length - 1].score.toFixed(0)}` : '-'}`
+    + `  walls ${range(walls)}  strings ${range(inks)}`,
+  );
+});
+
+let bad = 0;
+for (const b of out) {
+  const c = compile(b);
+  if (!judge(c, b.solution).solved) {
+    console.error(`  ${b.id} rejects its own answer`);
+    bad++;
+  }
+  const found = search(c, 2, 600_000);
+  if (found.exhausted || found.solutions.length !== 1) {
+    console.error(`  ${b.id} has ${found.solutions.length} answers${found.exhausted ? ' (search cut off)' : ''}`);
+    bad++;
+  }
+  const reading = analyse(c);
+  if (!reading.byReason) {
+    console.error(`  ${b.id} cannot be reasoned out`);
+    bad++;
+  }
+  if (Math.abs(scoreOf(reading) - b.score) > 0.11) {
+    console.error(`  ${b.id} scores ${scoreOf(reading).toFixed(1)}, shipped as ${b.score}`);
+    bad++;
+  }
+  if (b.strands.length > INKS.length) {
+    console.error(`  ${b.id} wants ${b.strands.length} colours and there are ${INKS.length}`);
+    bad++;
+  }
+  if (new Set(b.strands.map((s) => s.color)).size !== b.strands.length) {
+    console.error(`  ${b.id} uses one colour twice`);
+    bad++;
+  }
 }
 
-console.log(`Building boards with seed "${SEED}"\n`);
 mkdirSync('boards', { recursive: true });
+const json = JSON.stringify(out);
+writeFileSync('boards/thread.json', json);
 
-let total = 0;
-for (const mode of ['classic', 'coloured', 'grid'] as const) {
-  const boards = buildMode(mode);
-  const json = JSON.stringify(boards);
-  writeFileSync(`boards/${mode}.json`, json);
-  console.log(`  wrote boards/${mode}.json  (${boards.length} boards, ${Math.round(json.length / 1024)} kB)\n`);
-  total += boards.length;
+const counts = new Map<string, number>();
+for (const b of out) counts.set(b.band, (counts.get(b.band) ?? 0) + 1);
+console.log('');
+for (const [band, n] of counts) console.log(`  ${band.padEnd(8)} ${n}`);
+
+const scores = out.map((b) => b.score).sort((a, b) => a - b);
+const q = (p: number) => (scores[Math.floor(scores.length * p)] ?? 0).toFixed(1);
+console.log(`\n  the spread the bands are cut from: q1 ${q(0.25)}  med ${q(0.5)}  q3 ${q(0.75)}`);
+
+console.log(`\n${out.length} boards, ${Math.round(json.length / 1024)} kB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+if (bad > 0) {
+  console.error(`\n${bad} board${bad === 1 ? '' : 's'} did not check out.`);
+  process.exit(1);
 }
-console.log(`Total: ${total} boards`);
+console.log('Every board has one answer, and every one can be reasoned out.');

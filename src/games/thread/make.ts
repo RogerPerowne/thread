@@ -6,19 +6,23 @@
  * other way round from the obvious: it builds the ANSWER first, then adds
  * constraint until nothing else works.
  *
- *   1. Lay a path that covers a lattice. That is the intended answer.
- *   2. Shake the posts off the lattice so the board does not look like graph
- *      paper — and, more importantly, so runs are no longer only orthogonal.
- *   3. Search. If a second answer exists, drop a block on a run that answer
- *      uses and the intended one does not, and search again.
+ *   1. Lay a path that covers the lattice. That is the intended answer.
+ *   2. Cut it into strings. Each cut is a pair of pinned ends.
+ *   3. Search. While a second answer exists, take a freedom away — a WALL
+ *      across a run the rival uses and the answer does not, or, when no wall
+ *      will fit, one more cut.
+ *   4. Then ask whether it can be REASONED out rather than searched out, and
+ *      keep adding walls until it can.
  *
- * Step 3 is the whole trick. Each block kills one rival without touching the
- * intended answer, so the count comes down without the answer ever changing.
+ * Steps 3 and 4 are the whole trick, and they never touch the answer: a wall
+ * is only ever placed across a run the intended answer does not use, and a cut
+ * changes where the string ends, not which posts it covers. So the answer that
+ * was drawn in step 1 is still the answer at the end, and every board is
+ * possible by construction.
  *
- * Post width does a great deal of the work for free: a run only exists if it
- * clears every post it does not use, so on a board with posts this close
- * together the long runs are already impossible and the graph is sparse before
- * a single block is placed.
+ * A wall is preferred to a cut wherever both would do, because a cut costs a
+ * colour and a wall costs nothing — and the number of colours a board can wear
+ * is the hard limit on this whole game (see INKS).
  */
 
 import {
@@ -27,6 +31,7 @@ import {
 } from './board.js';
 import { judge } from './check.js';
 import { search } from './search.js';
+import { analyse, type Reading } from './reason.js';
 import type { Rng } from '../../platform/rng.js';
 
 export type Made = {
@@ -114,27 +119,20 @@ export function latticePath(cols: number, rows: number, rng: Rng): number[] | nu
   return null;
 }
 
-/** Lattice cell centres, shaken off the grid so the board is not graph paper. */
-export function shakenPosts(cols: number, rows: number, rng: Rng, shake: number): Pt[] {
+/** Lattice cell centres, evenly spread inside the board's margin. */
+export function latticePosts(cols: number, rows: number): Pt[] {
   const margin = 12;
   const span = BOARD - margin * 2;
   const out: Pt[] = [];
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const cx = margin + (cols === 1 ? span / 2 : (x * span) / (cols - 1));
-      const cy = margin + (rows === 1 ? span / 2 : (y * span) / (rows - 1));
       out.push([
-        Math.round((cx + rng.range(-shake, shake)) * 100) / 100,
-        Math.round((cy + rng.range(-shake, shake)) * 100) / 100,
+        Math.round((margin + (cols === 1 ? span / 2 : (x * span) / (cols - 1))) * 100) / 100,
+        Math.round((margin + (rows === 1 ? span / 2 : (y * span) / (rows - 1))) * 100) / 100,
       ]);
     }
   }
   return out;
-}
-
-/** Exact lattice cell centres, for Grid boards. */
-export function latticePosts(cols: number, rows: number): Pt[] {
-  return shakenPosts(cols, rows, { range: () => 0 } as unknown as Rng, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -224,237 +222,176 @@ function blockAcross(
 }
 
 /**
- * Add blocks until `intended` is the only answer.
+ * Take one freedom away.
  *
- * Returns null rather than a compromise: a board with two answers is not a
- * puzzle, and a board whose answer the blocks broke is a bug.
- *
- * The budget is generous because it has to be, and it has grown twice as the
- * rule has been let out. Running through post centres rather than round them
- * means a run only has to clear a post by the string's own width; dropping the
- * old refusal of a sharp turn opened up a third of the routes on every board;
- * and dropping the last of it — a fold is now never a fault, because a string
- * round a nail is entitled to touch itself there — opened up the rest.
- *
- * Every one of those makes the run graph denser and uniqueness harder to
- * reach, so the number of blocks it takes to leave one answer standing has
- * gone up each time. That is the right way to pay for it. Blocks are part of
- * the game and they are honest: they say what they do. A rule that refuses
- * moves the picture allows is the one thing this game cannot afford, because
- * the player cannot see it and cannot act on it.
+ * A wall across the run a..b, placed so it comes nowhere near the intended
+ * answer and swallows no post. Tried at several points along the run, because
+ * near the ends it will usually be too close to the answer's own runs.
  */
-export function carve(base: Board, intended: number[][], rng: Rng, maxBlocks = 32): Made | null {
-  const keep = runsOf(intended);
-  let blocks = [...base.blocks];
-
-  for (let round = 0; round <= maxBlocks; round++) {
-    const board: Board = { ...base, blocks, solution: intended };
-    const c = compile(board);
-    if (!judge(c, intended).solved) return null;
-
-    const found = search(c, 2, VERIFY_NODES);
-    if (found.exhausted) return null;
-    if (found.solutions.length === 0) return null;
-    if (found.solutions.length === 1) return { board, nodes: found.nodes };
-    if (round === maxBlocks) return null;
-
-    const rival = found.solutions.find((s) => !sameCover(s, intended));
-    if (!rival) return null;
-    const spare = rng.shuffle(
-      [...runsOf(rival)].filter((k) => !keep.has(k)),
-    );
-    let placed: Block | null = null;
-    for (const key of spare) {
-      const [i, j] = key.split(':').map(Number);
-      placed = blockAcross(board, i, j, keep, rng);
-      if (placed) break;
-    }
-    if (!placed) return null;
-    blocks = [...blocks, placed];
-  }
-  return null;
+function wallAcross(
+  board: Board, a: number, b: number, keep: Set<string>, rng: Rng,
+): Block | null {
+  return blockAcross(board, a, b, keep, rng);
 }
 
+export type Settled = Made & { readonly reading: Reading };
+
 /**
- * Refine a grid board until its answer is the only one.
+ * Add walls and cuts until the answer is the only one AND can be reasoned out.
  *
- * A lattice board has nothing to carve with: the only thing holding the answer
- * down is where the string ends are pinned. So the grid designer does what
- * `carve` does, with the one tool it has — it cuts the covering path again.
- *
- * Find a rival answer, find the first place where the intended path uses a run
- * the rival does not, and cut the path there. The two cells either side of
- * that cut become a new pair of pinned ends, which is precisely the fact the
- * rival was free to disagree about. Cutting never changes which cells are
- * covered, so the intended answer survives every round — the same property
- * that makes `carve` safe.
- *
- * How many pairs a board ends up with is therefore measured, not chosen. The
- * recipe asks for a starting number and the board is told how many it actually
- * needs, which is the honest way round: nobody can know in advance how much
- * pinning a particular 12 x 12 lattice takes.
+ * Returns null rather than a compromise. A board with two answers is not a
+ * puzzle; a board with one answer that nothing but trial and error will find
+ * is a worse thing — it looks like a puzzle and it is a maze.
  */
-function refine(base: Board, path: number[], want: number, rng: Rng): Made | null {
-  let cuts = new Set<number>();
-  {
-    // Start from the requested number of pairs, spread at random.
-    const spread = rng.shuffle([...path.keys()].slice(1, path.length - 1));
-    for (const at of spread) {
-      if (cuts.size >= want - 1) break;
-      cuts.add(at);
-    }
-  }
+function settle(
+  posts: readonly Pt[], lattice: { cols: number; rows: number },
+  path: number[], cuts: Set<number>, rng: Rng, maxInks: number,
+): Settled | null {
+  let blocks: Block[] = [];
 
   const build = (): number[][] | null => {
-    const at = [0, ...[...cuts].sort((a, b) => a - b), path.length];
+    const at = [0, ...[...cuts].sort((x, y) => x - y), path.length];
     const out: number[][] = [];
     for (let i = 0; i + 1 < at.length; i++) {
       const piece = path.slice(at[i], at[i + 1]);
-      // A one-cell strand pins a cell to itself, which is not a string.
+      // A one-post strand pins a post to itself, which is not a string.
       if (piece.length < 2) return null;
       out.push(piece);
     }
     return out;
   };
 
-  /*
-   * Every cut is one more pair of ends, and every pair needs a colour of its
-   * own — two strings the same colour is two strings the player cannot tell
-   * apart, which is worse than no board at all. So the palette is the ceiling,
-   * and a lattice that cannot be pinned down inside it is one this designer
-   * honestly cannot make.
-   */
-  const maxCuts = Math.min(INKS.length, Math.floor(path.length / 2)) - 1;
-  if (cuts.size > maxCuts) return null;
+  /** Somewhere to put a wall that the intended answer will not mind. */
+  const addWall = (board: Board, over: readonly string[], keep: Set<string>): boolean => {
+    for (const key of rng.shuffle([...over])) {
+      if (keep.has(key)) continue;
+      const [i, j] = key.split(':').map(Number);
+      const wall = wallAcross(board, i, j, keep, rng);
+      if (wall) { blocks = [...blocks, wall]; return true; }
+    }
+    return false;
+  };
 
-  for (;;) {
+  for (let round = 0; round < 60; round++) {
     const cover = build();
     if (!cover) return null;
+    if (cover.length > maxInks) return null;
+
     const board: Board = {
-      ...base,
+      id: 'pending',
+      chapter: 0,
+      posts,
+      blocks,
       strands: cover.map((piece, i) => ({
-        from: piece[0], to: piece[piece.length - 1], color: INKS[i % INKS.length],
+        from: piece[0], to: piece[piece.length - 1], color: INKS[i],
       })),
+      lattice,
       solution: cover,
     };
     const c = compile(board);
     if (!judge(c, cover).solved) return null;
 
+    const keep = runsOf(cover);
     const found = search(c, 2, VERIFY_NODES);
-    if (found.exhausted) return null;
-    if (found.solutions.length === 0) return null;
-    if (found.solutions.length === 1) return { board, nodes: found.nodes };
+    if (found.exhausted || found.solutions.length === 0) return null;
 
-    const rival = found.solutions.find((s) => !sameCover(s, cover));
+    if (found.solutions.length === 1) {
+      const reading = analyse(c);
+      if (reading.byReason) return { board, nodes: found.nodes, reading };
+      /*
+       * One answer, but only a search finds it. More constraint is what makes
+       * a board readable, so a wall goes across a run the answer does not use
+       * and the whole thing is asked again.
+       */
+      const spare = c.runs
+        .map((r) => runKey(r.a, r.b))
+        .filter((k) => !keep.has(k));
+      if (!addWall(board, spare, keep)) return null;
+      continue;
+    }
+
+    const rival = found.solutions.find((sol) => !sameCover(sol, cover));
     if (!rival) return null;
+    if (addWall(board, [...runsOf(rival)], keep)) continue;
+
+    /*
+     * No wall will fit, so the rival is disagreeing about a run the answer
+     * itself uses. Cutting there takes that freedom away instead — at the cost
+     * of one more colour, which is why it is the second choice.
+     */
     const theirs = runsOf(rival);
-    // The first run of the intended path the rival does not use is a place the
-    // rival was free to disagree. Cutting there takes that freedom away.
     let cutAt = -1;
     for (let i = 0; i + 1 < path.length; i++) {
       if (cuts.has(i + 1)) continue;
       if (theirs.has(runKey(path[i], path[i + 1]))) continue;
-      const next = new Set(cuts);
-      next.add(i + 1);
-      const sorted = [0, ...[...next].sort((a, b) => a - b), path.length];
+      const next = [0, ...[...cuts, i + 1].sort((x, y) => x - y), path.length];
       let fits = true;
-      for (let k = 0; k + 1 < sorted.length; k++) {
-        if (sorted[k + 1] - sorted[k] < 2) { fits = false; break; }
+      for (let k = 0; k + 1 < next.length; k++) {
+        if (next[k + 1] - next[k] < 2) { fits = false; break; }
       }
       if (fits) { cutAt = i + 1; break; }
     }
-    if (cutAt < 0 || cuts.size >= maxCuts) return null;
-    cuts = new Set(cuts).add(cutAt);
+    if (cutAt < 0 || cuts.size + 1 >= maxInks) return null;
+    cuts.add(cutAt);
   }
   return null;
 }
 
 // ---------------------------------------------------------------------------
-// The three modes
+// The inks
 // ---------------------------------------------------------------------------
 
 /*
- * The inks, and the reason there are twelve of them.
+ * Six colours, and the reason there are six of them.
  *
- * On a Coloured or Grid board a colour is not decoration, it is the whole
- * instruction: two dots of one colour say "join these" without a word of text.
- * So two strands may never share one. That makes the palette a hard limit on
- * how many strings a board can have — and, on a lattice, a hard limit on how
- * big the board can be, because the bigger it is the more pairs it takes to
- * pin one answer down.
+ * A colour is not decoration here, it is the whole instruction: two dots of
+ * one colour say "join these" without a word of text. So two strands may never
+ * share one, and the palette is a hard ceiling on how many strings a board can
+ * have.
  *
- * Twelve is where legibility gives out: an even turn round the hue wheel, each
- * one nameable, none of them a near-miss for its neighbours at the size a post
- * is drawn on a phone. Squeezing in a thirteenth would buy one more chapter at
- * the cost of two strings a player cannot tell apart, which is not a trade.
+ * There used to be twelve, with a NUMBER printed on every pinned end, because
+ * twelve inks cannot be told apart: measured as colour difference, the worst
+ * pair of that set was 2.1 — under a simulation of common colour blindness,
+ * effectively the same ink twice. The numbers were the patch.
  *
- * They alternate light and dark as they go round, which matters more than it
- * sounds: twelve hues means three of them land in the greens, and three greens
- * of the same weight are three greens nobody can pair up. Two axes to tell
- * them apart beats one, and it is also what makes the set survive being seen
- * by an eye that does not separate red from green.
+ * These six are Okabe and Ito's qualitative set, chosen for exactly this
+ * problem. Measured the same way, the worst pair here is 19 in ordinary
+ * vision, in deuteranopia and in protanopia alike — which is a difference
+ * nobody has to squint at. So the numbers are gone, and the board is back to
+ * saying what it means with colour alone.
  */
 export const INKS = [
-  '#D2452E', '#F07818', '#E0A21A', '#8C8A12', '#63B22B', '#12805A',
-  '#12B5C4', '#1F6FEB', '#3B2FB5', '#9B5CF6', '#C0219E', '#E8659C',
+  '#D55E00', '#0072B2', '#009E73', '#CC79A7', '#E69F00', '#56B4E9',
 ];
 
 export type Recipe = {
   readonly cols: number;
   readonly rows: number;
+  /** How many strings to start from. The designer adds more if it must. */
   readonly strands: number;
-  readonly shake: number;
-  /**
-   * Leave both ends of a single string unpinned. A purer puzzle, but a far
-   * looser one: with no ends given it takes six or seven blocks to pin the
-   * answer down, and a board that cluttered is a worse thing to look at than
-   * the free ends are worth.
-   */
-  readonly freeEnds?: boolean;
 };
 
 /** One board, or null if this seed did not produce a sound one. */
-export function makeBoard(
-  mode: Board['mode'], id: string, r: Recipe, rng: Rng,
-): Made | null {
+export function makeBoard(id: string, r: Recipe, rng: Rng): Settled | null {
   const path = latticePath(r.cols, r.rows, rng);
   if (!path) return null;
-
-  const grid = mode === 'grid';
-  const posts = grid ? latticePosts(r.cols, r.rows) : shakenPosts(r.cols, r.rows, rng, r.shake);
+  const posts = latticePosts(r.cols, r.rows);
+  const lattice = { cols: r.cols, rows: r.rows };
 
   /*
-   * Where the path is cut decides the puzzle, so one lattice path is worth
+   * Where the path is cut decides the puzzle, so one covering path is worth
    * several boards. Trying a handful of cuts here rather than throwing the
    * path away is most of the difference between a designer that fills a
    * chapter and one that does not.
    */
-  for (let cut = 0; cut < 8; cut++) {
-    const cover = cutPath(path, r.strands, grid ? 2 : 3, rng);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const cover = cutPath(path, r.strands, 2, rng);
     if (!cover) return null;
-
-    const free = r.strands === 1 && !grid && r.freeEnds === true;
-    const strands = cover.map((piece, i) => ({
-      from: free ? -1 : piece[0],
-      to: free ? -1 : piece[piece.length - 1],
-      color: INKS[i % INKS.length],
-    }));
-
-    const base: Board = {
-      id, mode, chapter: 0, posts, blocks: [], strands,
-      lattice: grid ? { cols: r.cols, rows: r.rows } : undefined,
-      solution: cover,
-    };
-
-    // A grid board has no blocks to carve with — walls in a lattice would make
-    // it a different game — so it is refined instead: see `refine`.
-    if (grid) {
-      const made = refine(base, path, r.strands, rng);
-      if (made) return made;
-      continue;
-    }
-    const made = carve(base, cover, rng);
-    if (made) return made;
+    const cuts = new Set<number>();
+    let at = 0;
+    for (let i = 0; i + 1 < cover.length; i++) { at += cover[i].length; cuts.add(at); }
+    const made = settle(posts, lattice, path, cuts, rng, INKS.length);
+    if (made) return { ...made, board: { ...made.board, id } };
   }
   return null;
 }
