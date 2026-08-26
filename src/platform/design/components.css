@@ -363,7 +363,7 @@
 /* --- the result ----------------------------------------------------------- */
 .result { text-align: center; }
 .result .big {
-  font-family: var(--display);
+  font-family: var(--num);
   font-size: var(--t-3xl);
   font-variant-numeric: tabular-nums;
   line-height: 1;

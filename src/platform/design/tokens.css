@@ -104,7 +104,23 @@
      puzzle that waits on a webfont is a puzzle nobody plays. */
   --display: 'Zilla Slab', 'Roboto Slab', Georgia, serif;
   --text: 'Libre Franklin', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-  /* Board numerals: tabular, so a column of digits lines up. */
+  /*
+   * Numerals are set in the TEXT face, never the display one, and this is a
+   * rule rather than a preference.
+   *
+   * Zilla Slab's figures are old-style: 3, 4, 5, 7 and 9 hang thirteen
+   * thousandths of an em below the baseline while 6 and 8 rise to full cap
+   * height. That is lovely in a line of running prose and wrong everywhere a
+   * number has to sit centred in a box or line up under another number — a 4
+   * on a tile reads as having slipped, and 48 has one digit low and one high.
+   * The shipped subset carries no lining-figure feature to switch to, so the
+   * fix is the face. Libre Franklin's figures are lining and tabular.
+   *
+   * Anything that draws a digit uses this. scripts/fit-audit.mjs measures the
+   * ink of all ten digits wherever numbers appear and fails if they do not
+   * share a baseline, so the rule is checked rather than remembered.
+   */
+  --num: 'Libre Franklin', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
   --digits: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
 
   --t-xs: 11.5px;

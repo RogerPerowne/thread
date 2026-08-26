@@ -200,6 +200,53 @@ for (const [vname, w, h] of VIEWPORTS) {
         const r = reachable(el);
         if (!r.ok) out.push(`${key} ${r.why}`);
       }
+      /*
+       * Are the numbers lining?
+       *
+       * The display face's figures are old-style: some digits hang below the
+       * baseline and some rise to cap height. In running prose that is a
+       * feature. In a puzzle it means a 4 sits low in its cell and 48 has one
+       * digit high and one low, and no amount of centring fixes it because the
+       * two halves of the number disagree with each other. So the rule is that
+       * numerals are set in the text face — and the rule is measured here
+       * rather than remembered, on whatever fonts the page actually resolved.
+       */
+      const c2d = document.createElement('canvas').getContext('2d');
+      const fonts = new Map();
+      for (const el of document.querySelectorAll('.screen *')) {
+        const own = [...el.childNodes]
+          .filter((n) => n.nodeType === 3).map((n) => n.textContent).join('');
+        /*
+         * Only numbers that are DATA. Old-style figures are not a defect in a
+         * line of prose — mixing with lowercase is what they are for — so a
+         * chapter called "5 by 5" is left alone. What is checked is text that
+         * is nothing but a number: a tile, a total, a clock. Those have to sit
+         * centred in a box and line up under one another, and a figure that
+         * drops below the baseline can do neither.
+         */
+        if (!/^[\s0-9.,:+\-\u2013\u2014%/]*[0-9][\s0-9.,:+\-\u2013\u2014%/]*$/.test(own)) continue;
+        const cs = getComputedStyle(el);
+        const font = `${cs.fontWeight} 100px ${cs.fontFamily}`;
+        if (!fonts.has(font)) fonts.set(font, named(el));
+      }
+      for (const [font, where] of fonts) {
+        c2d.font = font;
+        let lowest = 0;
+        let tall = 0;
+        let short = Infinity;
+        for (const d of '0123456789') {
+          const m = c2d.measureText(d);
+          lowest = Math.max(lowest, m.actualBoundingBoxDescent);
+          tall = Math.max(tall, m.actualBoundingBoxAscent);
+          short = Math.min(short, m.actualBoundingBoxAscent);
+        }
+        if (lowest > 3) {
+          out.push(`${where} draws digits in a face whose figures drop ${Math.round(lowest)}% below the baseline (${font})`);
+        } else if (tall - short > 7) {
+          out.push(`${where} draws digits in a face whose figures differ ${Math.round(tall - short)}% in height (${font})`);
+        }
+      }
+
       return out;
     });
 

@@ -114,7 +114,7 @@
 .ptile.going .pnum { fill: var(--accent); }
 
 .pnum {
-  font-family: var(--display);
+  font-family: var(--num);
   font-weight: 700;
   font-size: 46px;
   font-variant-numeric: tabular-nums;
@@ -228,7 +228,7 @@
 }
 .chaprail.scrubbing .flag { opacity: 1; }
 .chaprail .flag b {
-  font-family: var(--display);
+  font-family: var(--num);
   font-size: var(--t-lg);
   font-variant-numeric: tabular-nums;
 }

@@ -223,6 +223,17 @@ request to a font service was once being blocked, the wordmark had been quietly
 falling back to Times, and the design being looked at was not the design that
 had been written.
 
+**Numerals are set in the text face, never the display one.** Zilla Slab's
+figures are old-style: 3, 4, 5, 7 and 9 hang below the baseline while 6 and 8
+rise to cap height. That is what old-style figures are for and it is lovely in
+running prose — it is also wrong everywhere a number has to sit centred in a
+box or line up under another number, and no amount of centring fixes it,
+because the two halves of 48 disagree with each other. The fit audit measures
+the ink of all ten digits wherever a number is the whole of an element's text
+and fails if they do not share a baseline, so the rule is checked rather than
+remembered. Numbers inside a sentence are left alone: mixing with lowercase is
+the one place those figures belong.
+
 ## What is not here, and why
 
 - **A leaderboard.** Ranking players against each other needs a server to hold

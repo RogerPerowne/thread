@@ -50,7 +50,7 @@ function miniature(host: HTMLElement, still: boolean): () => void {
     }));
     root.appendChild(svg('text', {
       x, y, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-      'font-size': 15, 'font-family': 'var(--display)', 'font-weight': 700,
+      'font-size': 15, 'font-family': 'var(--num)', 'font-weight': 700,
       fill: 'var(--a-zigzag)', 'fill-opacity': 0.85, text: String(v),
     }));
   }

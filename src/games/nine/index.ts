@@ -46,7 +46,7 @@ function miniature(host: HTMLElement, still: boolean): () => void {
       svg('text', {
         x: xs[i] + 13, y: 37, 'text-anchor': 'middle', 'dominant-baseline': 'central',
         fill: '#fff', 'font-size': 18, 'font-weight': 700,
-        'font-family': "'Zilla Slab', Georgia, serif", text: String([4, 7, 2][i]),
+        'font-family': "'Libre Franklin', system-ui, sans-serif", text: String([4, 7, 2][i]),
       }),
     );
     g.setAttribute('opacity', '0');
@@ -61,7 +61,7 @@ function miniature(host: HTMLElement, still: boolean): () => void {
   }
   root.appendChild(svg('text', {
     x: 50, y: 76, 'text-anchor': 'middle', fill: 'var(--a-nine)',
-    'font-size': 19, 'font-weight': 700, 'font-family': "'Zilla Slab', Georgia, serif",
+    'font-size': 19, 'font-weight': 700, 'font-family': "'Libre Franklin', system-ui, sans-serif",
     text: '= 13',
   }));
   host.appendChild(root);

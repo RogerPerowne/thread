@@ -74,7 +74,7 @@
  */
 .nine-target {
   fill: var(--ink-2);
-  font-family: var(--display);
+  font-family: var(--num);
   font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -98,7 +98,7 @@
 }
 .nine-digit {
   fill: var(--ink);
-  font-family: var(--display);
+  font-family: var(--num);
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
