@@ -21,26 +21,18 @@
  *                                 of a post it does not use
  *   string hits a block      <=>  centreline comes within STRING_W of it
  *
- * A string may go back on itself as sharply as it likes. It is one piece of
- * string round a row of nails, and a string that turns at a nail is wrapped
- * round it — the two legs of a wrap are in contact at the nail, and that is
- * the one contact this game allows. WRAP below says how much string a nail
- * holds; past that a hairpin's legs are measured against each other like any
- * other pair, so a fold that separates is fine and a fold that runs alongside
- * itself is not. That is the difference between going back on yourself and
- * lying on yourself, and it is the only thing the sharpness of a turn decides.
+ * A string may go back on itself as sharply as it likes, and how sharply is
+ * nobody's business. It is one piece of string round a row of nails: a turn is
+ * a wrap, the two legs of a wrap touch at the nail, and no amount of measuring
+ * that contact turns it into a fault. So two runs that meet at a post are
+ * never in conflict, full stop — the only thing that can go wrong between two
+ * pieces of string is one lying across the other, and runs that share a nail
+ * cannot do that.
  *
- * This is where post width earns its place. A post used by the red string is a
- * pillar the blue string has to get around, so the gap between two posts is
- * only passable if it is wider than the string. That is the tension the game
- * is made of: a gap just wide enough for one string, and two strings that both
- * want it.
- *
- * The string does not wrap the posts it uses — it runs through them. A version
- * that wrapped the rim was tried and dropped: it made the drawn shape stray
- * from the line the rule measures, so the rule had to be widened to cover the
- * stray, and a rule that is stricter than the picture is a rule that refuses
- * moves which look fine.
+ * How tight a fold can get is therefore not a rule at all but a consequence:
+ * the leg coming back has to clear the post it came from like any other run
+ * that does not use it, so the geometry stops a string folding flat without
+ * anyone having to legislate for it.
  */
 
 export type Pt = readonly [number, number];
@@ -53,45 +45,41 @@ export const POST_R = 2.0;
 export const STRING_W = 1.0;
 
 /**
- * How much string a nail can hold against itself: the wrap allowance.
- *
- * A string that turns at a post is wrapped round a nail, and the two legs of
- * a wrap are in contact at the nail — that is what wrapping IS, and it is the
- * one place a string is allowed to touch itself. So contact is ignored within
- * WRAP of the post the two runs turn at, and measured everywhere else, exactly
- * as it is for two runs that share nothing.
- *
- * This is the one place the rule is looser than the picture, so it is worth
- * being exact about the size of it: at a fold you will see the string bunched
- * against itself for about this far either side of the nail, and no further.
+ * The halo a post wears when there is no way to reach it, and how far it
+ * swells. A post is two units across on a board that can hold sixty of them,
+ * so a post that answers a refused move by changing colour is a dot changing
+ * shade under the very hand covering it. The halo is what carries the answer,
+ * which means it has to be big enough to read from across the screen.
  */
-export const WRAP = 4;
+export const GLOW_R = POST_R * 2.8;
+export const GLOW_SWELL = 1.15;
 
 /**
  * How far outside a post's centre anything is ever drawn around it.
  *
- * The widest of them is the ring on a pinned end: radius POST_R + 1.5, stroked
- * at 1.2, so its outer edge is 0.6 past that. The others are all inside it —
- * a caught post swells to 1.55 of its radius, the clash mark is 4.4 wide, the
- * solve grows the string to three, the string's own cap is STRING_W. This is
- * the number the view has to allow for, and getting it from the drawing rather
- * than guessing is the difference between a board that fits and one whose top
- * row is shaved off.
+ * The widest is the refusal halo at full swell. Behind it come the ring on a
+ * pinned end (POST_R + 1.5, stroked at 1.2), a caught post swelling to 1.55 of
+ * its radius, the 4.4-wide clash mark, the solve growing the string to three,
+ * and the string's own cap at STRING_W.
+ *
+ * Taking this from the drawing rather than guessing is the difference between
+ * a board that fits and one whose top row is shaved off — and it is why the
+ * halo could be made larger without anyone having to remember to widen the
+ * window by hand.
  */
-export const DRAW_R = POST_R + 2.1;
+export const DRAW_R = Math.max(POST_R + 2.1, GLOW_R * GLOW_SWELL);
 
 /**
- * How close a thumb has to get to catch a post, in board units.
+ * The most generous a thumb's reach is allowed to be, in board units.
  *
  * It lives here rather than with the play screen because it is a contract
  * between the designer and the player, not a tuning knob: a thumb sweeping
  * along a run catches everything it passes this close to, so a board whose
  * answer runs graze other posts would snatch them up mid-drag and there would
  * be no way to draw the answer at all. The gate holds every shipped board to
- * it. As it happens no answer run comes within eleven of a post it does not
- * use, so there is a wide margin — but the margin is checked, not assumed.
+ * it.
  */
-export const GRAB_POST = 7;
+export const GRAB_MAX = 7;
 
 export type Block = { x: number; y: number; w: number; h: number };
 
@@ -120,6 +108,34 @@ export type Board = {
   /** The answer, as one ordered post list per strand. */
   readonly solution: readonly (readonly number[])[];
 };
+
+/**
+ * How close a thumb has to get to catch a post on THIS board.
+ *
+ * A fixed reach cannot be right for every board. Nine posts spread over the
+ * whole square want a generous one; a lattice of fifty-six has its posts about
+ * eleven apart, and a reach of seven would leave a thumb halfway between two
+ * of them inside both — so it would catch whichever happened to be marginally
+ * nearer, which is a coin toss dressed up as an input.
+ *
+ * Half the closest gap is the line where that stops being possible: inside it,
+ * the post you are nearest is the only one you are near. A little under half,
+ * so the two never tie, and never more than GRAB_MAX, because past that the
+ * generosity stops being generosity and starts catching posts you were only
+ * passing.
+ */
+export function grabRadius(board: Board): number {
+  let closest = Infinity;
+  const P = board.posts;
+  for (let i = 0; i < P.length; i++) {
+    for (let j = i + 1; j < P.length; j++) {
+      const d2 = (P[i][0] - P[j][0]) ** 2 + (P[i][1] - P[j][1]) ** 2;
+      if (d2 < closest) closest = d2;
+    }
+  }
+  if (!Number.isFinite(closest)) return GRAB_MAX;
+  return Math.min(GRAB_MAX, 0.45 * Math.sqrt(closest));
+}
 
 /** A square window on board space, in board units. */
 export type View = { readonly x: number; readonly y: number; readonly side: number };
@@ -224,11 +240,9 @@ export function segRectDist2(a: Pt, b: Pt, r: Block): number {
 /**
  * The turn at `mid`, in degrees: 180 is straight on, 0 is straight back.
  *
- * Nothing in the rule reads this any more. A turn used to be refused for being
- * sharper than a number; now the two legs are measured against each other like
- * any other pair of runs, and how sharp the turn was is a description of what
- * happened rather than the reason it happened. It is kept because saying "that
- * turn is 34 degrees" is how the rule gets talked about and tested.
+ * Nothing in the rule reads this, and nothing should. It is here so a test can
+ * say "this board's tightest turn is 34 degrees, and it is allowed", which is
+ * a fact worth being able to state.
  */
 export function turnAngle(prev: Pt, mid: Pt, next: Pt): number {
   const ax = prev[0] - mid[0];
@@ -268,20 +282,7 @@ export const CLEAR_POST = POST_R + STRING_W;
 /** How far a string has to stay from a block. */
 export const CLEAR_BLOCK = STRING_W;
 
-/**
- * The shortest run there may be.
- *
- * A turn at each end of a run costs WRAP of it, and what is left is the part
- * the contact test actually looks at. A run shorter than twice WRAP would be
- * swallowed whole by the wrap allowance at its two ends and never measured at
- * all — string could lie on top of it and nothing would say so. Requiring
- * CLEAR_STRING of measured middle is what stops the allowance from opening a
- * hole in the rule, rather than a length that seemed about right.
- */
-export const MIN_RUN = 2 * WRAP + CLEAR_STRING;
-
 const CLEAR_STRING2 = CLEAR_STRING ** 2;
-const MIN_RUN2 = MIN_RUN ** 2;
 const CLEAR_POST2 = CLEAR_POST ** 2;
 const CLEAR_BLOCK2 = CLEAR_BLOCK ** 2;
 
@@ -310,16 +311,14 @@ export type Compiled = {
 };
 
 /**
- * Is a direct run from post a to post b legal in isolation? It must be long
- * enough to be measured (see MIN_RUN), clear every other post, clear every
- * block, and — on a grid board — join lattice neighbours rather than cutting
- * across.
+ * Is a direct run from post a to post b legal in isolation? It must clear
+ * every other post, clear every block, and — on a grid board — join lattice
+ * neighbours rather than cutting across.
  */
 export function runIsLegal(board: Board, a: number, b: number): boolean {
   if (a === b) return false;
   const pa = board.posts[a];
   const pb = board.posts[b];
-  if ((pa[0] - pb[0]) ** 2 + (pa[1] - pb[1]) ** 2 < MIN_RUN2) return false;
   if (board.lattice) {
     const { cols } = board.lattice;
     const ax = a % cols, ay = (a / cols) | 0;
@@ -337,52 +336,25 @@ export function runIsLegal(board: Board, a: number, b: number): boolean {
 }
 
 /**
- * Pull `at` back along the run towards `to` by WRAP, so the string a nail
- * holds is left out of the measurement. MIN_RUN keeps every run longer than
- * 2 * WRAP, so what comes back is always a real segment.
- */
-function pastWrap(at: Pt, to: Pt): Pt {
-  const len = Math.hypot(to[0] - at[0], to[1] - at[1]);
-  if (len <= WRAP) return to;
-  const t = WRAP / len;
-  return [at[0] + (to[0] - at[0]) * t, at[1] + (to[1] - at[1]) * t];
-}
-
-/**
  * Can these two runs both appear on a finished board?
  *
- * One question, asked one way: do the two pieces of string come closer than
- * the string is thick? A string may go back on itself as sharply as it likes
- * — what it may not do is lie on itself. The only difference between a pair of
- * runs that turn at a shared post and a pair that share nothing is that the
- * shared post is a nail holding a wrap, so the WRAP of string either side of
- * it is left out of the measurement. Everything past that is measured the
- * same, which is why a hairpin whose legs separate is allowed and a fold that
- * runs alongside itself is not.
+ * One question: does one piece of string lie across the other? Two runs that
+ * meet at a post cannot — they are the same string wrapped round a nail, and a
+ * wrap is not a fault however tight it is. Everything else is the distance
+ * between them, against the width of the string.
+ *
+ * There used to be a second half to this, refusing a turn that came back on
+ * itself too sharply: first as a flat angle limit, then as a measurement past
+ * an allowance for the nail. Both were wrong the same way. A string round a
+ * post is entitled to touch itself there, so measuring that contact could only
+ * ever produce a rule against something the player was allowed to do — and a
+ * warning about it was a warning that could not be acted on.
  */
 export function runsConflict(board: Board, r: Run, s: Run): boolean {
-  if ((r.a === s.a && r.b === s.b) || (r.a === s.b && r.b === s.a)) return false;
+  if (r.a === s.a || r.a === s.b || r.b === s.a || r.b === s.b) return false;
   const P = board.posts;
-  let [ra, rb] = [P[r.a], P[r.b]];
-  let [sa, sb] = [P[s.a], P[s.b]];
-  if (r.a === s.a || r.a === s.b) ra = pastWrap(P[r.a], P[r.b]);
-  else if (r.b === s.a || r.b === s.b) rb = pastWrap(P[r.b], P[r.a]);
-  if (s.a === r.a || s.a === r.b) sa = pastWrap(P[s.a], P[s.b]);
-  else if (s.b === r.a || s.b === r.b) sb = pastWrap(P[s.b], P[s.a]);
-  return segSegDist2(ra, rb, sa, sb) < CLEAR_STRING2;
+  return segSegDist2(P[r.a], P[r.b], P[s.a], P[s.b]) < CLEAR_STRING2;
 }
-
-/**
- * The sharpest turn that clears itself, in degrees — a consequence of WRAP
- * and the string's width rather than a number anyone picked. Two legs leaving
- * a nail at angle t are 2 * WRAP * sin(t / 2) apart at the edge of the wrap,
- * and they have to be CLEAR_STRING apart to be clear of each other.
- *
- * Nothing reads this to make a decision — `runsConflict` measures. It is here
- * because a rule you can only observe is a rule you cannot check, and the
- * tests hold the measurement to this number.
- */
-export const MIN_TURN_DEG = (2 * Math.asin(Math.min(1, STRING_W / WRAP)) * 180) / Math.PI;
 
 /*
  * Compiling is quadratic in the number of runs — every pair of them is checked

@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openBoard, solveByDragging, dragStrand, isSolved, solvedIds, pointMapper,
-  findTurn, findFold,
+  gotoApp, openBoard, solveByDragging, dragStrand, isSolved, pointMapper,
+  findTightestTurn,
 } from './helpers.js';
 
 const MODES = ['classic', 'coloured', 'grid'] as const;
-const PER_MODE: Record<string, number> = { classic: 60, coloured: 48, grid: 50 };
 
 test('home is the masthead and one card per mode', async ({ page }) => {
   await gotoApp(page);
@@ -36,17 +35,41 @@ test('the chapters get bigger as you go', async ({ page }) => {
   expect(last).toBeGreaterThan(first * 2);
 });
 
+/*
+ * Every shipped board, solved by real drags, a chapter at a time.
+ *
+ * A chapter each rather than a mode each: eighty grid boards of up to twelve
+ * strings is several minutes of pointer events in one test, and a test that
+ * fails by timing out tells you nothing about which board broke.
+ */
+const CHAPTERS: Record<string, number> = { classic: 6, coloured: 5, grid: 8 };
+const PER_CHAPTER = 10;
+
 for (const mode of MODES) {
-  test(`every ${mode} board is solvable by dragging`, async ({ page }) => {
-    await gotoApp(page);
-    for (let n = 1; n <= PER_MODE[mode]; n++) {
-      const board = await openBoard(page, mode, n);
-      await solveByDragging(page, board);
-      expect(await isSolved(page), `${mode} ${n} (${board.id}) was not solved`).toBe(true);
-    }
-    expect((await solvedIds(page)).length).toBe(PER_MODE[mode]);
-  });
+  for (let chapter = 1; chapter <= CHAPTERS[mode]; chapter++) {
+    test(`every ${mode} board in chapter ${chapter} is solvable by dragging`, async ({ page }) => {
+      const first = (chapter - 1) * PER_CHAPTER + 1;
+      for (let n = first; n < first + PER_CHAPTER; n++) {
+        const board = await openBoard(page, mode, n);
+        await solveByDragging(page, board);
+        expect(await isSolved(page), `${mode} ${n} (${board.id}) was not solved`).toBe(true);
+      }
+    });
+  }
 }
+
+test('every shipped board can be reached and solved', async ({ page }) => {
+  // The per-chapter tests cover the boards; this covers the count, so a
+  // chapter quietly losing boards cannot pass by not being looked at.
+  await gotoApp(page);
+  const counts = await page.evaluate(
+    () => (window as never as { __thread: { counts(): Record<string, number> } }).__thread.counts(),
+  );
+  for (const mode of MODES) {
+    expect(counts[mode], `${mode} has the wrong number of boards`)
+      .toBe(CHAPTERS[mode] * PER_CHAPTER);
+  }
+});
 
 test('an unfinished board is never shown as a broken one', async ({ page }) => {
   const board = await openBoard(page, 'coloured', 1);
@@ -68,32 +91,18 @@ test('an unfinished board is never shown as a broken one', async ({ page }) => {
   await expect(note).not.toHaveClass(/bad/);
 });
 
-test('a warning appears the moment a rule is broken and goes when it is undone', async ({ page }) => {
-  // A fold sharp enough to lie on itself is the one break a player can make by
-  // dragging alone: every other illegal run is simply refused.
-  const found = await findFold(page);
-  const note = page.locator('.hud .ask');
-
-  await dragStrand(page, found.board, found.turn);
-  await expect(note).toHaveClass(/bad/);
-  expect((await note.textContent()) ?? '').toContain('too tight');
-
-  // Take it back off. The warning has to go with it — a warning that outlives
-  // its cause teaches the wrong thing.
-  await page.locator('.pill', { hasText: 'Undo' }).click();
-  await expect(note).not.toHaveClass(/bad/);
-});
-
-test('the string may go back on itself', async ({ page }) => {
+test('the string may go back on itself as sharply as it likes', async ({ page }) => {
   /*
-   * The turn that used to be refused. Anything under 55 degrees was called a
-   * fold and warned about, which ruled out most of the ways round a board that
-   * a player would actually reach for. Now the two legs are measured past the
-   * nail, so a turn is refused only when the string really does lie on itself.
+   * A turn used to be refused for being under 55 degrees, then under 29. Both
+   * were rules against something a string round a nail is entitled to do, and
+   * both produced a warning the player could not act on because the picture
+   * looked fine. There is no angle rule left: the tightest turn each board
+   * allows is whatever its own geometry allows, and it is never a fault.
    */
-  const found = await findTurn(page, 30, 54);
-  const note = page.locator('.hud .ask');
+  const found = await findTightestTurn(page);
+  expect(found.degrees, 'no board offers a turn under 55 degrees to try').toBeLessThan(55);
   await dragStrand(page, found.board, found.turn);
+  const note = page.locator('.hud .ask');
   await expect(note).not.toHaveClass(/bad/);
 });
 
@@ -260,13 +269,13 @@ test('a post there is no way to reach says so', async ({ page }) => {
   await page.mouse.up();
 });
 
-test('an overlap warning goes when the overlap does, tail and all', async ({ page }) => {
+test('an overlap warning goes when the overlap does', async ({ page }) => {
   /*
    * The warning was right and the player could not act on it. Dragging the
-   * offending run off worked, and then letting go laid it straight back:
-   * everything past the point you grabbed waits to rejoin, and it rejoined
-   * whether or not it still fitted. So the board went on saying two strings
-   * were touching however many times you took the touch away.
+   * offending run off worked, and then letting go laid it straight back —
+   * everything past the point you grabbed used to wait in a hidden tail and
+   * rejoin on release whether or not it still fitted. There is no tail now,
+   * and this is the test that says so.
    */
   const board = await openBoard(page, 'coloured', 3);
   const at = await pointMapper(page);
@@ -315,16 +324,89 @@ test('an overlap warning goes when the overlap does, tail and all', async ({ pag
   await expect(note).toHaveClass(/bad/);
   await expect(note).toContainText('lying on each other');
 
-  // Grab the string at the post the bad run ends on and take it back off. What
-  // was past it is the tail, and it must not bring the touch back with it.
-  const grab = at(board.posts[cross![1]]);
-  await page.mouse.move(grab.x, grab.y);
-  await page.mouse.down();
-  await expect(page.locator('.waiting')).toHaveAttribute('opacity', '1');
+  // Take the bad run back off by pointing at the post before it. Nothing may
+  // put it back: what is on screen is the whole state, so letting go cannot
+  // quietly re-lay the run that was the problem.
   const home = at(board.posts[cross![0]]);
-  await page.mouse.move(home.x, home.y, { steps: 10 });
+  await page.mouse.move(home.x, home.y);
+  await page.mouse.down();
   await page.mouse.up();
 
   await expect(note).not.toHaveClass(/bad/);
   await expect(page.locator('.clash[opacity="1"]')).toHaveCount(0);
+});
+
+test('a board can be solved by tapping alone', async ({ page }) => {
+  /*
+   * Dragging is fast, and it is also a hand held over the board you are trying
+   * to read — on a thirty-post board, held for a long time. Tapping has to be
+   * a real way to play, not a fallback, or the game is only playable in the
+   * one posture.
+   */
+  const board = await openBoard(page, 'classic', 20);
+  const at = await pointMapper(page);
+  for (const p of board.solution[0]) {
+    const q = at(board.posts[p]);
+    await page.mouse.move(q.x, q.y);
+    await page.mouse.down();
+    await page.mouse.up();
+  }
+  expect(await isSolved(page), 'tapping the answer post by post did not solve it').toBe(true);
+});
+
+test('tapping a post already on the string winds back to it', async ({ page }) => {
+  const board = await openBoard(page, 'classic', 20);
+  const at = await pointMapper(page);
+  const path = board.solution[0];
+  await dragStrand(page, board, path.slice(0, 7));
+  await expect(page.locator('.hud .num')).toContainText(`7 of ${board.posts.length}`);
+
+  // Going back is the same gesture as going forward, so it is one tap.
+  const back = at(board.posts[path[2]]);
+  await page.mouse.move(back.x, back.y);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(page.locator('.hud .num')).toContainText(`3 of ${board.posts.length}`);
+});
+
+test('pressing and letting go without moving changes nothing', async ({ page }) => {
+  /*
+   * A press has to be harmless, or a player cannot poke at the board — and
+   * poking at it without fear is most of what makes one of these hard to put
+   * down. Pressing the middle of a string used to take everything past it off
+   * the board and hold it in a hidden tail.
+   */
+  const board = await openBoard(page, 'classic', 20);
+  const at = await pointMapper(page);
+  const path = board.solution[0];
+  await dragStrand(page, board, path);
+  const before = await page.locator('.hud .num').textContent();
+
+  const mid = at(board.posts[path[Math.floor(path.length / 2)]]);
+  await page.mouse.move(mid.x, mid.y);
+  await page.mouse.down();
+  await page.mouse.move(mid.x + 1, mid.y + 1);
+  await page.mouse.up();
+  expect(await page.locator('.hud .num').textContent()).toBe(before);
+});
+
+test('every string on a board has a colour of its own', async ({ page }) => {
+  /*
+   * On a Coloured or Grid board the ends are the whole instruction. Two
+   * strings the same colour is two strings nobody can pair up, and the biggest
+   * lattice ships twelve of them — which is exactly why the palette is what
+   * limits how large a lattice can get.
+   */
+  for (const [mode, n] of [['grid', 80], ['grid', 71], ['coloured', 50]] as const) {
+    const board = await openBoard(page, mode, n);
+    const inks = new Set(board.strands.map((s) => s.color));
+    expect(inks.size, `${mode} ${n} has ${board.strands.length} strings sharing colours`)
+      .toBe(board.strands.length);
+    // And the ends have to actually wear it, not just carry it in the data.
+    const painted = await page.evaluate(() => {
+      const ends = [...document.querySelectorAll('.post.end')];
+      return ends.map((e) => getComputedStyle(e).fill);
+    });
+    expect(new Set(painted).size).toBe(inks.size);
+  }
 });

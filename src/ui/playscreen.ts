@@ -1,38 +1,77 @@
 /**
  * Playing a board.
  *
- * Press anywhere on a string — a post, or the string itself between two posts
- * — and drag. The string is picked up at that point and follows your thumb;
- * everything past where you grabbed waits, and joins back on the moment your
- * new route meets it again. Being made to redraw a string from its end because
- * you wanted to change its middle is the kind of friction that makes a puzzle
- * feel like admin.
+ * WHAT GOOD CONTROLS ARE, FOR THIS GAME
  *
- * The rule is checked on every change rather than at the end. A string that is
- * already lying on another will still be lying on it when you let go, and the
- * end is the worst possible moment to find that out. A warning appears the
- * instant it is true and goes the instant it is not — which is only possible
- * because a warning here means a rule BROKEN. How much is left to do is not a
- * warning and is never shown as one: it would be true from the first move to
- * the last, and a red line that is always on is one nobody can read.
+ * The player's whole job is to put the posts in an order. Everything below
+ * follows from taking that seriously, and from one further observation: the
+ * thing that makes a puzzle game hard to put down is not that the input is
+ * clever, it is that the input is never in the way. Every rule here is chosen
+ * so that being wrong costs nothing.
  *
- * Nothing here reflows. The line carrying the warning holds its height whether
- * or not it has anything in it, and Next holds its place from the start — a
- * board that jumps under your thumb because a word appeared is worse than the
- * word being missing.
+ *   1. ONE VERB. Point at a post. That is the entire input. Tapping a post and
+ *      sweeping a thumb through it do exactly the same thing, so there is no
+ *      mode to be in and nothing that has to be learned twice.
+ *
+ *   2. TAP AND DRAG ARE BOTH FIRST CLASS. Dragging is fast, and it is also a
+ *      hand held over the board you are trying to read, and a thirty-post
+ *      board is a long thing to hold. Tapping is precise, keeps the board
+ *      visible, and can be put down mid-solve. A player should be able to
+ *      switch between them in the middle of a string without thinking about
+ *      it, and here they can, because of rule 1.
+ *
+ *   3. WHAT YOU SEE IS THE WHOLE STATE. Nothing is held back, remembered, or
+ *      restored later. An earlier version kept the part of the string past
+ *      where you grabbed in a hidden tail and rejoined it when you let go; it
+ *      was clever and it was the direct cause of a bug where a warning could
+ *      not be cleared, because taking the bad run off and letting go put it
+ *      straight back. Predictable beats clever.
+ *
+ *   4. LIFTING YOUR FINGER IS A PAUSE, NEVER A DECISION. It does not commit
+ *      and it does not discard. The next touch carries on from where the
+ *      string ends.
+ *
+ *   5. GOING BACK IS THE SAME GESTURE AS GOING FORWARD. Point at a post that
+ *      is already on the string and the string ends there again. One post back
+ *      or six, tapped or dragged. Correcting a mistake should cost what making
+ *      it cost — never a careful reverse over every post in turn.
+ *
+ *   6. A REFUSED MOVE CHANGES NOTHING, AND SAYS SO. You are never left undoing
+ *      something that did not happen. But silence is not an option either:
+ *      nothing happening is exactly what a missed touch looks like, so the
+ *      string glows.
+ *
+ *   7. NOTHING IS EVER LOST TO A MIS-TOUCH. Pressing the board and letting go
+ *      without moving changes nothing. Every gesture is one Undo.
+ *
+ *   8. THE ANSWER IS INSTANT AND SPECIFIC. The post you catch pulses, the
+ *      string you cannot extend glows, the stretch you take off is drawn
+ *      coming off. All of it CSS, so none of it costs a frame of the drag.
+ *
+ *   9. THE BOARD NEVER MOVES. No scroll, no zoom, no reflow. The line carrying
+ *      the warning holds its height whether or not it has anything in it, and
+ *      Next holds its place from the start.
+ *
+ * WHAT TURNS RED
+ *
+ * A warning means a rule BROKEN — a post used twice, two strings lying on each
+ * other. How much is left to do is not a warning and is never shown as one: it
+ * is true from the first move to the last, so a red line saying it would be on
+ * for the whole game, and one that is always on is one nobody can read.
  */
 
 import { h } from './dom.js';
 import { topBar, pill } from './components.js';
 import { mountBoard } from './render.js';
 import {
-  compile, runBetween, conflicts, segPointDist2, POST_R, GRAB_POST, type Board,
+  compile, runBetween, segPointDist2, POST_R, grabRadius, type Board,
 } from '../core/board.js';
 import { judge, firstBreak, whatIsLeft } from '../core/check.js';
 import * as haptics from '../render/haptics.js';
 
-/** How close to catch the string itself, between posts. */
-const GRAB_STRING = 5;
+/** How close to catch the string itself, between posts, as a share of the
+ * reach for a post — so it scales with the board like the reach does. */
+const GRAB_STRING = 0.72;
 
 export type PlayHooks = {
   onSolved(): void;
@@ -48,12 +87,20 @@ export type PlayHooks = {
 export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; dispose(): void } {
   const c = compile(board);
   const view = mountBoard(c);
+  /** This board's thumb reach: see `grabRadius`. */
+  const GRAB_POST = grabRadius(board);
+  const GRAB_LINE = GRAB_POST * GRAB_STRING;
 
   let paths: number[][] = board.strands.map(() => []);
   const history: number[][][] = [];
-  let dragging = -1;
-  /** What was past the point we grabbed, waiting to be joined back on. */
-  let tail: number[] = [];
+  /*
+   * The strand being worked on. It follows the player rather than being
+   * chosen: point at a string, or at one of its pinned ends, and that is the
+   * one you are holding. On a Classic board there is only ever one.
+   */
+  let active = 0;
+  /** Is a press in progress? */
+  let holding = false;
   /** Where the thumb was at the last sample, so the gap can be walked. */
   let lastAt: { x: number; y: number } | null = null;
   let solved = false;
@@ -136,8 +183,6 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     const prev = history.pop();
     if (!prev) return;
     paths = prev;
-    tail = [];
-    view.setWaiting(0, []);
     haptics.tick();
     repaint(false);
   }
@@ -145,8 +190,6 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
   function clearAll(): void {
     snapshot();
     paths = board.strands.map(() => []);
-    tail = [];
-    view.setWaiting(0, []);
     haptics.tick();
     repaint(false);
   }
@@ -176,7 +219,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
    */
   function stringAt(x: number, y: number): { strand: number; at: number } | null {
     let best: { strand: number; at: number } | null = null;
-    let bestD = GRAB_STRING * GRAB_STRING;
+    let bestD = GRAB_LINE * GRAB_LINE;
     for (let s = 0; s < paths.length; s++) {
       const path = paths[s];
       for (let i = 0; i + 1 < path.length; i++) {
@@ -193,56 +236,42 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     return best;
   }
 
-  /** Pick the string up at `at`, keeping what is past it waiting to rejoin. */
-  function pickUp(strand: number, at: number): void {
-    snapshot();
-    dragging = strand;
-    tail = paths[strand].slice(at + 1);
-    paths[strand].length = at + 1;
-    view.setWaiting(strand, tail);
+  /** Can this strand begin at this post? A pinned strand may start at either
+   * of its own two ends; an unpinned one may start anywhere. */
+  function canStart(strand: number, post: number): boolean {
+    const spec = board.strands[strand];
+    if (!spec) return false;
+    return spec.from < 0 ? true : post === spec.from || post === spec.to;
   }
 
-  function begin(post: number): boolean {
-    const owner = ownerOf(post);
-    if (owner) { pickUp(owner.strand, owner.at); return true; }
+  /** The strand this post is a pinned end of, or -1. */
+  function pinnedOwner(post: number): number {
     for (let s = 0; s < board.strands.length; s++) {
       const spec = board.strands[s];
-      if (spec.from !== post && spec.to !== post) continue;
-      snapshot();
-      dragging = s;
-      tail = paths[s].slice(1);
-      paths[s] = [post];
-      view.setWaiting(s, tail);
-      return true;
+      if (spec.from === post || spec.to === post) return s;
     }
-    return false;
+    return -1;
   }
 
-  /**
-   * Wind the string back to the post at `at`, dropping everything past it.
+  /*
+   * Where the pointer picked the string up, on the strand it is editing.
    *
-   * One post back or six, it is the same move: you have changed your mind
-   * about a stretch of string. Having to reverse over every post in turn to
-   * take back a run of them is the kind of precision a thumb on a moving board
-   * cannot deliver, and failing at it silently is why a warning could feel
-   * stuck — the board was right that two strings were touching, and the player
-   * had no reliable way to take one of them off.
-   *
-   * What comes off does NOT join the waiting tail. The tail is the part of the
-   * string you have not got back to yet; this is a stretch you have just
-   * decided against, and putting it in the tail would have the string quietly
-   * lay it again the moment you let go.
+   * Nothing is removed at that moment: press on the middle of a string and let
+   * go again and the board is exactly as it was. The cut happens when you
+   * actually go somewhere else, which is the point at which you have said what
+   * you want. Holding the removal back like this is what makes a press
+   * harmless, and a harmless press is what lets a player poke at the board
+   * without fear — which is most of what makes one of these addictive.
    */
-  function rewindTo(at: number): void {
-    const path = paths[dragging];
-    if (at >= path.length - 1) return;
-    // The new head first, so the recoil runs outwards from where the string
-    // now ends — string being pulled back in, rather than a line vanishing.
-    view.retract(dragging, path.slice(at));
-    path.length = at + 1;
-    refused = -1;
-    haptics.notch();
-    repaint(true);
+  let cutFrom: number | null = null;
+  /** Has this gesture changed the board? Drives undo, and tap-to-wind-back. */
+  let changed = false;
+  /** One undo step per gesture, taken before the first change it makes. */
+  let snapped = false;
+
+  function touch(): void {
+    if (!snapped) { snapshot(); snapped = true; }
+    changed = true;
   }
 
   /*
@@ -251,64 +280,72 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
    */
   let refused = -1;
 
-  /**
-   * The thumb has come to rest on a post there is no way to reach.
-   *
-   * A block across the gap, or another post in the line. Nothing happening is
-   * the worst possible answer, because it is exactly what a missed touch looks
-   * like — so the string you have laid pulses, from the loose end backwards,
-   * which says both that the game heard you and which string it is about.
-   *
-   * Only where the thumb ENDS UP, never where it passed through. Sweeping
-   * across a board goes near all sorts of posts you had no intention of
-   * joining, and pulsing at each of them would be a board that flinches.
-   */
-  function refuseAt(x: number, y: number): void {
-    const path = paths[dragging];
-    const head = path[path.length - 1];
-    const post = view.nearestPost(x, y, GRAB_POST);
-    if (post < 0 || post === head || path.includes(post) || tail.includes(post)
-      || runBetween(c, head, post) >= 0) {
-      refused = -1;
-      return;
-    }
+  function refuse(post: number): void {
     if (post === refused) return;
     refused = post;
-    view.refuse(path);
+    view.refuse(paths[active]);
     haptics.bump();
   }
 
-  /** The thumb has reached `post`. Everything a drag can do happens here. */
+  /**
+   * Point at a post. This is the whole game's input.
+   *
+   * A tap calls it once; a drag calls it for every post the thumb crosses.
+   * There is no second verb and no mode — which is why the two can be mixed
+   * freely, mid-solve, without the player having to decide which one they are
+   * doing.
+   */
   function reach(post: number): void {
-    const path = paths[dragging];
-    const head = path[path.length - 1];
-    if (post === head) return;
+    // A pinned end belongs to its own string. Pointing at one means "this
+    // string now", not "run the string I am holding into someone else's end".
+    const pin = pinnedOwner(post);
+    if (pin >= 0 && pin !== active && !paths[active].includes(post)) active = pin;
 
-    // Somewhere on the string already: wind back to it.
-    const at = path.indexOf(post);
-    if (at >= 0) { rewindTo(at); return; }
+    const path = paths[active];
 
-    const run = runBetween(c, head, post);
-
-    // Meeting the waiting tail again joins the string back up.
-    const inTail = tail.indexOf(post);
-    if (inTail >= 0 && run >= 0) {
-      path.push(...tail.slice(inTail));
-      tail = [];
-      view.setWaiting(dragging, tail);
+    if (path.length === 0) {
+      if (!canStart(active, post)) { refuse(post); return; }
+      touch();
+      path.push(post);
+      cutFrom = null;
       refused = -1;
       view.flashPost(post);
-      haptics.tie();
+      haptics.tick();
       repaint(true);
       return;
     }
 
-    // No way to lay string from here to there. Passing over such a post on the
-    // way somewhere else is not an attempt to go there, so nothing is said
-    // here — `onMove` speaks when the thumb actually stops on one.
-    if (run < 0) return;
+    /*
+     * Already on this string: wind back to it, however far back it is. Going
+     * forward and going back are the same gesture, so undoing a mistake costs
+     * exactly what making it cost — no reversing over five posts in turn and
+     * landing inside every one of them.
+     */
+    const at = path.indexOf(post);
+    if (at >= 0) {
+      cutFrom = at;
+      if (at === path.length - 1) return;
+      touch();
+      // The post it now ends at goes first, so the recoil runs outwards from
+      // there: string pulled back in, rather than a line that stops existing.
+      view.retract(active, path.slice(at));
+      path.length = at + 1;
+      refused = -1;
+      haptics.notch();
+      repaint(true);
+      return;
+    }
 
-    steal(post, dragging);
+    const from = cutFrom ?? path.length - 1;
+    if (runBetween(c, path[from], post) < 0) { refuse(post); return; }
+
+    touch();
+    if (from < path.length - 1) {
+      view.retract(active, path.slice(from));
+      path.length = from + 1;
+    }
+    cutFrom = null;
+    steal(post, active);
     path.push(post);
     refused = -1;
     view.flashPost(post);
@@ -320,23 +357,20 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
    * Every post the thumb passed through since the last sample, in order.
    *
    * A pointer sample is wherever the finger happened to be when the browser
-   * looked. On a phone that is tens of pixels apart, and a post is worth about
-   * thirty — so a quick sweep across three posts could easily be reported as
-   * one move that started on the first and ended past the third, and the two
-   * in between simply never happened. Playing the whole board in one gesture,
-   * which is how anyone actually plays it, was therefore a matter of luck.
-   *
-   * Walking the line between the two samples fixes it: what the thumb crossed
-   * is what the string does, whether it was moved slowly or thrown.
+   * looked. On a phone those are tens of pixels apart and a post is worth
+   * about thirty, so a quick sweep across three posts could arrive as one move
+   * that began on the first and ended past the third — and the two in between
+   * simply never happened. Walking the line between two samples is what makes
+   * a fast drag mean the same thing as a slow one.
    */
   function sweep(to: { x: number; y: number }): void {
     const from = lastAt ?? to;
     const span = Math.hypot(to.x - from.x, to.y - from.y);
-    // A step of half a post cannot skip one, and the cap keeps a wild jump —
-    // or a first sample after a scroll — from costing a frame.
+    // A step of half a post cannot skip one, and the cap keeps a wild jump
+    // from costing a frame.
     const steps = Math.min(96, Math.max(1, Math.ceil(span / POST_R)));
     let seen = -1;
-    for (let i = 1; i <= steps && dragging >= 0; i++) {
+    for (let i = 1; i <= steps && holding; i++) {
       const k = i / steps;
       const x = from.x + (to.x - from.x) * k;
       const y = from.y + (to.y - from.y) * k;
@@ -348,86 +382,44 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     }
   }
 
-  /** Every run on the board right now, as compiled run ids. */
-  function laidRuns(except: number): number[] {
-    const out: number[] = [];
-    for (let s = 0; s < paths.length; s++) {
-      if (s === except) continue;
-      const path = paths[s];
-      for (let i = 0; i + 1 < path.length; i++) {
-        const id = runBetween(c, path[i], path[i + 1]);
-        if (id >= 0) out.push(id);
-      }
-    }
-    return out;
-  }
-
-  /**
-   * On letting go, join the waiting tail back on rather than dropping it.
-   * Keeping as much of it as possible is the whole point of being able to grab
-   * a string in the middle.
-   *
-   * As much as is still GOOD, though. Rejoining a stretch that lies across
-   * another string is how a warning came to look stuck: you would drag the
-   * offending run off, let go, and the string would quietly lay it again —
-   * so the board went on saying two strings were touching however many times
-   * you took the touch away. What still fits comes back; what no longer does
-   * is dropped, which is the answer the player was asking for.
-   */
-  function reconnect(): void {
-    if (dragging < 0 || tail.length === 0) { tail = []; return; }
-    const path = paths[dragging];
-    const busy = laidRuns(dragging);
-    const ours: number[] = [];
-    for (let i = 0; i + 1 < path.length; i++) {
-      const id = runBetween(c, path[i], path[i + 1]);
-      if (id >= 0) ours.push(id);
-    }
-    const clear = (a: number, b: number): boolean => {
-      const id = runBetween(c, a, b);
-      if (id < 0) return false;
-      for (const other of busy) if (conflicts(c, id, other)) return false;
-      for (const other of ours) if (conflicts(c, id, other)) return false;
-      ours.push(id);
-      return true;
-    };
-    for (let i = 0; i < tail.length; i++) {
-      if (path.includes(tail[i])) continue;
-      if (!clear(path[path.length - 1], tail[i])) continue;
-      // From here the tail is laid post by post and stops at the first one
-      // that no longer fits, rather than all-or-nothing.
-      for (let k = i; k < tail.length; k++) {
-        if (path.includes(tail[k])) continue;
-        if (k > i && !clear(path[path.length - 1], tail[k])) break;
-        path.push(tail[k]);
-      }
-      break;
-    }
-    tail = [];
-  }
-
   // --- pointer -------------------------------------------------------------
 
   const onDown = (e: PointerEvent) => {
     if (solved) return;
     const p = view.at(e.clientX, e.clientY);
     const post = view.nearestPost(p.x, p.y, GRAB_POST);
+
+    holding = true;
+    changed = false;
+    snapped = false;
+    refused = -1;
+    cutFrom = null;
+
     if (post >= 0) {
-      if (!begin(post)) return;
+      const owner = ownerOf(post);
+      if (owner) {
+        // Picking the string up. Nothing is taken off until you go somewhere.
+        active = owner.strand;
+        cutFrom = owner.at;
+      } else {
+        reach(post);
+        if (!changed) { holding = false; return; }
+      }
     } else {
       const grab = stringAt(p.x, p.y);
-      if (!grab) return;
-      pickUp(grab.strand, grab.at);
+      if (!grab) { holding = false; return; }
+      active = grab.strand;
+      cutFrom = grab.at;
     }
+
     lastAt = p;
-    refused = -1;
     view.el.setPointerCapture(e.pointerId);
     e.preventDefault();
     repaint(true);
   };
 
   const onMove = (e: PointerEvent) => {
-    if (dragging < 0) return;
+    if (!holding) return;
     /*
      * Take every position the browser has for this move, not just the latest.
      * A phone coalesces pointer moves — several real positions arrive as one
@@ -436,35 +428,50 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
      * follows your finger and one that follows where your finger stopped.
      */
     const samples = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
-    for (const s of samples.length > 0 ? samples : [e]) {
-      const p = view.at(s.clientX, s.clientY);
+    for (const sample of samples.length > 0 ? samples : [e]) {
+      const p = view.at(sample.clientX, sample.clientY);
       sweep(p);
       lastAt = p;
     }
 
     // Whatever happened, the loose end goes where the thumb is.
     const p = lastAt ?? view.at(e.clientX, e.clientY);
-    refuseAt(p.x, p.y);
-    const path = paths[dragging];
-    const head = path[path.length - 1];
+    const path = paths[active];
+    const head = path[cutFrom ?? path.length - 1];
     if (head !== undefined) {
       const near = view.nearestPost(p.x, p.y, GRAB_POST * 1.6);
-      const canReach = near < 0 || near === head
-        || path.includes(near)
+      if (near >= 0 && near !== head && !path.includes(near)
+        && runBetween(c, head, near) < 0) refuse(near);
+      else if (near < 0 || near === head || path.includes(near)) refused = -1;
+      const canReach = near < 0 || near === head || path.includes(near)
         || runBetween(c, head, near) >= 0;
-      view.setLead(dragging, head, p.x, p.y, canReach);
+      view.setLead(active, head, p.x, p.y, canReach);
     }
     e.preventDefault();
   };
 
   const onUp = () => {
-    if (dragging < 0) return;
-    reconnect();
-    dragging = -1;
+    if (!holding) return;
+    /*
+     * A press that never went anywhere is a tap. On a post already on the
+     * string that means "put the end back here" — which is the only way to
+     * wind back without dragging, and so the thing that makes the game
+     * playable by tapping alone.
+     */
+    if (!changed && cutFrom !== null) {
+      const path = paths[active];
+      if (cutFrom < path.length - 1) {
+        touch();
+        view.retract(active, path.slice(cutFrom));
+        path.length = cutFrom + 1;
+        haptics.notch();
+      }
+    }
+    holding = false;
+    cutFrom = null;
     lastAt = null;
     refused = -1;
     view.clearLead();
-    view.setWaiting(0, []);
     repaint(false);
   };
 
@@ -479,7 +486,6 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
    * in that direction, Enter lays string to it, Backspace takes one back.
    */
   let cursor = board.strands[0]?.from >= 0 ? board.strands[0].from : 0;
-  let keyStrand = 0;
   view.el.tabIndex = 0;
 
   const nearestIn = (from: number, dx: number, dy: number): number => {
@@ -510,31 +516,26 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
       return;
     }
     if (e.key === 'Enter' || e.key === ' ') {
-      const path = paths[keyStrand];
-      if (path.length === 0) {
-        const owner = ownerOf(cursor);
-        if (owner) { keyStrand = owner.strand; pickUp(owner.strand, owner.at); }
-        else if (!begin(cursor)) return;
-        else keyStrand = dragging;
-      } else {
-        dragging = keyStrand;
-        reach(cursor);
-      }
-      reconnect();
-      dragging = -1;
+      // The same verb the thumb uses, so the keyboard is not a second game.
+      reach(cursor);
       repaint(false);
       e.preventDefault();
       return;
     }
     if (e.key === 'Backspace') {
-      paths[keyStrand].pop();
+      const path = paths[active];
+      if (path.length > 0) {
+        snapshot();
+        view.retract(active, path.slice(path.length - 2));
+        path.pop();
+      }
       repaint(false);
       e.preventDefault();
       return;
     }
     if (e.key === 'Tab' && !e.shiftKey && board.strands.length > 1) {
-      keyStrand = (keyStrand + 1) % board.strands.length;
-      const start = board.strands[keyStrand].from;
+      active = (active + 1) % board.strands.length;
+      const start = board.strands[active].from;
       if (start >= 0) { cursor = start; view.markCursor(cursor); }
       e.preventDefault();
     }

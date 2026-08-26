@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   compile, runIsLegal, runsConflict, segSegDist2, segPointDist2, segRectDist2,
-  turnAngle, CLEAR_POST, CLEAR_STRING, MIN_TURN_DEG, MIN_RUN, WRAP,
-  viewOf, DRAW_R, type Board, type Pt,
+  turnAngle, CLEAR_POST, viewOf, DRAW_R, type Board, type Pt,
 } from '../../src/core/board.js';
 import { judge, firstBreak, whatIsLeft } from '../../src/core/check.js';
 import { search } from '../../src/core/search.js';
@@ -90,7 +89,8 @@ describe('when two runs cannot share a board', () => {
 
   /*
    * A hairpin at post 0: two legs of length 40 leaving it `deg` apart. This is
-   * the shape the whole fold rule is about — a string going back on itself.
+   * the shape the fold argument was always about — a string going back on
+   * itself.
    */
   const hairpin = (deg: number): Board => {
     const r = (deg * Math.PI) / 360;
@@ -104,54 +104,37 @@ describe('when two runs cannot share a board', () => {
   };
   const folds = (deg: number) => runsConflict(hairpin(deg), { a: 0, b: 1 }, { a: 0, b: 2 });
 
-  it('lets a string go back on itself', () => {
-    // The complaint this rule exists to answer: a turn far sharper than a
-    // right angle is a perfectly good move, and used to be refused outright.
-    expect(folds(90)).toBe(false);
-    expect(folds(60)).toBe(false);
-    expect(folds(45)).toBe(false);
-    expect(folds(35)).toBe(false);
+  it('never calls a turn a fault, however tight', () => {
+    // Two runs meeting at a post are one string wrapped round a nail. A wrap
+    // touches itself at the nail; that is what wrapping is, and no measurement
+    // of it should ever have produced a rule.
+    for (const deg of [170, 90, 60, 45, 30, 20, 10, 2]) {
+      expect(folds(deg), `${deg} degrees was refused`).toBe(false);
+    }
   });
 
-  it('refuses a fold that lies along itself', () => {
-    // Past the nail the two legs are still on top of each other. That is not
-    // going back on yourself, it is drawing the same string twice.
-    expect(folds(20)).toBe(true);
-    expect(folds(10)).toBe(true);
-    expect(folds(1)).toBe(true);
+  it('still refuses two runs that lie across each other', () => {
+    const b = board({ posts: SQUARE });
+    expect(runsConflict(b, { a: 0, b: 2 }, { a: 1, b: 3 })).toBe(true);
   });
 
-  it('turns over exactly where the geometry says it should', () => {
-    // MIN_TURN_DEG is derived from WRAP and the string width, and nothing
-    // reads it to make a decision — so this is a real check that the
-    // measurement and the stated number are the same rule, not a restatement.
-    expect(MIN_TURN_DEG).toBeCloseTo(28.955, 2);
-    expect(folds(MIN_TURN_DEG + 0.05)).toBe(false);
-    expect(folds(MIN_TURN_DEG - 0.05)).toBe(true);
-  });
-
-  it('measures the fold rather than reading the angle off a table', () => {
-    // Same turn, longer legs: the answer must not change. It is the distance
-    // between the two pieces of string that decides, and that is set at the
-    // edge of the wrap, not at the far ends.
-    const wide = board({
-      posts: [[50, 50], [50 + 90 * Math.cos(-0.3), 50 + 90 * Math.sin(-0.3)],
-        [50 + 90 * Math.cos(0.3), 50 + 90 * Math.sin(0.3)]],
-    });
-    const deg = turnAngle(wide.posts[1], wide.posts[0], wide.posts[2]);
-    expect(runsConflict(wide, { a: 0, b: 1 }, { a: 0, b: 2 })).toBe(deg < MIN_TURN_DEG);
-  });
-
-  it('keeps a measured middle in every run', () => {
-    // The wrap allowance is a hole in the contact test, and MIN_RUN is what
-    // stops it becoming a hole in the rule: a run shorter than two wraps would
-    // be excused at both ends at once and never checked anywhere.
-    expect(MIN_RUN).toBeGreaterThan(2 * WRAP);
-    expect(MIN_RUN - 2 * WRAP).toBeGreaterThanOrEqual(CLEAR_STRING);
-    const close = board({ posts: [[50, 50], [50 + MIN_RUN - 0.5, 50]] });
-    expect(runIsLegal(close, 0, 1)).toBe(false);
-    const clear = board({ posts: [[50, 50], [50 + MIN_RUN + 0.5, 50]] });
-    expect(runIsLegal(clear, 0, 1)).toBe(true);
+  it('leaves how tight a fold can get to the geometry', () => {
+    /*
+     * Nothing legislates a minimum turn, but one exists anyway: the leg coming
+     * back has to clear the post it came from, like any run that does not use
+     * it. So a string cannot fold flat, and it is `runIsLegal` that says so
+     * rather than a number anybody chose.
+     */
+    const flat = hairpin(3);
+    expect(runIsLegal(flat, 0, 1)).toBe(false);
+    expect(runIsLegal(flat, 0, 2)).toBe(false);
+    const open = hairpin(20);
+    expect(runIsLegal(open, 0, 1)).toBe(true);
+    expect(runIsLegal(open, 0, 2)).toBe(true);
+    // And where it gives way depends on how long the legs are, which is what
+    // makes it geometry rather than a limit in disguise: the same angle on
+    // shorter legs puts the far post closer to the line.
+    expect(runsConflict(hairpin(3), { a: 0, b: 1 }, { a: 0, b: 2 })).toBe(false);
   });
 });
 

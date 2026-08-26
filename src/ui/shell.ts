@@ -39,7 +39,10 @@ export const MODE_LINE: Record<Mode, string> = {
 export const CHAPTER_NAMES: Record<Mode, string[]> = {
   classic: ['First Nine', 'Wider', 'Sixteen', 'Twenty', 'Twenty-Five', 'The Long Way'],
   coloured: ['Two Strings', 'Sharing', 'Three Strings', 'Crowded', 'Four Strings'],
-  grid: ['The Lattice', 'Wider Grid', 'Five Square', 'Twenty-Five', 'Thirty'],
+  grid: [
+    'The Lattice', 'Twenty', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two',
+    'Seven Square', 'Fifty-Six',
+  ],
 };
 
 const isMode = (v: string): v is Mode => (MODES as readonly string[]).includes(v);

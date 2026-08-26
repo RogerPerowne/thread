@@ -41,12 +41,22 @@ const LADDERS: Record<'classic' | 'coloured' | 'grid', Band[]> = {
     { count: 10, cols: 5, rows: 5, strands: 3, shake: 2.6 },
     { count: 10, cols: 5, rows: 5, strands: 4, shake: 2.4 },
   ],
+  /*
+   * Grid grows the furthest, because a lattice board is nothing but its size
+   * and its pinned pairs — and the designer now finds the pairs for itself
+   * (see `refine`), so a chapter can ask for a bigger lattice and be told how
+   * much pinning it takes rather than having to guess. Sixteen cells to
+   * fifty-six across seven chapters.
+   */
   grid: [
     { count: 10, cols: 4, rows: 4, strands: 3, shake: 0 },
-    { count: 10, cols: 5, rows: 4, strands: 3, shake: 0 },
+    { count: 10, cols: 5, rows: 4, strands: 4, shake: 0 },
     { count: 10, cols: 5, rows: 5, strands: 4, shake: 0 },
-    { count: 10, cols: 5, rows: 5, strands: 5, shake: 0 },
-    { count: 10, cols: 6, rows: 5, strands: 7, shake: 0 },
+    { count: 10, cols: 6, rows: 5, strands: 5, shake: 0 },
+    { count: 10, cols: 6, rows: 6, strands: 6, shake: 0 },
+    { count: 10, cols: 7, rows: 6, strands: 7, shake: 0 },
+    { count: 10, cols: 7, rows: 7, strands: 8, shake: 0 },
+    { count: 10, cols: 8, rows: 7, strands: 9, shake: 0 },
   ],
 };
 
@@ -54,20 +64,27 @@ const LADDERS: Record<'classic' | 'coloured' | 'grid', Band[]> = {
  * The board grows with the chapter, so the ladder is a real one: nine posts in
  * chapter one, thirty by the last.
  *
- * Classic gets six chapters and the other two get five. That is not an
- * oversight: past about thirty posts a Coloured or Grid board stops having one
- * answer. Many short strings can be paired up more ways than few long ones, so
- * the bigger those boards get the less likely it is that any cut of them is
- * unique — and a board with two answers is not a puzzle. Rather than pad the
- * ladder with boards that cannot be proven, those modes stop where the proof
- * does. Difficulty inside a chapter is the
- * search cost, which is measured; difficulty between chapters is the size,
- * which is chosen.
+ * Classic gets six chapters, Coloured five and Grid eight. That is not an
+ * oversight in either direction, it is where the proof runs out in each case.
+ *
+ * Coloured stops at about thirty posts: many short strings can be paired up
+ * more ways than few long ones, so past that no cut of the board is unique.
+ * Grid goes much further because the designer can keep pinning pairs until it
+ * is — but every pair needs a colour a player can tell from the others, and
+ * there are twelve of those. Fifty-six cells is where a lattice starts needing
+ * a thirteenth. Twelve by twelve would want somewhere north of twenty-five,
+ * which is not a puzzle, it is a colour-matching exam.
+ *
+ * Difficulty inside a chapter is the search cost, which is measured;
+ * difficulty between chapters is the size, which is chosen.
  */
 export const CHAPTER_NAMES: Record<string, string[]> = {
   classic: ['First Nine', 'Wider', 'Sixteen', 'Twenty', 'Twenty-Five', 'The Long Way'],
   coloured: ['Two Strings', 'Sharing', 'Three Strings', 'Crowded', 'Four Strings', 'Full House'],
-  grid: ['The Lattice', 'Wider Grid', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two'],
+  grid: [
+    'The Lattice', 'Twenty', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two',
+    'Seven Square', 'Fifty-Six',
+  ],
 };
 
 /**

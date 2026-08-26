@@ -2,22 +2,22 @@
  * The gate. Every shipped board, re-proven from the JSON that actually ships.
  *
  * The designer already checked all of this, but the designer is not what runs
- * in CI — the files are. Six questions per board, and a board that fails any
+ * in CI — the files are. Five questions per board, and a board that fails any
  * of them is not a puzzle:
  *
  *   1. Is the answer it ships with actually legal?
  *   2. Is it the ONLY answer?
  *   3. Is every post reachable at all, so the board is not quietly impossible?
  *   4. Is it the right size and shape for the mode it claims to be?
- *   5. Where the drawn string touches itself, is it only where a nail holds it?
- *   6. Can a thumb actually draw the answer without snatching up other posts?
+ *   5. Can a thumb actually draw the answer without snatching up other posts,
+ *      and does every string have a colour of its own to be known by?
  *
  *   npx tsx scripts/validate.ts
  */
 
 import { readFileSync } from 'node:fs';
 import {
-  compile, segPointDist2, CLEAR_STRING, WRAP, GRAB_POST, type Board, type Pt,
+  compile, segPointDist2, grabRadius, type Board,
 } from '../src/core/board.js';
 import { judge } from '../src/core/check.js';
 import { search } from '../src/core/search.js';
@@ -28,40 +28,6 @@ const MODES = ['classic', 'coloured', 'grid'] as const;
  * legitimately gets thrown out here for taking longer than this allows.
  */
 const NODES = 900_000;
-
-/**
- * How far from a nail the drawn string still lies on itself.
- *
- * The contact rule excuses the string from clearing itself within WRAP of the
- * post it turns at — that is what lets a hairpin exist at all, and it is the
- * one place the rule is looser than the picture. So it is worth measuring on
- * the shipped drawings rather than trusting the argument: this samples the
- * answer's own polyline where it turns and reports the furthest point from the
- * nail at which the two legs are still within a string's width of each other.
- * Anything past WRAP would be a visible doubled line the rule had waved
- * through, which is exactly the failure the allowance risks.
- */
-function selfContactReach(board: Board): number {
-  const P = board.posts;
-  const STEPS = 60;
-  let worst = 0;
-  for (const path of board.solution) {
-    for (let i = 1; i + 1 < path.length; i++) {
-      const mid = P[path[i]];
-      const legs: Pt[] = [P[path[i - 1]], P[path[i + 1]]];
-      for (let k = 1; k <= STEPS; k++) {
-        const t = k / STEPS;
-        const p: Pt = [
-          mid[0] + (legs[0][0] - mid[0]) * t,
-          mid[1] + (legs[0][1] - mid[1]) * t,
-        ];
-        if (segPointDist2(mid, legs[1], p) >= CLEAR_STRING ** 2) continue;
-        worst = Math.max(worst, Math.hypot(p[0] - mid[0], p[1] - mid[1]));
-      }
-    }
-  }
-  return worst;
-}
 
 /** The closest any answer run comes to a post it does not use. */
 function thumbClearance(board: Board): number {
@@ -147,21 +113,22 @@ for (const mode of MODES) {
      * all. This is the check that the boards are playable by thumb and not
      * only solvable on paper.
      */
+    const reach = grabRadius(board);
     const graze = thumbClearance(board);
-    if (graze < GRAB_POST) {
+    if (graze < reach) {
       console.error(
-        `  ${board.id}: an answer run passes ${graze.toFixed(2)} from a post it does not use, inside the ${GRAB_POST} a thumb catches`,
+        `  ${board.id}: an answer run passes ${graze.toFixed(2)} from a post it does not use, inside the ${reach.toFixed(2)} a thumb catches`,
       );
       bad++;
     }
 
-    const bunched = selfContactReach(board);
-    if (bunched > WRAP + 1e-6) {
-      console.error(
-        `  ${board.id}: its answer lies on itself ${bunched.toFixed(2)} from a nail, past the ${WRAP} a nail holds`,
-      );
+    // Two strings the same colour is two strings the player cannot tell apart.
+    const inks = new Set(board.strands.map((s) => s.color));
+    if (board.strands.length > 1 && inks.size !== board.strands.length) {
+      console.error(`  ${board.id}: ${board.strands.length} strings share ${inks.size} colours`);
       bad++;
     }
+
   }
 
   console.log(

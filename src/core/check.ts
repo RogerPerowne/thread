@@ -23,9 +23,7 @@ export type Break =
   /** A run that cannot exist: it clips a post it does not use, or a block. */
   | 'blocked'
   /** Two runs are closer than the string is thick. */
-  | 'touch'
-  /** A turn so tight the string lies along itself past the nail. */
-  | 'fold';
+  | 'touch';
 
 /**
  * Something the player has not done yet. This is NOT a fault and must never be
@@ -42,7 +40,7 @@ export type Missing =
 
 export type Fault = Break | Missing;
 
-const BREAKS: readonly Break[] = ['touch', 'fold', 'blocked', 'reuse'];
+const BREAKS: readonly Break[] = ['touch', 'blocked', 'reuse'];
 
 export type Verdict = {
   readonly solved: boolean;
@@ -110,14 +108,15 @@ export function judge(c: Compiled, attempt: Attempt, partial = false): Verdict {
     }
   }
 
-  // --- no two runs may touch, and no string may fold -----------------------
+  /*
+   * No two runs may lie across each other. Runs that meet at a post are a
+   * string wrapped round a nail and are never in conflict, so there is only
+   * one kind of contact left to name.
+   */
   for (let i = 0; i < laid.length; i++) {
     for (let j = i + 1; j < laid.length; j++) {
       if (!conflicts(c, laid[i], laid[j])) continue;
-      const r = c.runs[laid[i]];
-      const s = c.runs[laid[j]];
-      const shares = r.a === s.a || r.a === s.b || r.b === s.a || r.b === s.b;
-      faults.add(shares ? 'fold' : 'touch');
+      faults.add('touch');
       clashes.push(laidPair[i], laidPair[j]);
     }
   }
@@ -159,7 +158,6 @@ export const FAULT_TEXT: Record<Fault, string> = {
   reuse: 'A post can only be used once',
   blocked: 'The string cannot pass there',
   touch: 'The strings are lying on each other',
-  fold: 'That turn is too tight — the string lies on itself',
   unused: 'Every post has to be used',
   ends: 'Each string has to join its own two ends',
 };

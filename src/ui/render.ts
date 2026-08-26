@@ -14,7 +14,7 @@
 
 import { svg } from './dom.js';
 import {
-  type Compiled, POST_R, STRING_W, viewOf,
+  type Compiled, POST_R, STRING_W, GLOW_R, GLOW_SWELL, viewOf,
 } from '../core/board.js';
 import type { Verdict, Attempt } from '../core/check.js';
 
@@ -41,11 +41,6 @@ export type BoardView = {
   /** There is no way to lay string where the thumb just went: say so. */
   refuse(path: readonly number[]): void;
   /**
-   * The stretch that is waiting to be joined back on, drawn faintly so the
-   * player can see what is still there rather than having to remember it.
-   */
-  setWaiting(strand: number, path: readonly number[]): void;
-  /**
    * The loose end, following the finger. `post` is where the string currently
    * ends; x and y are where the thumb is, in board space. `reach` says whether
    * letting go there would actually lay string, which is worth showing before
@@ -68,8 +63,26 @@ export function mountBoard(c: Compiled): BoardView {
     'aria-label': 'board',
     // The solve animation grows the stroke from whatever it is, so the width
     // lives in a variable rather than being repeated in the keyframes.
-    style: `--sw:${SW}`,
+    // The keyframes grow these from whatever they are, so the numbers live in
+    // variables rather than being repeated — and the halo's swell is the same
+    // number the board's window was sized from.
+    style: `--sw:${SW};--swell:${GLOW_SWELL}`,
   });
+
+  /*
+   * The soft red a refused post wears. It is a radial gradient rather than a
+   * blur filter: one gradient serves every post on the board, and a filter on
+   * thirty circles is real work for the compositor at exactly the moment the
+   * player is mid-drag. This is a glow that costs a fill.
+   */
+  const defs = svg('defs');
+  const glowFill = svg('radialGradient', { id: `refuseglow-${board.id}` });
+  glowFill.append(
+    svg('stop', { offset: '0%', class: 'g0' }),
+    svg('stop', { offset: '38%', class: 'g1' }),
+    svg('stop', { offset: '100%', class: 'g2' }),
+  );
+  defs.appendChild(glowFill);
 
   // --- blocks ---------------------------------------------------------------
   const gBlocks = svg('g', { class: 'blocks' });
@@ -79,12 +92,25 @@ export function mountBoard(c: Compiled): BoardView {
     }));
   }
 
+  /*
+   * The refusal glow, under everything, so the post and the string stay crisp
+   * on top of it and the light reads as coming from behind the board.
+   */
+  const gGlow = svg('g', { class: 'glows' });
+  const glowEl: SVGCircleElement[] = [];
+
   // --- posts, under the string so it reads as wrapped around them -----------
   const gPosts = svg('g', { class: 'posts' });
   const postEl: SVGCircleElement[] = [];
   const ringEl: SVGCircleElement[] = [];
   for (let i = 0; i < board.posts.length; i++) {
     const [x, y] = board.posts[i];
+    const glow = svg('circle', {
+      cx: x, cy: y, r: GLOW_R, class: 'glow',
+      fill: `url(#refuseglow-${board.id})`,
+    });
+    gGlow.appendChild(glow);
+    glowEl.push(glow);
     const ring = svg('circle', { cx: x, cy: y, r: POST_R + 1.5, class: 'pin' });
     const dot = svg('circle', { cx: x, cy: y, r: POST_R, class: 'post' });
     gPosts.append(ring, dot);
@@ -119,18 +145,6 @@ export function mountBoard(c: Compiled): BoardView {
   });
   gStrings.appendChild(lead);
 
-  /*
-   * What is waiting to be joined back on. Grabbing a string in the middle
-   * takes everything past your thumb off the board until your route meets it
-   * again — and with nothing drawn there, the player had to remember what was
-   * there and hope. Drawn faintly it is a promise you can see being kept.
-   */
-  const waiting = svg('path', {
-    class: 'waiting', fill: 'none', 'stroke-width': SW,
-    'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0,
-  });
-  gStrings.insertBefore(waiting, lead);
-
   // --- the nail heads, on top, so the string passes behind them -------------
   const gHeads = svg('g', { class: 'heads' });
   const headEl: SVGCircleElement[] = [];
@@ -141,7 +155,7 @@ export function mountBoard(c: Compiled): BoardView {
     headEl.push(head);
   }
 
-  el.append(gBlocks, gPosts, gClash, gStrings, gHeads);
+  el.append(defs, gGlow, gBlocks, gPosts, gClash, gStrings, gHeads);
 
   /*
    * Animation is CSS class flips, never per-frame JavaScript. A caught post
@@ -226,20 +240,25 @@ export function mountBoard(c: Compiled): BoardView {
   let refusedNow: readonly number[] = [];
 
   function clearRefused(): void {
-    for (const p of refusedNow) postEl[p]?.classList.remove('refused');
+    for (const p of refusedNow) {
+      postEl[p]?.classList.remove('refused');
+      glowEl[p]?.classList.remove('refused');
+    }
     refusedNow = [];
   }
 
   function refuse(path: readonly number[]): void {
     clearRefused();
     for (let i = 0; i < path.length; i++) {
-      const node = postEl[path[i]];
-      if (!node) continue;
-      node.style.setProperty('--step', String(path.length - 1 - i));
-      // Reading a layout property restarts the animation rather than letting
-      // the removal and the addition collapse into one frame with no change.
-      void node.getBoundingClientRect();
-      node.classList.add('refused');
+      const step = String(path.length - 1 - i);
+      for (const node of [postEl[path[i]], glowEl[path[i]]]) {
+        if (!node) continue;
+        node.style.setProperty('--step', step);
+        // Reading a layout property restarts the animation rather than letting
+        // the removal and the addition collapse into one frame with no change.
+        void node.getBoundingClientRect();
+        node.classList.add('refused');
+      }
     }
     refusedNow = [...path];
     clearTimeout(refusing);
@@ -273,9 +292,18 @@ export function mountBoard(c: Compiled): BoardView {
     if (s.from < 0) continue;
     for (const p of [s.from, s.to]) {
       pinned[p] = 1;
-      postEl[p].setAttribute('fill', s.color);
+      /*
+       * The colour goes on as a custom property, not as a fill attribute.
+       * `.post` sets its fill in the stylesheet, and any rule beats a
+       * presentation attribute — so the attribute version had been quietly
+       * doing nothing since it was written. On a Classic board, with one
+       * string, nobody noticed. On a lattice with twelve pairs it is the whole
+       * puzzle: the ends are the only instruction there is, and if they are
+       * all the same dark dot with a pale ring there is nothing to read.
+       */
+      postEl[p].style.setProperty('--ink', s.color);
       postEl[p].classList.add('end');
-      ringEl[p].setAttribute('stroke', s.color);
+      ringEl[p].style.setProperty('--ink', s.color);
       ringEl[p].classList.add('pinned');
     }
   }
@@ -337,17 +365,6 @@ export function mountBoard(c: Compiled): BoardView {
     lead.setAttribute('opacity', '0');
   }
 
-  function setWaiting(strand: number, path: readonly number[]): void {
-    if (path.length === 0) { waiting.setAttribute('opacity', '0'); return; }
-    const d = path.map((p, i) => {
-      const [x, y] = board.posts[p];
-      return `${i === 0 ? 'M' : 'L'}${x} ${y}`;
-    }).join('') + (path.length === 1 ? 'l0 0' : '');
-    waiting.setAttribute('d', d);
-    waiting.setAttribute('stroke', board.strands[strand]?.color ?? '#888');
-    waiting.setAttribute('opacity', '1');
-  }
-
   function at(clientX: number, clientY: number): { x: number; y: number } {
     const r = el.getBoundingClientRect();
     const side = Math.min(r.width, r.height);
@@ -374,6 +391,6 @@ export function mountBoard(c: Compiled): BoardView {
   void c;
   return {
     el, update, at, nearestPost, flashPost, markCursor, celebrate,
-    retract, refuse, setWaiting, setLead, clearLead, dispose,
+    retract, refuse, setLead, clearLead, dispose,
   };
 }

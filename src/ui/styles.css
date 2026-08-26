@@ -623,14 +623,6 @@ button { font: inherit; color: inherit; }
  * goes — string pulled back in rather than a line that stops existing. It is
  * one attribute on one element, so it costs nothing during a drag.
  */
-/* The stretch waiting to be joined back on: there, but not laid yet. */
-.waiting {
-  opacity: 0;
-  pointer-events: none;
-  stroke-opacity: 0.26;
-  stroke-dasharray: 3 3.4;
-}
-
 .recoil {
   opacity: 0;
   pointer-events: none;
@@ -650,25 +642,61 @@ button { font: inherit; color: inherit; }
 }
 
 /*
- * There is no way to lay string from here to there. The posts already on the
- * string pulse red, staggered from the loose end backwards, which says both
- * that the game heard the move and which string it is talking about. Kept
- * quiet on purpose: this is an answer to a question, not a telling-off.
+ * There is no way to lay string from here to there. Every post on the string
+ * lights up red, staggered from the loose end backwards, so the answer says
+ * both that the game heard the move and which string it is talking about.
+ *
+ * The light is what carries it. A post is two board units across and the
+ * board can hold thirty of them, so a post that only changes colour is a dot
+ * changing shade under the very hand that is covering it — easy to miss and
+ * easy to mistake for nothing having happened, which is the one thing this
+ * has to be told apart from. The halo is nearly four times the post's own
+ * width and swells outward, so it reads from the far side of the screen and
+ * from under a thumb.
  *
  * A pinned end wears its strand's colour as a presentation attribute, and any
- * CSS rule beats one of those — so the two ends pulse with the rest rather
+ * CSS rule beats one of those — so the two ends light with the rest rather
  * than sitting it out and making the string look only half spoken for.
  */
+.glow {
+  opacity: 0;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+/* The stops live in <defs>, not inside the circle that uses them, so they are
+   reached from the board rather than through .glow. */
+.board-svg .g0, .board-svg .g1, .board-svg .g2 { stop-color: var(--bad, #cf3520); }
+.board-svg .g0 { stop-opacity: 0.9; }
+.board-svg .g1 { stop-opacity: 0.45; }
+.board-svg .g2 { stop-opacity: 0; }
+.glow.refused {
+  animation: refuseglow 620ms var(--ease);
+  animation-delay: calc(var(--step, 0) * 26ms);
+}
+@keyframes refuseglow {
+  0% { opacity: 0; transform: scale(0.4); }
+  30% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(var(--swell, 1.15)); }
+}
+
 .post.refused {
-  animation: refused 420ms var(--ease);
-  animation-delay: calc(var(--step, 0) * 22ms);
+  animation: refused 620ms var(--ease);
+  animation-delay: calc(var(--step, 0) * 26ms);
 }
 @keyframes refused {
   0%, 100% { fill: var(--ink-2, #2a2a2a); }
-  40% { fill: var(--bad, #cf3520); }
+  32% { fill: var(--bad, #cf3520); }
 }
 .pin { fill: none; stroke-width: 0; }
-.pin.pinned { stroke-width: 1.2; stroke-opacity: 0.4; }
+/*
+ * A pinned end wears its string's colour, solid. On a Coloured or Grid board
+ * that is the only instruction there is — two dots of one colour say "join
+ * these" without a word of text — so it has to be readable at the size a post
+ * is drawn on a lattice of fifty-six.
+ */
+.post.end { fill: var(--ink, var(--ink-2, #2a2a2a)); }
+.pin.pinned { stroke: var(--ink, currentColor); stroke-width: 1.7; stroke-opacity: 1; }
 .head { fill: var(--paper); }
 
 .clash {

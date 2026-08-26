@@ -7,7 +7,7 @@
  */
 
 import './ui/styles.css';
-import { App } from './ui/shell.js';
+import { App, BOARDS } from './ui/shell.js';
 import { compile, runBetween, conflicts } from './core/board.js';
 
 /*
@@ -29,6 +29,10 @@ if (root) {
   // through real pointer events and only ever reads state back.
   (window as unknown as { __thread: unknown }).__thread = {
     solved: () => [...app.solved],
+    /** How many boards each mode ships, so a test can check none went missing. */
+    counts: () => Object.fromEntries(
+      (['classic', 'coloured', 'grid'] as const).map((m) => [m, BOARDS[m].length]),
+    ),
     board: () => app.board,
     /*
      * Whether a run exists between two posts, which is what the harness needs

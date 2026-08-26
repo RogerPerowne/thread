@@ -8,7 +8,7 @@
  *
  * The search is a depth-first walk that grows one strand at a time. What makes
  * it finish at all is the pruning: after every run laid, it asks whether the
- * posts still standing can possibly be covered. Three questions, cheapest
+ * posts still standing can possibly be covered. Four questions, cheapest
  * first, and each of them kills whole subtrees that the raw search would spend
  * minutes inside.
  */
@@ -39,7 +39,8 @@ type State = {
   exhausted: boolean;
   /** Scratch, reused by the pruner so the hot path allocates nothing. */
   readonly queue: Int32Array;
-  readonly seen: Uint8Array;
+  readonly region: Int32Array;
+  readonly reached: Uint8Array;
 };
 
 /** Lay a run: mark it used and shut out everything it conflicts with. */
@@ -82,19 +83,30 @@ function open(st: State, a: number, b: number): number {
  * 1. A post with no way out is already lost.
  * 2. A post with exactly one way out has to be the end of a strand, and there
  *    are only so many ends left to go round.
- * 3. Every post left has to be reachable from somewhere a strand can get to.
+ * 3. The free posts fall into regions. A strand can only be laid inside one of
+ *    them, so a strand whose two ends have ended up in different regions can
+ *    never be joined — and the strand being grown has to be able to reach its
+ *    own far end.
+ * 4. Every post left has to be in a region something can get to.
  *
- * All three are necessary conditions, never sufficient, so this only ever
+ * Three was the missing one, and it was worth a great deal. Without it the
+ * search would lay a route straight across the board, cutting six strands off
+ * from their own far ends, and then explore every arrangement of the wreckage
+ * before finding out. It is what the cost of a big lattice was mostly being
+ * spent on.
+ *
+ * All four are necessary conditions, never sufficient, so this only ever
  * prunes branches that genuinely cannot work.
  */
 function feasible(st: State, head: number, strand: number): boolean {
   const { c, visited } = st;
   const n = c.n;
+  const strands = c.board.strands;
 
   // Ends still available to land on a leftover post: the current strand has
   // one left to place, and each strand not yet started has two.
   let endsLeft = 1;
-  for (let s = strand + 1; s < c.board.strands.length; s++) endsLeft += 2;
+  for (let s = strand + 1; s < strands.length; s++) endsLeft += 2;
 
   let onlyOneWayOut = 0;
   for (let p = 0; p < n; p++) {
@@ -109,28 +121,66 @@ function feasible(st: State, head: number, strand: number): boolean {
     if (deg === 1 && ++onlyOneWayOut > endsLeft) return false;
   }
 
-  // Reachability, from the current head and from the far end of every strand
-  // not yet started.
-  const { queue, seen } = st;
-  seen.fill(0);
-  let qn = 0;
-  const push = (p: number) => {
-    if (p >= 0 && p < n && !seen[p]) { seen[p] = 1; queue[qn++] = p; }
-  };
-  push(head);
-  for (let s = strand + 1; s < c.board.strands.length; s++) {
-    const spec = c.board.strands[s];
-    if (spec.from >= 0 && !visited[spec.from]) push(spec.from);
-    if (spec.to >= 0 && !visited[spec.to]) push(spec.to);
-  }
-  for (let i = 0; i < qn; i++) {
-    const p = queue[i];
-    for (const q of c.neighbours[p]) {
-      if (visited[q] || seen[q]) continue;
-      if (open(st, p, q) >= 0) push(q);
+  /*
+   * Label the free posts by region: two are in the same region when a string
+   * could run between them over free posts alone. `region` is -1 for a post
+   * that is already used.
+   */
+  const { queue, region } = st;
+  region.fill(-1);
+  let regions = 0;
+  for (let start = 0; start < n; start++) {
+    if (visited[start] || region[start] >= 0) continue;
+    const id = regions++;
+    let qn = 0;
+    queue[qn++] = start;
+    region[start] = id;
+    for (let i = 0; i < qn; i++) {
+      const p = queue[i];
+      for (const q of c.neighbours[p]) {
+        if (visited[q] || region[q] >= 0) continue;
+        if (open(st, p, q) >= 0) { region[q] = id; queue[qn++] = q; }
+      }
     }
   }
-  for (let p = 0; p < n; p++) if (!visited[p] && !seen[p]) return false;
+  if (regions === 0) return true;
+
+  // Which regions the growing strand can still get into.
+  const reachable = st.reached;
+  reachable.fill(0, 0, regions);
+  let anyFromHead = false;
+  for (const q of c.neighbours[head]) {
+    if (visited[q] || region[q] < 0) continue;
+    if (open(st, head, q) >= 0) { reachable[region[q]] = 1; anyFromHead = true; }
+  }
+
+  // The strand being grown has to be able to reach its own far end.
+  const mine = strands[strand];
+  if (mine.to >= 0 && !visited[mine.to]) {
+    if (!anyFromHead || region[mine.to] < 0 || !reachable[region[mine.to]]) return false;
+  }
+
+  // A strand not yet started has to have both its ends in one region, and that
+  // region is then somewhere a string can be laid.
+  for (let s = strand + 1; s < strands.length; s++) {
+    const spec = strands[s];
+    if (spec.from < 0 || spec.to < 0) continue;
+    if (visited[spec.from] || visited[spec.to]) return false;
+    if (region[spec.from] !== region[spec.to]) return false;
+    reachable[region[spec.from]] = 1;
+  }
+
+  /*
+   * An unpinned strand can start anywhere, so it does not narrow the regions
+   * down — it only says one more of them can be covered.
+   */
+  let free = 0;
+  for (let s = strand + 1; s < strands.length; s++) {
+    if (strands[s].from < 0) free++;
+  }
+  let unreached = 0;
+  for (let r = 0; r < regions; r++) if (!reachable[r]) unreached++;
+  if (unreached > free) return false;
   return true;
 }
 
@@ -230,7 +280,8 @@ export function search(c: Compiled, cap = 2, maxNodes = DEFAULT_NODES): SearchRe
     nodes: 0,
     exhausted: false,
     queue: new Int32Array(c.n),
-    seen: new Uint8Array(c.n),
+    region: new Int32Array(c.n),
+    reached: new Uint8Array(c.n + 1),
   };
   if (c.n > 0) startStrand(st, 0);
   return { solutions: st.solutions, nodes: st.nodes, exhausted: st.exhausted };
