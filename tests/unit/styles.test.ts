@@ -45,10 +45,17 @@ describe('the viewport units', () => {
     for (const sheet of sheets) {
       for (const rule of rules(sheet.css)) {
         for (const prop of ['height', 'min-height', 'max-height']) {
-          const decls = [...rule.body.matchAll(new RegExp(`${prop}\\s*:([^;]*)`, 'g'))]
+          const decls: string[] = [...rule.body.matchAll(new RegExp(`${prop}\\s*:([^;]*)`, 'g'))]
             .map((d) => d[1]);
-          const lastVh = decls.findLastIndex((d) => /\d\s*vh\b/.test(d));
-          const lastDvh = decls.findLastIndex((d) => /\d\s*dvh\b/.test(d));
+          // `findLastIndex` would read better and needs a newer lib than this
+          // project targets; a loop costs nothing and keeps the target honest.
+          const lastOf = (test: RegExp): number => {
+            let at = -1;
+            for (let i = 0; i < decls.length; i++) if (test.test(decls[i])) at = i;
+            return at;
+          };
+          const lastVh = lastOf(/\d\s*vh\b/);
+          const lastDvh = lastOf(/\d\s*dvh\b/);
           if (lastVh === -1 || lastDvh === -1) continue;
           expect(
             lastVh,
