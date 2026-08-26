@@ -2,7 +2,7 @@
  * The gate. Every shipped board, re-proven from the JSON that actually ships.
  *
  * The designer already checked all of this, but the designer is not what runs
- * in CI — the files are. Five questions per board, and a board that fails any
+ * in CI — the files are. Six questions per board, and a board that fails any
  * of them is not a puzzle:
  *
  *   1. Is the answer it ships with actually legal?
@@ -10,13 +10,14 @@
  *   3. Is every post reachable at all, so the board is not quietly impossible?
  *   4. Is it the right size and shape for the mode it claims to be?
  *   5. Where the drawn string touches itself, is it only where a nail holds it?
+ *   6. Can a thumb actually draw the answer without snatching up other posts?
  *
  *   npx tsx scripts/validate.ts
  */
 
 import { readFileSync } from 'node:fs';
 import {
-  compile, segPointDist2, CLEAR_STRING, WRAP, type Board, type Pt,
+  compile, segPointDist2, CLEAR_STRING, WRAP, GRAB_POST, type Board, type Pt,
 } from '../src/core/board.js';
 import { judge } from '../src/core/check.js';
 import { search } from '../src/core/search.js';
@@ -56,6 +57,22 @@ function selfContactReach(board: Board): number {
         ];
         if (segPointDist2(mid, legs[1], p) >= CLEAR_STRING ** 2) continue;
         worst = Math.max(worst, Math.hypot(p[0] - mid[0], p[1] - mid[1]));
+      }
+    }
+  }
+  return worst;
+}
+
+/** The closest any answer run comes to a post it does not use. */
+function thumbClearance(board: Board): number {
+  let worst = Infinity;
+  for (const path of board.solution) {
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = board.posts[path[i]];
+      const b = board.posts[path[i + 1]];
+      for (let p = 0; p < board.posts.length; p++) {
+        if (p === path[i] || p === path[i + 1]) continue;
+        worst = Math.min(worst, Math.sqrt(segPointDist2(a, b, board.posts[p])));
       }
     }
   }
@@ -120,6 +137,22 @@ for (const mode of MODES) {
         console.error(`  ${board.id}: post ${p} has no legal run at all`);
         bad++;
       }
+    }
+
+    /*
+     * Playing is one long drag, so the string is laid by sweeping a thumb
+     * along the route — and a sweep catches every post it passes within
+     * GRAB_POST of. If an answer run grazed a post it does not use, drawing
+     * that run would snatch the post up and the answer could not be drawn at
+     * all. This is the check that the boards are playable by thumb and not
+     * only solvable on paper.
+     */
+    const graze = thumbClearance(board);
+    if (graze < GRAB_POST) {
+      console.error(
+        `  ${board.id}: an answer run passes ${graze.toFixed(2)} from a post it does not use, inside the ${GRAB_POST} a thumb catches`,
+      );
+      bad++;
     }
 
     const bunched = selfContactReach(board);

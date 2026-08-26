@@ -9,11 +9,12 @@
  */
 
 import { svg } from './dom.js';
-import { POST_R, VIEW, type Board } from '../core/board.js';
+import { POST_R, viewOf, type Board } from '../core/board.js';
 
 export function miniBoard(board: Board, ink: string): SVGSVGElement {
+  const view = viewOf(board);
   const root = svg('svg', {
-    viewBox: `${VIEW.at} ${VIEW.at} ${VIEW.side} ${VIEW.side}`,
+    viewBox: `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.side.toFixed(2)} ${view.side.toFixed(2)}`,
     class: 'mini', 'aria-hidden': 'true',
   });
 

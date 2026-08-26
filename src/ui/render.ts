@@ -14,7 +14,7 @@
 
 import { svg } from './dom.js';
 import {
-  type Compiled, POST_R, STRING_W, VIEW,
+  type Compiled, POST_R, STRING_W, viewOf,
 } from '../core/board.js';
 import type { Verdict, Attempt } from '../core/check.js';
 
@@ -34,6 +34,18 @@ export type BoardView = {
   /** The board is solved: run the string round once. */
   celebrate(): void;
   /**
+   * String has just been taken back off. `path` is the discarded run of posts,
+   * the post it now ends at first, so the recoil travels outwards from there.
+   */
+  retract(strand: number, path: readonly number[]): void;
+  /** There is no way to lay string where the thumb just went: say so. */
+  refuse(path: readonly number[]): void;
+  /**
+   * The stretch that is waiting to be joined back on, drawn faintly so the
+   * player can see what is still there rather than having to remember it.
+   */
+  setWaiting(strand: number, path: readonly number[]): void;
+  /**
    * The loose end, following the finger. `post` is where the string currently
    * ends; x and y are where the thumb is, in board space. `reach` says whether
    * letting go there would actually lay string, which is worth showing before
@@ -46,9 +58,12 @@ export type BoardView = {
 
 export function mountBoard(c: Compiled): BoardView {
   const board = c.board;
+  // The window is this board's own extent, so nothing it draws can fall off
+  // the edge and a board that does not fill the square is drawn larger.
+  const view = viewOf(board);
   const el = svg('svg', {
     class: 'board-svg',
-    viewBox: `${VIEW.at} ${VIEW.at} ${VIEW.side} ${VIEW.side}`,
+    viewBox: `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.side.toFixed(2)} ${view.side.toFixed(2)}`,
     preserveAspectRatio: 'xMidYMid meet',
     'aria-label': 'board',
     // The solve animation grows the stroke from whatever it is, so the width
@@ -104,6 +119,18 @@ export function mountBoard(c: Compiled): BoardView {
   });
   gStrings.appendChild(lead);
 
+  /*
+   * What is waiting to be joined back on. Grabbing a string in the middle
+   * takes everything past your thumb off the board until your route meets it
+   * again — and with nothing drawn there, the player had to remember what was
+   * there and hope. Drawn faintly it is a promise you can see being kept.
+   */
+  const waiting = svg('path', {
+    class: 'waiting', fill: 'none', 'stroke-width': SW,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0,
+  });
+  gStrings.insertBefore(waiting, lead);
+
   // --- the nail heads, on top, so the string passes behind them -------------
   const gHeads = svg('g', { class: 'heads' });
   const headEl: SVGCircleElement[] = [];
@@ -140,6 +167,85 @@ export function mountBoard(c: Compiled): BoardView {
     postEl[i]?.classList.add('cursor');
   }
 
+  /*
+   * Taking string back off.
+   *
+   * The discarded stretch is drawn on a spare path and pulled back in: a dash
+   * as long as the whole thing, wound off from the far end towards the post
+   * the string now ends at, thinning as it goes. String that recoils reads as
+   * string you took back; a line that simply stops being there reads as a bug,
+   * and on a board you are still dragging across it is easy to miss entirely.
+   *
+   * Several of them, cycled, because winding back over five posts takes five
+   * stretches off in one sweep and each deserves its own recoil rather than
+   * cutting the one before it short.
+   */
+  const recoils: SVGPathElement[] = [];
+  for (let i = 0; i < 6; i++) {
+    const p = svg('path', {
+      class: 'recoil', fill: 'none', 'stroke-width': SW,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    });
+    gStrings.appendChild(p);
+    recoils.push(p);
+  }
+  let nextRecoil = 0;
+
+  function retract(strand: number, path: readonly number[]): void {
+    if (path.length < 2) return;
+    const node = recoils[nextRecoil];
+    nextRecoil = (nextRecoil + 1) % recoils.length;
+    const d = path.map((p, i) => {
+      const [x, y] = board.posts[p];
+      return `${i === 0 ? 'M' : 'L'}${x} ${y}`;
+    }).join('');
+    node.setAttribute('d', d);
+    node.setAttribute('stroke', board.strands[strand]?.color ?? '#888');
+    node.classList.remove('go');
+    // Measuring the path is what makes the dash exactly its own length, so the
+    // recoil ends at the new head rather than somewhere near it.
+    const len = node.getTotalLength();
+    node.style.setProperty('--len', String(len));
+    node.setAttribute('stroke-dasharray', String(len));
+    node.classList.add('go');
+  }
+
+  /*
+   * A refused reach. The posts already on the string pulse, from the loose end
+   * backwards, so the answer names the string it is about rather than being a
+   * general flash of red — and the stagger makes it read as a run down the
+   * string instead of everything blinking at once.
+   */
+  let refusing = 0;
+  /*
+   * Which posts are wearing the pulse right now. Clearing "the path we were
+   * just given" is not the same thing: a second refusal on a shorter string
+   * cancels the first one's timer, and every post the first one marked and the
+   * second one did not would keep its red for good.
+   */
+  let refusedNow: readonly number[] = [];
+
+  function clearRefused(): void {
+    for (const p of refusedNow) postEl[p]?.classList.remove('refused');
+    refusedNow = [];
+  }
+
+  function refuse(path: readonly number[]): void {
+    clearRefused();
+    for (let i = 0; i < path.length; i++) {
+      const node = postEl[path[i]];
+      if (!node) continue;
+      node.style.setProperty('--step', String(path.length - 1 - i));
+      // Reading a layout property restarts the animation rather than letting
+      // the removal and the addition collapse into one frame with no change.
+      void node.getBoundingClientRect();
+      node.classList.add('refused');
+    }
+    refusedNow = [...path];
+    clearTimeout(refusing);
+    refusing = window.setTimeout(clearRefused, 900);
+  }
+
   let celebrating = 0;
   function celebrate(): void {
     el.classList.remove('celebrate');
@@ -153,6 +259,8 @@ export function mountBoard(c: Compiled): BoardView {
     for (const t of flashes.values()) clearTimeout(t);
     flashes.clear();
     clearTimeout(celebrating);
+    clearTimeout(refusing);
+    clearRefused();
   }
 
   /*
@@ -229,14 +337,25 @@ export function mountBoard(c: Compiled): BoardView {
     lead.setAttribute('opacity', '0');
   }
 
+  function setWaiting(strand: number, path: readonly number[]): void {
+    if (path.length === 0) { waiting.setAttribute('opacity', '0'); return; }
+    const d = path.map((p, i) => {
+      const [x, y] = board.posts[p];
+      return `${i === 0 ? 'M' : 'L'}${x} ${y}`;
+    }).join('') + (path.length === 1 ? 'l0 0' : '');
+    waiting.setAttribute('d', d);
+    waiting.setAttribute('stroke', board.strands[strand]?.color ?? '#888');
+    waiting.setAttribute('opacity', '1');
+  }
+
   function at(clientX: number, clientY: number): { x: number; y: number } {
     const r = el.getBoundingClientRect();
     const side = Math.min(r.width, r.height);
     const ox = r.left + (r.width - side) / 2;
     const oy = r.top + (r.height - side) / 2;
     return {
-      x: VIEW.at + ((clientX - ox) / side) * VIEW.side,
-      y: VIEW.at + ((clientY - oy) / side) * VIEW.side,
+      x: view.x + ((clientX - ox) / side) * view.side,
+      y: view.y + ((clientY - oy) / side) * view.side,
     };
   }
 
@@ -255,6 +374,6 @@ export function mountBoard(c: Compiled): BoardView {
   void c;
   return {
     el, update, at, nearestPost, flashPost, markCursor, celebrate,
-    setLead, clearLead, dispose,
+    retract, refuse, setWaiting, setLead, clearLead, dispose,
   };
 }

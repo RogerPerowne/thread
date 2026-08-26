@@ -48,14 +48,6 @@ export type Pt = readonly [number, number];
 /** Board space is 0..100 on both axes, whatever the screen is. */
 export const BOARD = 100;
 
-/**
- * The part of board space worth showing. Posts are laid inside a margin, so
- * drawing the full 0..100 square wastes about a fifth of a phone screen on
- * blank paper — and on a phone that fifth is the difference between a post you
- * can hit with a thumb and one you cannot.
- */
-export const VIEW = { at: 8, side: BOARD - 16 };
-
 /** A post's radius, and the string's half-width, in board units. */
 export const POST_R = 2.0;
 export const STRING_W = 1.0;
@@ -74,6 +66,32 @@ export const STRING_W = 1.0;
  * against itself for about this far either side of the nail, and no further.
  */
 export const WRAP = 4;
+
+/**
+ * How far outside a post's centre anything is ever drawn around it.
+ *
+ * The widest of them is the ring on a pinned end: radius POST_R + 1.5, stroked
+ * at 1.2, so its outer edge is 0.6 past that. The others are all inside it —
+ * a caught post swells to 1.55 of its radius, the clash mark is 4.4 wide, the
+ * solve grows the string to three, the string's own cap is STRING_W. This is
+ * the number the view has to allow for, and getting it from the drawing rather
+ * than guessing is the difference between a board that fits and one whose top
+ * row is shaved off.
+ */
+export const DRAW_R = POST_R + 2.1;
+
+/**
+ * How close a thumb has to get to catch a post, in board units.
+ *
+ * It lives here rather than with the play screen because it is a contract
+ * between the designer and the player, not a tuning knob: a thumb sweeping
+ * along a run catches everything it passes this close to, so a board whose
+ * answer runs graze other posts would snatch them up mid-drag and there would
+ * be no way to draw the answer at all. The gate holds every shipped board to
+ * it. As it happens no answer run comes within eleven of a post it does not
+ * use, so there is a wide margin — but the margin is checked, not assumed.
+ */
+export const GRAB_POST = 7;
 
 export type Block = { x: number; y: number; w: number; h: number };
 
@@ -102,6 +120,41 @@ export type Board = {
   /** The answer, as one ordered post list per strand. */
   readonly solution: readonly (readonly number[])[];
 };
+
+/** A square window on board space, in board units. */
+export type View = { readonly x: number; readonly y: number; readonly side: number };
+
+/**
+ * The part of board space this board actually occupies, squared up.
+ *
+ * It used to be one fixed window, 8..92, on the grounds that posts are laid
+ * inside a margin and drawing the whole 0..100 square wastes a fifth of a
+ * phone screen on blank paper. Both halves of that were wrong. Posts are
+ * shaken off their lattice by up to 3.5, so they reach 7.35 — outside the
+ * window — and around a pinned one there is another DRAW_R of ring, so the
+ * top and bottom rows were being shaved off. And a fixed window is too big for
+ * boards that do not fill it.
+ *
+ * Measuring the board instead fixes both: nothing can be cut off, because the
+ * window is defined as everything that gets drawn, and a board that occupies
+ * less of the square is drawn larger. The square-up is because the surface is
+ * square and the projection is xMidYMid meet — without it the shorter axis
+ * would letterbox and the mapping from thumb to board would need to know it.
+ */
+export function viewOf(board: Board): View {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of board.posts) {
+    x0 = Math.min(x0, x - DRAW_R); y0 = Math.min(y0, y - DRAW_R);
+    x1 = Math.max(x1, x + DRAW_R); y1 = Math.max(y1, y + DRAW_R);
+  }
+  for (const b of board.blocks) {
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+    x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+  }
+  if (!Number.isFinite(x0)) return { x: 0, y: 0, side: BOARD };
+  const side = Math.max(x1 - x0, y1 - y0);
+  return { x: x0 - (side - (x1 - x0)) / 2, y: y0 - (side - (y1 - y0)) / 2, side };
+}
 
 // ---------------------------------------------------------------------------
 // Distance

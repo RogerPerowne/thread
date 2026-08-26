@@ -8,7 +8,7 @@
 
 import './ui/styles.css';
 import { App } from './ui/shell.js';
-import { compile, runBetween } from './core/board.js';
+import { compile, runBetween, conflicts } from './core/board.js';
 
 /*
  * Pinch and double-tap zoom, shut off at the source. The viewport meta asks
@@ -38,5 +38,19 @@ if (root) {
      */
     runIsLegal: (a: number, b: number) =>
       app.board !== null && runBetween(compile(app.board), a, b) >= 0,
+    /*
+     * Whether two runs would be in contact. The harness needs it to build a
+     * board that is genuinely broken — a test that lays "some legal run" and
+     * asserts a warning is a test that passes for the wrong reason on most
+     * boards and fails on the rest. Like the above it reads the compiled board
+     * and decides nothing.
+     */
+    runsTouch: (a: number, b: number, x: number, y: number) => {
+      if (app.board === null) return false;
+      const c = compile(app.board);
+      const r = runBetween(c, a, b);
+      const s = runBetween(c, x, y);
+      return r >= 0 && s >= 0 && conflicts(c, r, s);
+    },
   };
 }

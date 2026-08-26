@@ -51,23 +51,26 @@ export async function solvedIds(page: Page): Promise<string[]> {
 /**
  * Board space to viewport pixels, via the SVG's own square.
  *
- * The board is drawn through a cropped viewBox rather than the full 0..100
- * square — posts sit inside a margin, and showing that margin wastes a fifth
- * of a phone screen. These two numbers have to match `VIEW` in core/board.ts,
- * or the harness taps somewhere the player would not.
+ * The window is read off the drawn element rather than copied from the source.
+ * It used to be two constants here that had to match `VIEW` in core/board.ts,
+ * with a comment saying so — and the moment the window became each board's own
+ * extent, constants like that would have had the harness tapping somewhere no
+ * player ever taps, while still passing. Asking the page where it is looking
+ * is the only version that cannot drift.
  */
-const VIEW_AT = 8;
-const VIEW_SIDE = 84;
-
 export async function pointMapper(page: Page): Promise<(p: [number, number]) => { x: number; y: number }> {
-  const box = await page.locator('.board-svg').first().boundingBox();
+  const svg = page.locator('.board-svg').first();
+  const box = await svg.boundingBox();
   if (!box) throw new Error('the board is not on screen');
+  const vb = (await svg.getAttribute('viewBox'))?.split(/\s+/).map(Number);
+  if (!vb || vb.length !== 4) throw new Error('the board has no viewBox');
+  const [vx, vy, vw] = vb;
   const side = Math.min(box.width, box.height);
   const ox = box.x + (box.width - side) / 2;
   const oy = box.y + (box.height - side) / 2;
   return (p) => ({
-    x: ox + ((p[0] - VIEW_AT) / VIEW_SIDE) * side,
-    y: oy + ((p[1] - VIEW_AT) / VIEW_SIDE) * side,
+    x: ox + ((p[0] - vx) / vw) * side,
+    y: oy + ((p[1] - vy) / vw) * side,
   });
 }
 

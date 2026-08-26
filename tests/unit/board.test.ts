@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   compile, runIsLegal, runsConflict, segSegDist2, segPointDist2, segRectDist2,
   turnAngle, CLEAR_POST, CLEAR_STRING, MIN_TURN_DEG, MIN_RUN, WRAP,
-  type Board, type Pt,
+  viewOf, DRAW_R, type Board, type Pt,
 } from '../../src/core/board.js';
 import { judge, firstBreak, whatIsLeft } from '../../src/core/check.js';
 import { search } from '../../src/core/search.js';
@@ -182,6 +182,41 @@ function bruteForce(b: Board): string[] {
   rec();
   return [...out].sort();
 }
+
+describe('the window on the board', () => {
+  it('covers everything the board draws, ring and all', () => {
+    // A post at the very edge with the widest thing drawn around it. The old
+    // fixed 8..92 window cut exactly this off, which is what shaved the top
+    // and bottom rows on a phone.
+    const b = board({ posts: [[6, 6], [90, 90]] });
+    const v = viewOf(b);
+    expect(v.x).toBeLessThanOrEqual(6 - DRAW_R);
+    expect(v.y).toBeLessThanOrEqual(6 - DRAW_R);
+    expect(v.x + v.side).toBeGreaterThanOrEqual(90 + DRAW_R);
+    expect(v.y + v.side).toBeGreaterThanOrEqual(90 + DRAW_R);
+  });
+
+  it('covers the blocks too', () => {
+    const b = board({
+      posts: [[50, 50], [70, 70]],
+      blocks: [{ x: 2, y: 3, w: 5, h: 5 }],
+    });
+    const v = viewOf(b);
+    expect(v.x).toBeLessThanOrEqual(2);
+    expect(v.y).toBeLessThanOrEqual(3);
+  });
+
+  it('is square, because the surface is', () => {
+    // A board wider than it is tall still gets a square window, centred —
+    // otherwise the shorter axis letterboxes and thumb-to-board needs to know.
+    const b = board({ posts: [[10, 48], [90, 52]] });
+    const v = viewOf(b);
+    const midX = v.x + v.side / 2;
+    const midY = v.y + v.side / 2;
+    expect(midX).toBeCloseTo(50);
+    expect(midY).toBeCloseTo(50);
+  });
+});
 
 describe('the searcher agrees with judging every ordering by hand', () => {
   const cases: [string, Board][] = [

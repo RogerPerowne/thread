@@ -617,6 +617,56 @@ button { font: inherit; color: inherit; }
 
 /* No `stroke` here: the ring gets its colour from a presentation attribute,
    and a CSS declaration would win over it and paint every ring the same. */
+/*
+ * String being taken back off. The dash is the path's own length, wound off
+ * from the far end towards the post the string now ends at, thinning as it
+ * goes — string pulled back in rather than a line that stops existing. It is
+ * one attribute on one element, so it costs nothing during a drag.
+ */
+/* The stretch waiting to be joined back on: there, but not laid yet. */
+.waiting {
+  opacity: 0;
+  pointer-events: none;
+  stroke-opacity: 0.26;
+  stroke-dasharray: 3 3.4;
+}
+
+.recoil {
+  opacity: 0;
+  pointer-events: none;
+  stroke-dashoffset: 0;
+}
+.recoil.go {
+  animation: recoil 320ms cubic-bezier(0.32, 0, 0.16, 1) forwards;
+}
+@keyframes recoil {
+  0% { opacity: 0.9; stroke-dashoffset: 0; stroke-width: var(--sw); }
+  60% { opacity: 0.5; }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: var(--len);
+    stroke-width: calc(var(--sw) * 0.5);
+  }
+}
+
+/*
+ * There is no way to lay string from here to there. The posts already on the
+ * string pulse red, staggered from the loose end backwards, which says both
+ * that the game heard the move and which string it is talking about. Kept
+ * quiet on purpose: this is an answer to a question, not a telling-off.
+ *
+ * A pinned end wears its strand's colour as a presentation attribute, and any
+ * CSS rule beats one of those — so the two ends pulse with the rest rather
+ * than sitting it out and making the string look only half spoken for.
+ */
+.post.refused {
+  animation: refused 420ms var(--ease);
+  animation-delay: calc(var(--step, 0) * 22ms);
+}
+@keyframes refused {
+  0%, 100% { fill: var(--ink-2, #2a2a2a); }
+  40% { fill: var(--bad, #cf3520); }
+}
 .pin { fill: none; stroke-width: 0; }
 .pin.pinned { stroke-width: 1.2; stroke-opacity: 0.4; }
 .head { fill: var(--paper); }

@@ -90,9 +90,13 @@ for (const [mode, n] of [['classic', 30], ['coloured', 25], ['grid', 20]]) {
   ok(`${mode} ${n} loaded`, !!board && board.mode === mode);
   const box = await page.locator('.board-svg').boundingBox();
   const side = Math.min(box.width, box.height);
+  // Read the window off the element. Each board now has its own, so a pair of
+  // constants here would tap somewhere no player taps and still pass.
+  const [vx, vy, vw] = (await page.locator('.board-svg').getAttribute('viewBox'))
+    .split(/\s+/).map(Number);
   const at = (p) => ({
-    x: box.x + (box.width - side) / 2 + ((p[0] - 8) / 84) * side,
-    y: box.y + (box.height - side) / 2 + ((p[1] - 8) / 84) * side,
+    x: box.x + (box.width - side) / 2 + ((p[0] - vx) / vw) * side,
+    y: box.y + (box.height - side) / 2 + ((p[1] - vy) / vw) * side,
   });
   for (const path of board.solution) {
     const f = at(board.posts[path[0]]);
