@@ -160,6 +160,34 @@ for (const game of games) {
       await page.mouse.move(t.x, t.y);
       await page.mouse.up();
     }
+  } else if (game === 'shape') {
+    const svg = page.locator('.shape-svg');
+    const box = await svg.boundingBox();
+    const v = handle.view;
+    const side = Math.min(box.width / v.W, box.height / v.H);
+    const left = box.x + (box.width - side * v.W) / 2;
+    const top = box.y + (box.height - side * v.H) / 2;
+    const at = (x, y) => ({ x: left + x * side, y: top + y * side });
+    for (let cell = 0; cell < handle.shape.answer.length; cell++) {
+      const pick = handle.shape.answer[cell];
+      const c = await page.evaluate((k) => window.__puzzles.board().cellBox(k), cell);
+      const from = at(c.x + c.size / 2, c.y + c.size / 2);
+      // Press to open the ring, then tap the option — the one way in that can
+      // reach the middle as well as the outside.
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.up();
+      const spot = await page.evaluate((k) => {
+        const h = window.__puzzles.board();
+        const g = h.ring();
+        const s = h.ringSpot(k);
+        return { x: g.cx + s.x, y: g.cy + s.y };
+      }, pick);
+      const to = at(spot.x, spot.y);
+      await page.mouse.move(to.x, to.y);
+      await page.mouse.down();
+      await page.mouse.up();
+    }
   } else {
     /*
      * A game with no driver here is a game this check silently stops checking.
