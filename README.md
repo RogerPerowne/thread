@@ -1,12 +1,12 @@
 # Puzzles
 
 A small catalogue of logic puzzles that share a shell and share nothing else.
-Four games are in it so far.
+Six games are in it.
 
-**Thread** — a board of posts and a piece of string. Use every post. The string
-never lies on other string, or on itself, and it never crosses a block. The
+**Thread** — a lattice of posts and a string for each colour. Use every post
+once, run each string between its own two dots, and never through a wall. The
 drawing is the rule: what you see stroked on the board is exactly the set of
-points the string occupies, so if it looks like it touches, it touches.
+points the string occupies.
 
 **Zigzag** — one line through every cell, in order. The numbers say which cell
 the line may step to next, and exactly one route uses them all.
@@ -19,15 +19,26 @@ the number beside them.
 outside say what you would see looking in: the shape, and how many shapes deep
 it sits.
 
+**Hexagony** — hexagonal tiles cut into six numbered sectors. Every tile has a
+place and every place a tile, and where two of them touch the numbers facing
+each other have to match. Tiles never turn.
+
+**Isolate** — draw walls on the lines between cells until every room holds
+exactly two circles. A number in a circle says how many cells its room takes,
+a cross says at least two walls meet at that corner, and the walls already
+drawn are part of the board.
+
 ```
 pnpm install
 pnpm dev        # play it
 pnpm test       # unit tests
 pnpm validate   # the board gate: every Thread board re-proven unique
-pnpm boards     # regenerate boards/*.json from the designers
+pnpm boards     # regenerate boards/thread.json from the designer
 pnpm zigzag     # regenerate puzzles/zigzag.json
 pnpm nine       # regenerate puzzles/nine.json
 pnpm shape      # regenerate puzzles/shape.json
+pnpm hex        # regenerate puzzles/hex.json
+pnpm isolate    # regenerate puzzles/isolate.json
 pnpm e2e        # solve every board through real pointer events
 pnpm ci         # everything CI runs
 ```
@@ -66,7 +77,7 @@ src/games/thread   board, check, search, make, session, play, render, mini
 src/games/zigzag   model, solve, design, session, view
 src/games/nine     model, solve, design, session, view
 src/games/shape    model, solve, design, session, view, glyphs
-boards/            Thread's 190 boards, generated and proven, never authored
+boards/            Thread's 56 boards, generated and proven, never authored
 puzzles/           Zigzag's 44, One to Nine's 64, Shape Up's 66
 scripts/           the designers, the gate, and the audits
 tests/             vitest unit tests + playwright end-to-end
@@ -96,11 +107,14 @@ round: draw a legal answer, then constrain the board until that answer is the
 only one. A puzzle built this way cannot be impossible, because the answer
 existed before the puzzle did.
 
-Thread's designer draws a covering path, cuts it into strands, and then carves
-blocks in one at a time for as long as the solver still finds rival answers —
-up to thirty-two of them, which is what a six-by-five board actually needs. On
-Grid boards there is nothing to carve with, so it pins one more pair of ends
-instead, cutting at the first run a rival does not use.
+Thread's designer draws a covering path over the lattice, cuts it into strings,
+and then takes freedoms away for as long as the solver still finds rivals: a
+wall across a run the rival used, or — when no wall will fit — one more cut,
+which costs a colour. Isolate's cuts the grid into rooms, drops two circles in
+each, and adds clues until the board has one answer that can also be reasoned
+out; then it lifts every clue in turn and puts back only the ones it needed,
+which is the difference between a board with a cross on every corner and a
+board with two.
 
 Shape Up goes the other way and takes clues AWAY. Every clue the answer could
 carry is generated, then removed one at a time for as long as exactly one
@@ -199,7 +213,7 @@ space it was given.
 
 Every end-to-end test drives the app through **real pointer events**. Solving a
 board by calling into it would prove the rules work and nothing at all about
-whether the game is playable, and those are different questions. All 190 Thread
+whether the game is playable, and those are different questions. All 56 Thread
 boards, all 44 Zigzag boards, all 64 One to Nine boards and all 66 Shape Up
 boards are solved by dragging.
 
@@ -210,21 +224,21 @@ no player taps and still go green.
 
 ## Accessibility
 
-Full keyboard play in both games — arrows move, Enter acts.
+Full keyboard play in every game — arrows move, Enter acts.
 `prefers-reduced-motion` is honoured: durations collapse and nothing that
 carries meaning is removed. Focus is visible and never removed; the keyboard is
 a supported way to play. On the path, every state is told by shape and fill as
 well as by colour, and each tile carries its own number.
 
-Colour is never the only carrier. A Thread board with twelve strands needs
-twelve pairs told apart, and twelve inks that separate cleanly for one player
-collapse to two or three under dichromacy — the palette's worst pair differs by
-1.02:1 in lightness, so hue was carrying all of it, and no re-ordering fixes
-that. Every pinned end carries its strand's **number**. It is a number rather
-than a dash pattern on the string, because a dashed string would break the one
-promise the board makes: what is drawn is exactly the set of points the string
-occupies. A board with a single strand has nothing to tell apart and is left
-plain.
+Colour is never the only carrier, and where it has to be one it is measured.
+Thread pairs its strings by colour alone; twelve inks could not do that — the
+worst pair of that palette measured 2.1 in colour difference under simulated
+deuteranopia and protanopia, which is the same ink twice, and every pinned end
+had to carry a number to make up for it. The palette is Okabe and Ito's six
+now, whose worst pair measures 19 the same way, and no board needs more than
+five of them. Hexagony says every sector twice over — a colour and the numeral
+on it — so a board where two of the eight cannot be told apart is still a board
+that can be played.
 
 No icon in the interface is a text character. A gear or an arrow typed as a
 glyph changes shape between platforms, ignores the stroke weight around it and
