@@ -15,7 +15,8 @@
     "ci": "pnpm typecheck && pnpm test && pnpm validate && pnpm build",
     "verify:bytes": "node scripts/verify-deployed-bytes.mjs",
     "boards": "tsx scripts/build-boards.ts",
-    "zigzag": "tsx scripts/build-zigzag.ts"
+    "zigzag": "tsx scripts/build-zigzag.ts",
+    "nine": "tsx scripts/build-nine.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",

@@ -19,9 +19,11 @@ import { App, testHandle } from './platform/app.js';
 import { register } from './platform/registry.js';
 import { thread } from './games/thread/index.js';
 import { zigzag } from './games/zigzag/index.js';
+import { nine } from './games/nine/index.js';
 
 register(thread);
 register(zigzag);
+register(nine);
 
 /*
  * Pinch and double-tap zoom, shut off at the source. The viewport meta asks

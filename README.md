@@ -1,7 +1,7 @@
 # Puzzles
 
 A small catalogue of logic puzzles that share a shell and share nothing else.
-Two games are in it so far.
+Three games are in it so far.
 
 **Thread** — a board of posts and a piece of string. Use every post. The string
 never lies on other string, or on itself, and it never crosses a block. The
@@ -11,6 +11,10 @@ points the string occupies, so if it looks like it touches, it touches.
 **Zigzag** — one line through every cell, in order. The numbers say which cell
 the line may step to next, and exactly one route uses them all.
 
+**One to Nine** — nine digits, six sums, one arrangement. Every digit from one
+to nine used once, and all three rows and all three columns have to come out at
+the number beside them.
+
 ```
 pnpm install
 pnpm dev        # play it
@@ -18,6 +22,7 @@ pnpm test       # unit tests
 pnpm validate   # the board gate: every Thread board re-proven unique
 pnpm boards     # regenerate boards/*.json from the designers
 pnpm zigzag     # regenerate puzzles/zigzag.json
+pnpm nine       # regenerate puzzles/nine.json
 pnpm e2e        # solve every board through real pointer events
 pnpm ci         # everything CI runs
 ```
@@ -54,8 +59,9 @@ src/platform      the app, and what a game has to be
 src/library        library.ts (the home screen), path.ts (a game's ladder)
 src/games/thread   board, check, search, make, session, play, render, mini
 src/games/zigzag   model, solve, design, session, view
+src/games/nine     model, solve, design, session, view
 boards/            Thread's 190 boards, generated and proven, never authored
-puzzles/           Zigzag's 44
+puzzles/           Zigzag's 44 and One to Nine's 64
 scripts/           the designers, the gate, and the audits
 tests/             vitest unit tests + playwright end-to-end
 ```
@@ -106,6 +112,17 @@ nodes the solver has to visit to prove it unique. A nine-post board that takes
 three thousand nodes is a harder puzzle than a thirty-post board that takes
 three hundred, and telling a player otherwise because one has more dots on it
 would be a lie the ladder tells itself.
+
+One to Nine goes further and measures the *deduction* rather than the search,
+because a computer finds a board hard for reasons no person shares: it works
+out every triple that could fill each line, crosses out what the other lines
+rule out, and repeats. The measurement reordered the game's whole ladder.
+Plus and minus look like the easy end and are the hard end — `a + b + c = 15`
+allows twenty-five triples and tells you almost nothing, so only one board in a
+hundred falls to crossing-out alone, while `a x b x c = 336` allows one and two
+in three of those boards come out by pure deduction. So the ladder opens on
+multiplication and ends on addition, and nothing on it gets harder by making
+the sums bigger.
 
 ## The path
 
@@ -165,7 +182,8 @@ space it was given.
 Every end-to-end test drives the app through **real pointer events**. Solving a
 board by calling into it would prove the rules work and nothing at all about
 whether the game is playable, and those are different questions. All 190 Thread
-boards and all 44 Zigzag boards are solved by dragging.
+boards, all 44 Zigzag boards and all 64 One to Nine boards are solved by
+dragging.
 
 The read-only handle the harness reads is exactly that — read-only, and in the
 game's own terms. Thread answers questions about runs, Zigzag about cells. A

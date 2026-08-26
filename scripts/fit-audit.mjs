@@ -42,12 +42,15 @@ const ROUTES = [
   ['library', '#/'],
   ['archive thread', '#/g/thread'],
   ['archive zigzag', '#/g/zigzag'],
+  ['archive nine', '#/g/nine'],
   ['thread small', '#/g/thread/classic-1'],
   ['thread biggest', '#/g/thread/classic-60'],
   ['thread coloured', '#/g/thread/coloured-50'],
   ['thread grid', '#/g/thread/grid-80'],
   ['zigzag small', '#/g/zigzag/zigzag-1'],
   ['zigzag biggest', '#/g/zigzag/zigzag-44'],
+  ['nine first', '#/g/nine/nine-1'],
+  ['nine last', '#/g/nine/nine-64'],
 ];
 
 /*

@@ -1,0 +1,130 @@
+/**
+ * One to Nine's board.
+ *
+ * The digits are the design. Everything else — the holes they drop into, the
+ * operators between them, the numbers each line has to reach — is drawn light
+ * enough to stay out of the way of nine numerals being moved around.
+ *
+ * A token is a token whether it is in the tray or in a cell: the same chip,
+ * the same size, the same type. That is what makes picking one up and putting
+ * it down feel like one object moving rather than two objects swapping states.
+ */
+
+.nine-board {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: var(--s2) 0;
+}
+.nine-svg {
+  width: min(100%, calc(100cqh * var(--nine-ratio, 0.7)));
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: var(--nine-ratio, 0.7);
+  display: block;
+}
+.nine-svg:focus { outline: none; }
+.nine-svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }
+
+/* --- the holes ------------------------------------------------------------ */
+.nine-hole {
+  fill: var(--paper-2);
+  stroke: none;
+  transition: fill var(--fast) var(--ease);
+}
+/* Where the next digit will land: while a token is over it, and where the
+   keyboard is. */
+.nine-hole.over { fill: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
+.nine-hole.cursor { fill: color-mix(in srgb, var(--accent) 12%, var(--paper)); }
+.nine-hole.lookhere {
+  fill: color-mix(in srgb, var(--accent) 20%, var(--paper));
+  animation: nine-look 1.6s var(--ease) infinite;
+}
+@keyframes nine-look {
+  0%, 100% { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); }
+  50% { fill: color-mix(in srgb, var(--accent) 34%, var(--paper)); }
+}
+
+/* The empty tray slot, so the tray reads as nine places rather than a row of
+   loose objects — and so a digit's place is still there once it has left. */
+.nine-slot {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.7;
+  stroke-dasharray: 2 2;
+}
+
+/* --- the sums ------------------------------------------------------------- */
+.nine-op {
+  fill: var(--mute);
+  font-family: var(--text);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+/*
+ * A line's number. It goes solid when the line comes out and takes the fault
+ * colour when the line is full and does not — which is the only red on the
+ * board, and it can only appear on a line you have actually finished.
+ */
+.nine-target {
+  fill: var(--ink-2);
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: fill var(--fast) var(--ease);
+}
+.nine-target.out { fill: var(--good); }
+.nine-target.off { fill: var(--bad); }
+
+/* The line between the puzzle and the pieces. */
+.nine-rule { stroke: var(--line); stroke-width: 0.7; }
+
+/* --- the tokens ----------------------------------------------------------- */
+.nine-token { cursor: grab; }
+.nine-token.held { cursor: grabbing; }
+
+.nine-chip {
+  fill: var(--paper);
+  stroke: var(--line-2);
+  stroke-width: 0.8;
+  transition: fill var(--fast) var(--ease), stroke var(--fast) var(--ease);
+}
+.nine-digit {
+  fill: var(--ink);
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* On the board it is committed: filled, and it stops looking like stock. */
+.nine-token.placed .nine-chip { fill: var(--accent); stroke: var(--accent); }
+.nine-token.placed .nine-digit { fill: var(--paper); }
+
+/* Waiting to be put somewhere, after a tap. */
+.nine-token.picked .nine-chip {
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+
+/*
+ * In the air. The lift is the only thing that says which of nine identical
+ * chips is the one under the finger, so it is a real shadow rather than a
+ * colour change — a colour change reads as a state, and this is a position.
+ */
+.nine-token.held {
+  filter: drop-shadow(0 1.6px 2.4px rgba(22, 21, 15, 0.34));
+}
+.nine-token.held .nine-chip { stroke: var(--accent); stroke-width: 1.4; }
+
+/* Everything settles rather than snapping, except the one being dragged —
+   that one has to be exactly under the finger, every frame. */
+.nine-token:not(.held) { transition: transform var(--fast) var(--ease); }

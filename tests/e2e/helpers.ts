@@ -161,3 +161,72 @@ export async function drawLine(page: Page, cells: number[], steps = 3): Promise<
   }
   await page.mouse.up();
 }
+
+// ---------------------------------------------------------------------------
+// One to Nine
+// ---------------------------------------------------------------------------
+
+export type NineBoard = {
+  n: number;
+  rowTargets: number[];
+  colTargets: number[];
+  answer: number[];
+};
+
+type NineHandle = {
+  nine: NineBoard;
+  cells(): number[];
+  slot(digit: number): { x: number; y: number };
+  cellBox(cell: number): { x: number; y: number; size: number };
+  view: { W: number; H: number; ox: number; oy: number };
+};
+
+export async function nineBoard(page: Page): Promise<NineBoard> {
+  return page.evaluate(() => (window.__puzzles.board() as NineHandle).nine as never);
+}
+
+/**
+ * Board space to viewport pixels, through the board's own window.
+ *
+ * Read off the element rather than copied: the board publishes the viewBox it
+ * actually drew with, so a change to the layout moves the harness with it
+ * instead of silently making it tap somewhere no player taps.
+ */
+export async function nineMapper(page: Page): Promise<(x: number, y: number) => { x: number; y: number }> {
+  const box = await page.locator('.nine-svg').boundingBox();
+  if (!box) throw new Error('the board is not on screen');
+  const v = await page.evaluate(() => (window.__puzzles.board() as NineHandle).view);
+  const side = Math.min(box.width / v.W, box.height / v.H);
+  const left = box.x + (box.width - side * v.W) / 2;
+  const top = box.y + (box.height - side * v.H) / 2;
+  return (x, y) => ({ x: left + (x - v.ox) * side, y: top + (y - v.oy) * side });
+}
+
+/** Drag one digit from wherever it is into a cell, the way a thumb would. */
+export async function dragDigit(page: Page, digit: number, cell: number): Promise<void> {
+  const at = await nineMapper(page);
+  const where = await page.evaluate((d) => {
+    const h = window.__puzzles.board() as NineHandle;
+    const on = h.cells().indexOf(d);
+    if (on >= 0) {
+      const b = h.cellBox(on);
+      return { x: b.x + b.size / 2, y: b.y + b.size / 2 };
+    }
+    const s = h.slot(d);
+    return { x: s.x + 9.5, y: s.y + 9.5 };
+  }, digit);
+  const box = await page.evaluate((c) => (window.__puzzles.board() as NineHandle).cellBox(c), cell);
+
+  const from = at(where.x, where.y);
+  const to = at(box.x + box.size / 2, box.y + box.size / 2);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (let s = 1; s <= 4; s++) {
+    await page.mouse.move(from.x + (to.x - from.x) * (s / 4), from.y + (to.y - from.y) * (s / 4));
+  }
+  await page.mouse.up();
+}
+
+export async function solveNine(page: Page, board: NineBoard): Promise<void> {
+  for (let i = 0; i < board.answer.length; i++) await dragDigit(page, board.answer[i], i);
+}

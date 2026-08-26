@@ -18,6 +18,22 @@ have to rediscover.
    to build from. Anywhere the text leaves a choice open, the choice belongs in
    the game's own metadata rather than being guessed at silently.
 
+## Measured, and it changed the design
+
+**One to Nine's ladder runs backwards from the obvious order.** Plus and minus
+look like the easy end. They are the hard end: `a + b + c = 15` allows
+twenty-five triples and says almost nothing, so only 1% of plus/minus boards
+fall to crossing-out alone, against 66% with multiplication and 75% with all
+four operators. The ladder opens on multiplication and ends on addition
+because that is what the measurement says, and the brief asked for difficulty
+from deduction complexity rather than harder arithmetic — which is exactly
+what this is.
+
+The evaluation convention is `precedence` on every shipped board, chosen
+because it is the one nobody has to be told. `leftToRight` is implemented and
+unit-tested; it travels in the puzzle data, so a future family can use it
+without the engine guessing.
+
 ## Refused, with the measurement
 
 **A twelve-by-twelve Grid.** Asked for; not deliverable. A 144-cell lattice
@@ -74,10 +90,10 @@ construction. They are here so the next change does not undo the fix.
 
 - **Tutorials.** Both games declare `tutorial: []`. The `TutorialStep` contract
   exists; no steps do.
-- **Four more games**: Shape Up, Hexagony, One to Nine, Isolate. Each needs a
-  model, a validator, a real solver, a generator that works answer-first, a
-  difficulty analyser that measures deduction rather than size, a serializer
-  and unit tests.
+- **Three more games**: Shape Up, Hexagony, Isolate. Each needs a model, a
+  validator, a real solver, a generator that works answer-first, a difficulty
+  analyser that measures deduction rather than size, a serializer and unit
+  tests. One to Nine is done.
 - **Thread still pins both ends of every strand.** A purer puzzle leaves them
   free, but with no ends given it takes six or seven blocks to pin the answer
   down, and a board that cluttered is worse to look at than the free ends are
