@@ -1,60 +1,82 @@
-# Working notes: from one game to a puzzle platform
+# Working notes
 
-## What is here now
+Decisions, scars and outstanding work. The README says what the project is;
+this says what is known about it that a reader of the source would otherwise
+have to rediscover.
 
-Thread is one game with a hand-built shell around it. Roughly 4,900 lines.
+## Two things the platform brief assumed that were not true
 
-    src/core/     board.ts    model, geometry, compile-once conflict tables
-                  check.ts    validator — judges an attempt, names the fault
-                  search.ts   solver — exhaustive, counts answers, reports cost
-                  make.ts     generator — builds the answer, then constrains it
-                  rng.ts      seeded PRNG
-    src/ui/       shell.ts    app state, routing, persistence
-                  screens.ts  home / chapters / path
-                  playscreen.ts  interaction
-                  render.ts   board renderer
-                  path.ts, enter.ts, camera.ts   the isometric level path
-                  components.ts, dom.ts, icons.ts, palette.ts
-                  styles.css  one stylesheet, ~1400 lines
-    src/render/   haptics.ts, tween.ts
-    scripts/      build-boards, validate (the gate), fit-audit, verify-deployed
+1. **"GAME 1 — SHAPE UP: this is the existing game already built."** It was
+   not. The existing game was Thread — string routed through posts on a plain
+   board, no grid of symbols, no directional clues. Shape Up as described is a
+   different game. The brief also said not to throw the existing game away, so
+   Thread stays as a registered game and Shape Up would be built fresh
+   alongside it. That makes six entries, not five.
 
-## What is genuinely reusable
-
-Already game-agnostic, moves to the platform as-is:
-  rng.ts, haptics.ts, tween.ts, dom.ts
-
-Nearly game-agnostic, generalises:
-  shell.ts routing and persistence, components.ts, the gate script's shape
-  (generate → re-prove from the shipped bytes → refuse to ship otherwise)
-
-Thread-specific, becomes games/thread/:
-  board, check, search, make, render, playscreen, path, enter, camera, mini
-
-The stylesheet is the awkward one. It is one file with tokens, layout, and
-Thread's board styling mixed together. It splits into design tokens + shared
-components on the platform side, and a board stylesheet per game.
-
-## The shape to aim for
-
-    src/platform/   types, registry, store, router, shell, ui/, design/
-    src/games/<id>/ model, validate, solve, generate, render, play, tutorial
-    src/library/    the catalogue screen and the animated miniatures
-
-A game registers a package. Nothing global knows any game's name.
-
-## Two things the brief assumes that are not true here
-
-1. "GAME 1 — SHAPE UP: this is the existing game already built." It is not.
-   The existing game is Thread: string routed through posts on a plain board,
-   no grid of symbols, no directional clues. Shape Up as described is a
-   different game. The brief also says not to throw the existing game away, so
-   Thread stays as a registered game and Shape Up is built fresh alongside it.
-   That makes six entries, not five.
-
-2. The photographs referenced ("the uploaded Hexagony puzzle", "the
+2. **The photographs referenced** ("the uploaded Hexagony puzzle", "the
    photographed puzzle") did not arrive. The written rules are complete enough
-   to build from and that is what the engines follow. Anywhere the text leaves
-   a choice open, the choice is recorded in the game's own metadata rather
-   than guessed at silently — the evaluation mode for One to Nine is the
-   clearest case, and the brief already calls for exactly that.
+   to build from. Anywhere the text leaves a choice open, the choice belongs in
+   the game's own metadata rather than being guessed at silently.
+
+## Refused, with the measurement
+
+**A twelve-by-twelve Grid.** Asked for; not deliverable. A 144-cell lattice
+needs more than twenty-five pairs of pinned ends before the answer is unique,
+and the palette has twelve inks — so two strands would wear the same colour and
+the board would be unreadable rather than hard. The ladder stops at eight by
+seven, which is the largest size that still reads. Raising the ink count is not
+the fix either: twenty-five hues that a person can tell apart at post size do
+not exist.
+
+## Scars
+
+Each of these cost real time and each one is now held by a test or by a
+construction. They are here so the next change does not undo the fix.
+
+- **A presentation attribute loses to a stylesheet.** `fill` written as an SVG
+  attribute had been doing nothing for weeks, because `.post { fill: … }` in
+  CSS beat it. Anything that varies per element goes through a custom property
+  now.
+- **`svg('text', { text: … })` set an attribute.** SVG has no `text`
+  attribute, so every Zigzag numeral was invisible. `dom.ts` special-cases it.
+- **A new screen mounted before the old one was disposed** wiped the new
+  board's handle in the old one's teardown. `show()` takes a factory, so the
+  old screen is gone before the new one exists.
+- **A sheet outlived its screen.** Its scrim covered the next board and ate
+  every touch: the puzzle looked fine and simply did not respond. Route changes
+  call `closeSheets()`.
+- **A result timer fired after navigation** and opened a sheet over the next
+  puzzle. Cleared on dispose.
+- **`findLastIndex` needs ES2023.** Vitest transpiles without typechecking, so
+  it passed locally and turned CI red. Run `pnpm build` — tsc *and* vite —
+  before pushing, not just the tests.
+- **The display face was never loaded.** The tokens named a font nobody had;
+  the two self-hosted faces in `public/fonts/` were unreferenced. The
+  deployed-bytes check then blamed the site for 404s it caused itself by not
+  mirroring `<link rel=preload>`.
+- **Two owners of one safe-area inset.** Invisible on a laptop, thirty-four
+  pixels wrong on a phone. One owner, and a unit test that reads the sheets.
+- **`pkill -f "vite preview"` kills its own shell**, because the pattern
+  matches the command line it is running in. Kill by pid.
+
+## Outstanding
+
+- **Tutorials.** Both games declare `tutorial: []`. The `TutorialStep` contract
+  exists; no steps do.
+- **Four more games**: Shape Up, Hexagony, One to Nine, Isolate. Each needs a
+  model, a validator, a real solver, a generator that works answer-first, a
+  difficulty analyser that measures deduction rather than size, a serializer
+  and unit tests.
+- **Thread still pins both ends of every strand.** A purer puzzle leaves them
+  free, but with no ends given it takes six or seven blocks to pin the answer
+  down, and a board that cluttered is worse to look at than the free ends are
+  worth. `Recipe.freeEnds` exists and is unused.
+- **Colour is the only thing pairing a Thread strand's two ends.** The twelve
+  inks are far apart in hue and nearly identical in lightness — the worst pair
+  is 1.02:1. Marking the pinned ends (a numeral or a shape on each) would fix
+  it; dashing the string would not, because a dashed line breaks the promise
+  that what is drawn is exactly what the string occupies.
+- **No entry animation into a puzzle.** The path used to fly the camera down
+  onto the tile you pressed and turn its face into the board. `camera.ts` still
+  carries everything that needs — `lerpCam`, the pitch and yaw — but the flight
+  and the card it hands over to are not wired up.

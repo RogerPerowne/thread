@@ -1,284 +1,218 @@
-# Thread
+# Puzzles
 
-A pegboard. One string. Drag from peg to peg and the string pulls taut behind
-you. Close the loop and the region it encloses — under the **even–odd fill
-rule** — must match the target shape.
+A small catalogue of logic puzzles that share a shell and share nothing else.
+Two games are in it so far.
 
-The even–odd rule is the whole game. Wrap five pegs in ring order and you get a
-solid pentagon. Wrap the same five pegs in star order and the crossings carve
-the pentagon *out of the middle*, leaving a pentagram. Crossing the string
-flips inside to outside. Everything else — budgets, posts, multiple threads,
-portals — is a lens on that one idea.
+**Thread** — a board of posts and a piece of string. Use every post. The string
+never lies on other string, or on itself, and it never crosses a block. The
+drawing is the rule: what you see stroked on the board is exactly the set of
+points the string occupies, so if it looks like it touches, it touches.
+
+**Zigzag** — one line through every cell, in order. The numbers say which cell
+the line may step to next, and exactly one route uses them all.
 
 ```
 pnpm install
 pnpm dev        # play it
 pnpm test       # unit tests
-pnpm validate   # the seven-check level gate, with a table
-pnpm levels     # regenerate levels/*.json from the designers
-pnpm e2e        # solve every level through real pointer events
+pnpm validate   # the board gate: every Thread board re-proven unique
+pnpm boards     # regenerate boards/*.json from the designers
+pnpm zigzag     # regenerate puzzles/zigzag.json
+pnpm e2e        # solve every board through real pointer events
 pnpm ci         # everything CI runs
 ```
 
+Live at <https://rogerperowne.github.io/thread/>.
+
 ## How it is put together
 
+The hard part of a puzzle platform is not the shell — it is resisting the urge
+to make every game go through one board component. Routing string and tracing a
+numbered path share almost nothing at the level of "a cell you tap". They share
+everything one level up: what a puzzle **is**, what a move **is**, how you know
+it is solved, how it is stored, how hard it is, and what the screen around it
+looks like.
+
+So the split is: **the platform owns the app, the game owns its board.** A game
+hands over a package of pure logic plus one function that mounts a view into a
+box. It never sees the router, the header, the timer or the stats, and the
+platform never sees a post.
+
 ```
-src/core      pure TypeScript, ZERO DOM imports — runs in plain Node
-  geometry.ts    segment intersection, point-segment distance, path length
-  region.ts      even-odd scanline rasterizer, IoU, symmetric difference
-  rules.ts       canAdd / canClose / legality, per mechanic
-  level.ts       the Level type, loader, runtime validation
-  solver.ts      cycle search, optimality, uniqueness, near misses
-  difficulty.ts  static difficulty estimator
-  rating.ts      ability estimation (2PL IRT)
-  gate.ts        the six quality checks
-  design.ts      the level designers, shared with the runtime generators
-  shapes.ts      shape and peg-layout families
-  rng.ts         seeded, deterministic
-src/game      state machine, input interpretation, progression, persistence
-src/render    scene graph, tween engine, particles, audio, themes
-src/ui        screens and components
-  palette.ts     one saturated colour per chapter
-  path.ts        the isometric level path
-levels        JSON, one file per mode — generated, never hand-authored
-reference     the screenshot the path layout is measured against, and a copy
-tests         vitest unit tests + playwright end-to-end
+src/platform      the app, and what a game has to be
+  types.ts          the contracts: GamePackage, Session, View, Puzzle, Verdict
+  registry.ts       the register of games — one line per game, and nothing else
+                    in the platform knows any game's name
+  app.ts            three routes: the library, a game's ladder, one puzzle
+  store.ts          what has been done and what was half-done, in localStorage
+  daily.ts          today's puzzle, chosen from the date and nothing else
+  signature.ts      the spoiler-free share line
+  rng.ts tween.ts haptics.ts dom.ts palette.ts
+  ui/               frame.ts (the screen round a board), components.ts,
+                    icons.ts, camera.ts (the path's projection)
+  design/           tokens.css, base.css, components.css, play.css, path.css
+src/library        library.ts (the home screen), path.ts (a game's ladder)
+src/games/thread   board, check, search, make, session, play, render, mini
+src/games/zigzag   model, solve, design, session, view
+boards/            Thread's 190 boards, generated and proven, never authored
+puzzles/           Zigzag's 44
+scripts/           the designers, the gate, and the audits
+tests/             vitest unit tests + playwright end-to-end
 ```
 
-`src/core` has no DOM imports at all. That is what makes the level validator
-and the CI gate possible: the same code that decides whether a move is legal
-during play is the code that proves, in Node, that every shipped level is fair.
+A game's engine has no DOM imports. That is what makes the gate possible: the
+same code that decides whether a move is legal during play is the code that
+proves, in Node, that every shipped board has exactly one answer.
 
-## Three rules the code holds itself to
+## Adding a game
 
-**The scene graph is built once per level.** After that, only attributes are
-mutated. There is no `innerHTML` anywhere in the play loop. Pointer handlers
-write to state and request a frame; they never draw.
+Write a `GamePackage` and register it. Everything else — its card on the home
+screen, its place in the router, its ladder as a path, its timer, undo, hints,
+sharing, resuming — follows from the register.
 
-**One `requestAnimationFrame` loop.** Every visual transition — segment settle,
-fill fade, peg pop, win flourish, the strum — goes through one tween system,
-and `cancelAll()` runs on every level change. Nothing schedules visual work
-with `setTimeout`, because a stale timer writing into a new level's state is
-the cause of most "glitchiness".
+```ts
+register(hexagony);
+```
 
-**A drag is more precise than a tap.** A tap gets a generous target — at least
-44 px, because a finger is imprecise from a standing start. A sweep gets a
-tighter one, because the finger is already down and tracking and the player is
-aiming at the peg they mean. Using the tap radius for both makes the string
-grab whatever the line happens to pass.
+The test for whether this is working is simple: `grep` for a game's id outside
+its own folder should turn up exactly one line, its registration.
 
-**Closing is part of the gesture.** There is no Tie off button. A drag that
-moved past threshold and added a peg ties the loop when you lift your finger;
-tapping the peg you are on ties it; and on levels where the string may not
-cross itself, returning to the start peg ties it too. On crossing levels the
-start peg is deliberately *not* a close, because revisiting it mid-loop is how
-a keyhole gets cut. For 500 ms after an auto-close, touching the loose end
-re-opens it without costing an undo.
+## Answers first
 
-## The level gate
+No board here is authored and then checked. Every one is built the other way
+round: draw a legal answer, then constrain the board until that answer is the
+only one. A puzzle built this way cannot be impossible, because the answer
+existed before the puzzle did.
 
-No level ships without passing all seven checks. `pnpm validate` runs them
-over every level and prints a table.
+Thread's designer draws a covering path, cuts it into strands, and then carves
+blocks in one at a time for as long as the solver still finds rival answers —
+up to thirty-two of them, which is what a six-by-five board actually needs. On
+Grid boards there is nothing to carve with, so it pins one more pair of ends
+instead, cutting at the first run a rival does not use.
 
-1. **Solvable** — the authored solution is legal under every rule of its level,
-   and playing it through really wins.
-2. **Target derived from the solution** — targets are generated from the
-   solution's region, never authored, so a level cannot be impossible by
-   construction. The `Level` type has no field for a target.
-3. **Uniqueness** — a bounded cycle search looks for anything *shorter* that
-   makes the same shape. When it finds one, the build adopts it as the
-   solution rather than shipping a puzzle whose intended answer is beaten by an
-   obvious one.
-4. **Threshold safety** — every near miss (drop a peg, swap two, substitute
-   each peg for each unused one, insert one extra) is played out and must not
-   be accepted as a win. In the prototype the worst near miss scored 0.9885
-   against a 0.975 threshold, so a hexagonal hole and a pentagonal hole counted
-   as the same shape. The threshold is **0.995**, and a correct solve scores
-   exactly **1.000** because the player's polygon uses identical peg
-   coordinates.
+`pnpm validate` re-proves all 190 from the shipped JSON, not from the
+designer's memory of them:
 
-   The same check also rejects a peg sitting on a solution edge. Sweeping along
-   that edge picks the peg up in passing, so the obvious gesture quietly makes
-   a different loop from the one it looked like — on a weave that changes the
-   crossings and the solve is refused for a reason the player cannot see. The
-   end-to-end harness found this by dragging, which is exactly why it drags.
-5. **Mechanics are load-bearing** — every declared mechanic must actually
-   constrain the level. A post must block a real shortcut; a budget must be
-   exceeded by a loop that looks like the answer; a gold peg must be skippable
-   without changing the shape; a rail peg must not already sit where the answer
-   needs it. An inert mechanic fails the build.
-6. **The objective is a real question** — every objective can be stated on a
-   board where it asks nothing, and this is the check that says the level
-   means it. A silhouette whose pegs joined the obvious way round give the
-   same region hides no information. A move cap a careless player meets anyway
-   is not a constraint. A corral the lazy fence — everything in — already
-   satisfies is not a puzzle. A clue board with two answers cannot be reasoned
-   out at all, and one with every cell numbered leaves nothing to work out.
+```
+           boards   answer legal   only answer   nodes to prove
+------------------------------------------------------------------
+classic       60            60/60          60/60          34327
+coloured      50            50/50          50/50          29706
+grid          80            80/80          80/80          24824
+```
 
-   Two of the checks are asking a shape question and do not apply to the
-   objectives that are not about a shape. A corral has many right answers on
-   purpose, and a clue board is judged against its numbers; on either, "another
-   loop makes almost the same region" is the mode rather than a fault. Those
-   levels are proved by this check instead.
-7. **Anti-repetition** — every level is compared with every other by target
-   region similarity, mechanic tuple, and a topology signature (peg count,
-   holes, crossings, symmetry group, loop shape). Any pair matching on all
-   three fails, and no two levels sharing a signature may sit within five
-   levels of each other.
+Difficulty is **measured, not asserted**: a board's band comes from how many
+nodes the solver has to visit to prove it unique. A nine-post board that takes
+three thousand nodes is a harder puzzle than a thirty-post board that takes
+three hundred, and telling a player otherwise because one has more dots on it
+would be a lie the ladder tells itself.
 
-## What a level asks
+## The path
 
-For a long time every level asked the same question — reproduce this shape —
-and drew the answer on the board as a dashed outline through the exact pegs, in
-order. Tracing was the whole skill, and it wasted the one genuinely interesting
-thing about the mechanic: under the even-odd rule the same five pegs make a
-pentagon or a pentagram depending only on the order you visit them in.
+A game's whole ladder is a path you climb, not a grid you scan: puzzles sit on
+isometric tiles along a meandering ribbon, with a band across it at each
+chapter and a rail down the right to jump between them. The ribbon is inked in
+behind you, so progress needs no separate read-out. The geometry is authored in
+ground coordinates and projected through a camera, so the drawing is one
+projection of one scene rather than a pile of diamond arithmetic.
 
-A level now states an **objective**, and the shape objective is only the first
-of five. Four modes are built on the others:
+Three things there are constructions rather than adjustments, because a number
+placed by hand goes wrong the moment a size changes:
 
-| Mode | What it asks | Why it is different |
-| --- | --- | --- |
-| **Shadow** | The region, with no outline | You are shown the shape and not the order, on boards where the obvious order gives a different shape |
-| **Par** | The region, in a fixed number of pegs | Spare pegs lie along the edges, so the shape is easy and finding its corners is the puzzle |
-| **Corral** | Fence these in, leave those out | No target at all. You invent the loop, and more than one answer is right |
-| **Wire** | Numbers count the sides each cell uses | No target at all. The string runs along the board's wires and exactly one loop fits |
+- **The ends.** The ribbon runs past both ends of the ladder and fades out. The
+  fade is anchored to the viewBox, and `HEAD` and `TAIL` are *defined* as
+  `GAP + FADE` — so the ribbon reaches zero exactly where the drawing stops.
+  The path carries on below the first tile, and there is still nothing under it
+  to scroll into.
+- **The chapter bands.** A band is a row of the ladder like any other. It takes
+  a slot on the meander, so the space it needs exists in the layout instead of
+  being made by pushing tiles about.
+- **The tap targets.** A tile is 144 by 88 in the drawing's units, which on the
+  narrowest phone still in use is about thirty pixels tall. Each tile carries a
+  rectangle sized so it clears 44px at the smallest width the drawing is ever
+  shown at, and stays under the 259 units between one slot and the next so two
+  targets cannot overlap.
 
-Two mechanics sit underneath them. **Wires** make a board a graph rather than
-an open field, which is what turns "how many of this cell's four sides does the
-loop use" into a question with an answer. **Marks** are judged by ray casting
-rather than by sampling the raster — a peg one cell from an edge should not be
-at the mercy of where the grid happened to fall when the answer decides whether
-a level is won.
+The rail is a scrubber rather than one button per chapter: nineteen buttons on
+a phone are either under 44px or taller than the screen. Its marks sit at each
+band's fraction of the drawing's height — a ratio of view units, and therefore
+the same number at every screen width.
 
-`src/core/clue.ts` both makes clue levels and proves them. It does not invent
-clues: it draws a loop, reads the true count off every cell, then takes clues
-away one at a time for as long as exactly one loop still fits. Counting
-"exactly one" means counting loops rather than peg orders, so the search starts
-at the loop's lowest peg and keeps only the direction whose second peg is the
-smaller of that peg's neighbours — otherwise every loop is found once per
-rotation and once per direction.
+## Perfect by construction, not by tuning
 
-On the rule-based objectives there is no target to be near, so "how close was
-I" is the fraction of the rule satisfied — the honest answer for a level that
-never had one right picture. A corral that catches three of four marks says
-"3 of 4", not "75%".
+The project's rule. Both of the failures below were invisible on a laptop and
+wrong on a phone, which is why they are constructions now and not numbers
+somebody once got right.
 
-## The Thread Score
+Exactly one element owns each safe-area inset. `--safe-b` is zero in every
+desktop browser, so a layout that applies it twice looks perfect on a laptop
+and sits thirty-four pixels wrong on the phone most people will use. There is
+one owner, and a unit test reads the stylesheets and says so.
 
-**A puzzle game cannot measure IQ.** IQ tests are norm-referenced instruments
-standardised on thousands of people across many item types, and their validity
-rests entirely on that norming. A score derived from one visuospatial task, on
-a self-selected population, with no supervision, is not an IQ.
+The row of controls under a board has four slots and always has four. Hiding a
+control the moment it becomes useful — Redo, the first time you undo — moves
+the other three sideways under a thumb already reaching for one of them.
 
-So the Assessment builds the most statistically defensible ability estimate it
-can — twelve adaptive items under a two-parameter logistic IRT model, with six
-continuous signals folded in as a bounded residual — reports it on a familiar
-100/15 scale with a confidence interval and an estimated percentile, and calls
-it a **Thread Score**, subtitled *"an IQ-style scale — not a clinical IQ
-test"*. The percentile is where the ability model places you, not a count of
-real people: Thread keeps everything on the device and has no telemetry to
-compare against, and the UI says so rather than implying otherwise. That sentence is shown once, on the first reveal, and then
-never again.
+`scripts/fit-audit.mjs` walks every route at eight handset sizes in two skins —
+flat, and with a notch and a home indicator simulated — and fails on anything
+running off the edge, anything smaller than 44px to press, anything covered by
+something else, and any board that is not within a pixel of the centre of the
+space it was given.
 
-Correctness outweighs speed roughly 4:1, deliberately, so frantic tapping
-cannot beat careful thought. A long pause is only rewarded when the solve that
-follows is first-try and near-optimal; a long pause followed by a bad loop
-scores as hesitation, not planning.
+## Testing
 
-Casual play never produces a score. It silently updates a hidden estimate; the
-badge comes only from the Assessment, once every seven days, because repeated
-testing inflates scores through practice effects.
+Every end-to-end test drives the app through **real pointer events**. Solving a
+board by calling into it would prove the rules work and nothing at all about
+whether the game is playable, and those are different questions. All 190 Thread
+boards and all 44 Zigzag boards are solved by dragging.
 
-## The chapter path
-
-A chapter is a path you walk down, not a grid you scan: levels sit on isometric
-tiles along a meandering ribbon, in the chapter's own colour edge to edge.
-Solved tiles are solid ink, the tile you are up to is paper-white, locked tiles
-are the chapter colour taken down a few steps. The ribbon is inked in behind
-you, so progress needs no separate read-out.
-
-The geometry is not invented. `reference/brilliant-source.png` is a screenshot
-of a learning app's course map; every constant in `src/ui/path.ts` — the
-meander's corner coordinates and its 1035px period, the 144x88x24 isometric
-tile, the 0.675 inner-face inset — was measured off it.
-`reference/brilliant-replica.html` is a bare copy of that screen carrying none
-of Thread's styling, and `pnpm compare:reference` scores the copy against the
-original on six metrics. That runs in CI, so the layout cannot drift.
-
-Three things are derived rather than placed by hand, because hand-placed
-numbers go wrong the moment a size changes:
-
-- **The extruded side** is the top face swept down, built from the top face's
-  own rounded outline. Rounding a six-sided silhouette separately pulls its
-  side corners inside the top face's and leaves a notch of background showing.
-- **The band and the light column** are sized to `HW * (1 - t/2)`, which is
-  where the fillet actually puts the tile's widest point — not the un-rounded
-  vertex at `HW`. The light runs down to the tile's widest row and is cut off
-  by the tile, so it hugs the upper edges instead of stopping in mid-air.
-- **Glyphs** are authored flat and upright in a 100x100 box and projected. The
-  face map composed with the 45 degrees the diamond already carries reduces to
-  a pure foreshorten, so an upright mark stays upright and lies down on the
-  tile. Un-projecting the reference's own tick through that scale gives an
-  ordinary upright tick, which is the proof the original was built the same way.
+The read-only handle the harness reads is exactly that — read-only, and in the
+game's own terms. Thread answers questions about runs, Zigzag about cells. A
+harness with board geometry copied into it is how a test comes to tap somewhere
+no player taps and still go green.
 
 ## Accessibility
 
-Full keyboard play (arrows move between pegs, Enter threads).
-`prefers-reduced-motion` is honoured — tweens land instantly and no particle is
-ever emitted. Threads are distinguished by dash pattern and end-cap shape as
-well as colour. Peg hit radius scales with the viewport, not with the drawn
-radius, so a touch target is never smaller than 44 px.
+Full keyboard play in both games — arrows move, Enter acts.
+`prefers-reduced-motion` is honoured: durations collapse and nothing that
+carries meaning is removed. Focus is visible and never removed; the keyboard is
+a supported way to play. On the path, every state is told by shape and fill as
+well as by colour, and each tile carries its own number.
 
-`scripts/fit-audit.mjs` walks every route at six handset sizes and fails on
-anything running off the edge, spilling out of its sheet, or smaller than 44 px
-to press — hit-testing the area that actually responds rather than trusting the
-box, so a small mark with a padded hit area counts as a fair target. It runs in
-CI as `tests/e2e/fit.spec.ts`.
+One gap, stated rather than glossed: on a Thread board with several strands,
+which two pinned ends belong to each other is told by **colour alone**. The
+twelve inks are far apart in hue but not in lightness — the worst pair differs
+by 1.02:1 — so a player who cannot separate those hues cannot read a crowded
+board. Dashing the string is not the fix, because a dashed line would break the
+one promise the board makes (what is drawn is exactly what the string
+occupies); marking the pinned ends would be. It is not done yet.
 
-No icon in the interface is a text character. A gear, an arrow or a star typed
-as a glyph changes shape between platforms, ignores the stroke weight around it
-and depends on whatever fallback font the device reaches for; every mark is
-drawn in `src/ui/icons.ts` instead.
+No icon in the interface is a text character. A gear or an arrow typed as a
+glyph changes shape between platforms, ignores the stroke weight around it and
+depends on whatever fallback font the device reaches for. Every mark is drawn
+in `src/platform/ui/icons.ts`.
 
 ## Typefaces
 
 The New York Times Games visual system is the reference for layout and
 restraint. Their wordmarks, logos and the Franklin and Karnak typefaces are
 licensed and trademarked, so this uses free stand-ins — Libre Franklin for UI,
-Zilla Slab for display — and an original mark.
+Zilla Slab for display — and an original mark. Both are self-hosted: the
+request to a font service was once being blocked, the wordmark had been quietly
+falling back to Times, and the design being looked at was not the design that
+had been written.
 
 ## What is not here, and why
 
-Two things the design called for cannot be built behind a static site, and are
-absent rather than faked:
-
-- **A weekly leaderboard.** Ranking players against each other needs a server
-  to hold the scores. Blitz and One Life keep a personal best, and a seed link
-  lets you hand a friend the exact same ladder, which is a fair contest with
-  no account and no backend.
-- **A daily reminder notification.** Real push needs a service worker talking
-  to a push service. There is no switch in Settings pretending to do it.
-
-Two more are honest approximations, and the UI says so where a player can see
-it:
-
-- The Daily reports **how hard today's puzzle is**, from the static difficulty
-  estimator, rather than "% of players who solved it today" — that figure would
-  be invented.
-- The Thread Score's percentile is **where the ability model places you**, not
-  a count of real people.
-
-## Levels
-
-The 322 levels are built by per-chapter *designers* — parameterised families of
-shapes, one idea per chapter — and every candidate is vetted individually by
-the seven-check gate before it is accepted, then vetted again as a set for
-repetition. `pnpm levels` regenerates them deterministically from a seed;
-`scripts/probe.ts` and `scripts/probew.ts` report a chapter's acceptance rate
-and why candidates are being rejected, which is how you tune one.
-
-This is not the same thing as 322 levels placed peg by peg by a person. It is,
-though, what the quality bar in the design actually asks for: every level earns
-its place by passing checks a human eye would not catch, and the anti-repetition
-audit is what stops a chapter becoming the same puzzle four times.
+- **A leaderboard.** Ranking players against each other needs a server to hold
+  the scores. Everything here lives on the device, and there is no switch
+  pretending otherwise.
+- **A daily reminder.** Real push needs a service worker talking to a push
+  service.
+- **A twelve-by-twelve Grid.** It was asked for and it is not deliverable: a
+  lattice that size needs more than twenty-five colour-distinguishable pairs of
+  ends against a twelve-ink palette, so two strands would be the same colour
+  and the board would be unreadable rather than hard. The ladder stops at
+  eight-by-seven, which is the largest size that still reads.
+- **Tutorials.** Both games declare an empty one. The contract for them exists;
+  the steps do not.
