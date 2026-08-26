@@ -97,7 +97,13 @@
 .btn:active { transform: scale(0.97); background: var(--paper-2); }
 .btn[disabled] { color: var(--line-2); border-color: var(--paper-3); pointer-events: none; }
 .btn.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.btn.accent { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+/* The fallback is not decoration. Without it, a context that has not defined
+   an accent paints paper text on no background, and the button vanishes. */
+.btn.accent {
+  background: var(--accent, var(--ink));
+  color: var(--paper);
+  border-color: var(--accent, var(--ink));
+}
 .btn.wide { width: 100%; }
 .btn svg { width: 17px; height: 17px; }
 

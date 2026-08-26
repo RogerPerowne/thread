@@ -66,25 +66,57 @@ test('the path carries a game\'s whole ladder, chapter by chapter', async ({ pag
   }
 });
 
-test('the path opens where the player is, and does not run past its own end', async ({ page }) => {
-  await gotoApp(page, '#/g/thread');
-  const box = await page.evaluate(() => {
-    const scroll = document.querySelector('.pathscroll') as HTMLElement;
-    const svg = document.querySelector('.pathsvg') as SVGSVGElement;
-    return {
-      top: scroll.scrollTop,
-      height: scroll.scrollHeight,
-      client: scroll.clientHeight,
-      drawn: svg.getBoundingClientRect().height,
-    };
-  });
+test('the path runs off both edges of the screen and cannot be scrolled to its end', async ({ page }) => {
   /*
-   * There is exactly as much to scroll as there is drawing. The ribbon runs
-   * past the first tile and fades out inside that drawing, so the bottom of
-   * the scroll is the end of the path and never a strip of nothing.
+   * The ribbon never ends on screen. It is drawn well past both ends of the
+   * ladder and the scroll stops early, so at either limit the drawing is still
+   * crossing the edge of the view — cut by the edge of the phone rather than
+   * by anything of ours. Measured at both limits, because "it looks fine on
+   * mine" is exactly the claim that was wrong the first time.
    */
-  expect(Math.abs(box.height - box.drawn)).toBeLessThan(2);
-  expect(box.height).toBeGreaterThan(box.client);
+  await gotoApp(page, '#/g/thread');
+
+  const edges = async (): Promise<{ top: number; bottom: number; viewTop: number; viewBottom: number }> =>
+    page.evaluate(() => {
+      const scroll = document.querySelector('.pathscroll') as HTMLElement;
+      const svg = document.querySelector('.pathsvg') as SVGSVGElement;
+      const s = scroll.getBoundingClientRect();
+      const d = svg.getBoundingClientRect();
+      return { top: d.top, bottom: d.bottom, viewTop: s.top, viewBottom: s.bottom };
+    });
+
+  await page.evaluate(() => { (document.querySelector('.pathscroll') as HTMLElement).scrollTop = 0; });
+  const atTop = await edges();
+  expect(atTop.top, 'the drawing stops short of the top of the view').toBeLessThan(atTop.viewTop);
+
+  await page.evaluate(() => {
+    const s = document.querySelector('.pathscroll') as HTMLElement;
+    s.scrollTop = s.scrollHeight;
+  });
+  const atBottom = await edges();
+  expect(atBottom.bottom, 'the drawing stops short of the bottom of the view')
+    .toBeGreaterThan(atBottom.viewBottom);
+
+  // And there is genuinely something to scroll.
+  const room = await page.evaluate(() => {
+    const s = document.querySelector('.pathscroll') as HTMLElement;
+    return s.scrollHeight - s.clientHeight;
+  });
+  expect(room).toBeGreaterThan(0);
+});
+
+test('the path opens where the player is', async ({ page }) => {
+  await gotoApp(page, '#/g/thread');
+  /*
+   * Nothing solved, so the tile you are up to is the first — at the FOOT of a
+   * path that climbs. Opening at the top of the drawing would put a fresh
+   * player a hundred and ninety levels from anything they can play.
+   */
+  const where = await page.evaluate(() => {
+    const s = document.querySelector('.pathscroll') as HTMLElement;
+    return s.scrollTop / Math.max(1, s.scrollHeight - s.clientHeight);
+  });
+  expect(where).toBeGreaterThan(0.9);
 });
 
 test('the rail swaps chapters', async ({ page }) => {

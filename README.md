@@ -119,11 +119,12 @@ projection of one scene rather than a pile of diamond arithmetic.
 Three things there are constructions rather than adjustments, because a number
 placed by hand goes wrong the moment a size changes:
 
-- **The ends.** The ribbon runs past both ends of the ladder and fades out. The
-  fade is anchored to the viewBox, and `HEAD` and `TAIL` are *defined* as
-  `GAP + FADE` — so the ribbon reaches zero exactly where the drawing stops.
-  The path carries on below the first tile, and there is still nothing under it
-  to scroll into.
+- **The ends.** The ribbon never ends. It is drawn well past both ends of the
+  ladder and the *scroll* stops early, so at either limit the clip line sits
+  exactly on the edge of the screen: the path is cut by the edge of the phone
+  rather than by anything of ours. Both numbers are ratios of the drawing's own
+  width, so the browser works them out from whatever width the screen turns out
+  to be and nothing has to be measured or recomputed on a resize.
 - **The chapter bands.** A band is a row of the ladder like any other. It takes
   a slot on the meander, so the space it needs exists in the layout instead of
   being made by pushing tiles about.

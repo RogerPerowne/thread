@@ -197,6 +197,13 @@ export function gameFrame(
   }
 
   function showResult(took: number): void {
+    /*
+     * Filled in by `sheet()` below, and referenced by the buttons built before
+     * it. It was `close()` — which resolved to `window.close()`, a no-op in
+     * any tab the script did not open, so the sheet was never actually shut by
+     * its own buttons and only went away because the route change swept it up.
+     */
+    let shut = (): void => {};
     const stats = store.statsOf(game.meta.id);
     const sig = session.signature();
     const line = `${game.meta.shareName} ${hooks.label}\n${store.clock(took)}\n${sig}`;
@@ -215,10 +222,10 @@ export function gameFrame(
       button('Share result', () => share(line), { wide: true, glyph: 'share' }),
       h('div', { style: 'height:8px' }),
       hooks.next
-        ? button('Next puzzle', () => { close(); hooks.onNext(); }, { wide: true, kind: 'accent', glyph: 'next' })
-        : button('Back to Games', () => { close(); hooks.onBack(); }, { wide: true, kind: 'accent' }),
+        ? button('Next puzzle', () => { shut(); hooks.onNext(); }, { wide: true, kind: 'accent', glyph: 'next' })
+        : button('Back to Games', () => { shut(); hooks.onBack(); }, { wide: true, kind: 'accent' }),
     ];
-    sheet('Solved', body);
+    shut = sheet('Solved', body);
   }
 
   async function share(text: string): Promise<void> {

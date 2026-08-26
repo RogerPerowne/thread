@@ -28,6 +28,26 @@
   padding-right: 44px;
 }
 
+/*
+ * The bed: the part of the drawing you can scroll to.
+ *
+ * Its height comes from an aspect ratio and the drawing is pulled up by a
+ * negative margin, both as ratios of the bed's own width — percentage margins
+ * resolve against the containing block's inline size, which is the one place
+ * in CSS where that is what you want. So the whole arrangement is worked out
+ * by the browser at whatever width the screen turns out to be, and nothing has
+ * to be measured or recomputed on a resize.
+ *
+ * `overflow: hidden` is what makes the ribbon appear to carry on: the last of
+ * the drawing is cut off at the bed's edge, and at the limit of the scroll the
+ * bed's edge is the screen's edge.
+ */
+.pathbed {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
 .pathsvg { display: block; width: 100%; height: auto; }
 
 /* The progress line under the bar: the same fact as "45 of 190", drawn. */

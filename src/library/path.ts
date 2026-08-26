@@ -16,11 +16,11 @@
  * Three things here are constructions rather than adjustments, and they are
  * the reason the screen behaves:
  *
- *   - The ribbon runs past both ends of the ladder and fades out. The fade is
- *     anchored to the viewBox, not to the tiles, and HEAD and TAIL are defined
- *     as GAP + FADE — so the ribbon reaches zero exactly where the drawing
- *     ends. There is no blank space below the first tile to scroll into,
- *     because there is no drawing below where the ribbon has already gone.
+ *   - The ribbon never ends. It is drawn well past both ends of the ladder and
+ *     the SCROLL stops early, so at the limit the clip line sits exactly on
+ *     the edge of the screen. The path is cut by the edge of the phone rather
+ *     than by anything of ours, which is the only way a path can appear to
+ *     carry on past the last tile without leaving somewhere empty to scroll to.
  *   - A chapter's band is a row of the ladder like any other. It takes a slot
  *     on the meander, so the space it needs exists in the layout rather than
  *     being made by pushing tiles about.
@@ -58,16 +58,21 @@ const RIBBON_D = 9;
 const GLOW_PX = 78;
 
 /*
- * The run past each end of the ladder, and how much of it is the fade.
+ * The run past each end of the ladder, and how much of it you can reach.
  *
- * These two are why the path can continue past the first tile without leaving
- * anywhere empty to scroll to: the fade is the last FADE units of the drawing
- * at each end, so the ribbon is already gone by the time the drawing is.
+ * The ribbon does not stop and does not fade: it is drawn RUN units past the
+ * top and bottom rows and simply carries on. What stops is the SCROLL. Only
+ * SHOW of that run is inside the scrollable box; the last CLIP units at each
+ * end are outside it and clipped away.
+ *
+ * That is what makes the end of the path invisible. At the limit of the scroll
+ * the clip line sits exactly on the edge of the screen, so the ribbon is cut
+ * by the edge of the phone rather than by anything of ours — it reads as
+ * running on past the screen, because as far as anyone can see, it does.
  */
-const FADE = 200;
-const GAP = 62;
-const HEAD = GAP + FADE;
-const TAIL = GAP + FADE;
+const RUN = 460;
+const SHOW = 220;
+const CLIP = RUN - SHOW;
 
 /** A chapter's band, in view units. Tall enough for two lines of type. */
 const BAND_H = 132;
@@ -302,10 +307,13 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   const yOf = (g: Pt2) => project(FLAT, g[0], g[1], 0)[1];
   const yTop = yOf(groundOfRow(R - 1));
   const yBot = yOf(groundOfRow(0));
-  const y0 = yTop - HEAD;
-  const H = yBot + TAIL - y0;
-  /** View-unit y of a row, in the finished drawing. */
-  const rowY = (j: number) => yOf(groundOfRow(j)) - y0;
+  const y0 = yTop - RUN;
+  /** The whole drawing, including the run past both ends. */
+  const H = yBot + RUN - y0;
+  /** The part of it you can scroll to: the drawing less the clip at each end. */
+  const BED = H - 2 * CLIP;
+  /** A row's y within the bed — which is the space the scroll measures in. */
+  const rowY = (j: number) => yOf(groundOfRow(j)) - y0 - CLIP;
 
   const root = svg('svg', {
     class: 'pathsvg',
@@ -342,33 +350,6 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   soften.appendChild(svg('feGaussianBlur', { stdDeviation: 9, edgeMode: 'none' }));
   defs.appendChild(soften);
 
-  /*
-   * The ends of the ribbon.
-   *
-   * The mask is fixed to the viewBox rather than to the tiles, and HEAD and
-   * TAIL are FADE + GAP, so the ribbon is at zero exactly where the drawing
-   * stops. That is the whole trick: the path carries on past the first tile,
-   * and there is still nothing underneath it to scroll into.
-   */
-  const fade = (id: string, up: boolean) => {
-    const g = svg('linearGradient', { id, x1: 0, y1: 0, x2: 0, y2: 1 });
-    g.appendChild(svg('stop', { offset: '0', 'stop-color': up ? '#000' : '#fff' }));
-    g.appendChild(svg('stop', { offset: '1', 'stop-color': up ? '#fff' : '#000' }));
-    return g;
-  };
-  defs.appendChild(fade('pathfadetop', true));
-  defs.appendChild(fade('pathfadebot', false));
-  const mask = svg('mask', { id: 'pathends', maskUnits: 'userSpaceOnUse' });
-  /* In the scene's own space: it is the ribbon that wears the mask, and the
-     ribbon is inside the shift. */
-  const wide = { x: -120, width: VIEW_W + 240 };
-  mask.append(
-    svg('rect', { ...wide, y: y0, height: FADE, fill: 'url(#pathfadetop)' }),
-    svg('rect', { ...wide, y: y0 + FADE, height: Math.max(0, H - 2 * FADE), fill: '#fff' }),
-    svg('rect', { ...wide, y: y0 + H - FADE, height: FADE, fill: 'url(#pathfadebot)' }),
-  );
-  defs.appendChild(mask);
-
   root.appendChild(scene);
 
   // --- the ribbon ----------------------------------------------------------
@@ -383,7 +364,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   const cutAt = groundOfRow(nowRow === -1 ? R - 1 : nowRow);
   const halves = splitPolyline(ground, cutAt);
 
-  const ribbon = svg('g', { class: 'ribbon', mask: 'url(#pathends)' });
+  const ribbon = svg('g', { class: 'ribbon' });
   const pointsOf = (pts: Pt2[], z: number) => {
     const dz = z * lift(FLAT);
     let out = '';
@@ -419,10 +400,10 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   for (let j = 0; j < R; j++) {
     const row = rows[j];
     if (row.kind !== 'band') continue;
-    /* Drawn in the scene's space; remembered in the drawing's, because that is
-       what the rail's percentages are a fraction of. */
+    /* Drawn in the scene's space; remembered in the bed's, because that is what
+       the rail's percentages and the scroll are fractions of. */
     const y = yOf(groundOfRow(j));
-    bandY[row.chapter] = y - y0;
+    bandY[row.chapter] = y - y0 - CLIP;
     const g = svg('g', { class: 'pband', 'aria-hidden': 'true' });
     g.append(
       svg('rect', { class: 'plate', x: -120, width: VIEW_W + 240, y: y - BAND_H / 2, height: BAND_H }),
@@ -500,7 +481,20 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   }
 
   // --- the frame around it -------------------------------------------------
-  const scroller = h('div', { class: 'pathscroll' }, root);
+  /*
+   * The bed is the scrollable box, and it is shorter than the drawing.
+   *
+   * Both numbers below are ratios of the drawing's own width, so the browser
+   * works them out from whatever width the screen turns out to be and nothing
+   * here has to measure anything or run again on a resize. The bed's height
+   * comes from an aspect ratio; the drawing is pulled up by a negative margin,
+   * and percentage margins resolve against the containing block's WIDTH, which
+   * is the one place in CSS where that is what you want.
+   */
+  const bed = h('div', { class: 'pathbed' }, root);
+  bed.style.aspectRatio = `${VIEW_W} / ${BED.toFixed(1)}`;
+  root.style.marginTop = `${((-CLIP / VIEW_W) * 100).toFixed(4)}%`;
+  const scroller = h('div', { class: 'pathscroll' }, bed);
 
   const meter = h('i');
   const bar = h('div', { class: 'pathmeter', 'aria-hidden': 'true' }, meter);
@@ -518,7 +512,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   const thumb = h('i', { class: 'thumb' });
   const marks: HTMLElement[] = chapters.map((_, c) => {
     const m = h('i', { class: 'mark' });
-    m.style.top = `${((bandY[c] ?? 0) / H) * 100}%`;
+    m.style.top = `${((bandY[c] ?? 0) / BED) * 100}%`;
     track.appendChild(m);
     return m;
   });
@@ -546,7 +540,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
     rail.setAttribute('aria-valuetext', `Chapter ${c + 1}, ${chapters[c]?.name ?? ''}`);
     flagNum.textContent = String(c + 1);
     flagName.textContent = chapters[c]?.name ?? '';
-    flag.style.top = `${((bandY[c] ?? 0) / H) * 100}%`;
+    flag.style.top = `${((bandY[c] ?? 0) / BED) * 100}%`;
   };
 
   /** Where the scroller has to be for chapter `c` to be at the foot of the view. */
@@ -599,7 +593,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
     let best = 0;
     let bestD = Infinity;
     for (let c = 0; c < chapters.length; c++) {
-      const d = Math.abs((bandY[c] ?? 0) / H - f);
+      const d = Math.abs((bandY[c] ?? 0) / BED - f);
       if (d < bestD) { bestD = d; best = c; }
     }
     return best;

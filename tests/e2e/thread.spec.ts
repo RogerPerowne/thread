@@ -213,3 +213,48 @@ test('a strand can be told from its neighbour without seeing colour', async ({ p
     for (const [n, c] of counts) expect(c, `strand ${n} does not have two ends`).toBe(2);
   }
 });
+
+test('finishing a board offers the next one, and you can see it', async ({ page }) => {
+  /*
+   * The result sheet lives on the body, so it is outside the screen that set
+   * `--accent` — and `.btn.accent` painted its background from that property
+   * and its text from `--paper`. With the accent missing the primary button
+   * was paper on paper: present, focusable, the right size, and invisible.
+   * Nothing that measures position or counts elements catches that, so this
+   * measures the two colours and demands they differ.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'thread');
+  await openPuzzle(page, 'thread', ids[0]);
+  const board = await threadBoard(page);
+  await solveThread(page, board);
+
+  const next = page.locator('.sheet .btn', { hasText: 'Next puzzle' });
+  await expect(next).toBeVisible();
+
+  const paint = await next.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const rgb = (s: string) => (s.match(/[\d.]+/g) ?? []).map(Number);
+    const lum = (c: number[]) => {
+      const [r, g, b] = c.slice(0, 3).map((v) => {
+        const x = v / 255;
+        return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const bg = rgb(cs.backgroundColor);
+    const fg = rgb(cs.color);
+    const alpha = bg.length > 3 ? bg[3] : 1;
+    const a = lum(bg);
+    const b = lum(fg);
+    return { alpha, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+  });
+  expect(paint.alpha, 'the primary button has no background at all').toBe(1);
+  expect(paint.ratio, 'the primary button is the same colour as its own label')
+    .toBeGreaterThan(3);
+
+  // And it goes where it says it goes.
+  await next.click();
+  await expect(page).toHaveURL(new RegExp(`#/g/thread/${ids[1]}$`));
+  await expect(page.locator('.scrim')).toHaveCount(0);
+});

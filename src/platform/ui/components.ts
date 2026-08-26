@@ -76,6 +76,19 @@ export function sheet(title: string, body: Child[], opts: { onClose?: () => void
   );
   const scrim = h('div', { class: 'scrim' }, panel);
 
+  /*
+   * A sheet lives on the body, because it has to sit above everything — which
+   * means it is outside the screen that set `--accent`, and every custom
+   * property the screen defined is simply absent inside it. That is not a
+   * cosmetic loss: `.btn.accent` painted its background from `var(--accent)`
+   * and its text from `var(--paper)`, so with the accent missing the primary
+   * button of the result sheet was paper on paper — present, focusable, the
+   * right size, and invisible. The colour is carried across explicitly.
+   */
+  const screen = document.querySelector('.screen') as HTMLElement | null;
+  const accent = screen && getComputedStyle(screen).getPropertyValue('--accent').trim();
+  if (accent) scrim.style.setProperty('--accent', accent);
+
   const shut = () => {
     openSheets.delete(shut);
     document.removeEventListener('keydown', onKey);
