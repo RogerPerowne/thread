@@ -247,9 +247,8 @@ type ShapeHandle = {
   shape: ShapeBoard;
   cells(): number[];
   cellBox(cell: number): { x: number; y: number; size: number };
-  ring(): { cx: number; cy: number; optR: number; ring: number };
-  ringSpot(pick: number): { x: number; y: number };
-  measureRing(): { optR: number; ring: number };
+  chipBox(pick: number): { x: number; y: number; size: number };
+  picked(): number;
   view: { W: number; H: number };
 };
 
@@ -267,67 +266,70 @@ export async function shapeMapper(page: Page): Promise<(x: number, y: number) =>
   return (x, y) => ({ x: left + x * side, y: top + y * side });
 }
 
-/**
- * Put a mark in a cell the way a thumb would: press the cell, slide onto the
- * option, let go. `pick` is 0 for empty and 1 and up for a shape.
- */
-export async function markCell(page: Page, cell: number, pick: number): Promise<void> {
+const tap = async (page: Page, q: { x: number; y: number }): Promise<void> => {
+  await page.mouse.move(q.x, q.y);
+  await page.mouse.down();
+  await page.mouse.up();
+};
+
+/** Choose a mark from the palette. `pick` is 0 for empty and 1 up for a shape. */
+export async function pickMark(page: Page, pick: number): Promise<void> {
   const at = await shapeMapper(page);
-  const box = await page.evaluate((c) => (window.__puzzles.board() as ShapeHandle).cellBox(c), cell);
-  const from = at(box.x + box.size / 2, box.y + box.size / 2);
-
-  /*
-   * Press, let go, tap the option. The other way round — press and slide onto
-   * it — also works and is tested on its own, but it cannot reach the middle
-   * of the ring, because the middle is where the finger already is and there
-   * is nowhere to slide from. This path reaches every option, so it is the one
-   * the harness uses to fill sixty-six boards.
-   */
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.up();
-
-  /*
-   * Where the option is is read off the ring AFTER it opens, not worked out
-   * here. The ring sizes itself from the scale the board is drawn at and moves
-   * back inside the edge when it opens near one, and a harness carrying its
-   * own copy of that arithmetic is a harness that taps empty paper the first
-   * time the rule changes.
-   */
-  const spot = await page.evaluate((k) => {
-    const h = window.__puzzles.board() as ShapeHandle;
-    const g = h.ring();
-    const s = h.ringSpot(k);
-    return { x: g.cx + s.x, y: g.cy + s.y };
-  }, pick);
-  const to = at(spot.x, spot.y);
-  await page.mouse.move(to.x, to.y);
-  await page.mouse.down();
-  await page.mouse.up();
+  const chip = await page.evaluate((k) => (window.__puzzles.board() as ShapeHandle).chipBox(k), pick);
+  await tap(page, at(chip.x + chip.size / 2, chip.y + chip.size / 2));
 }
 
-/** The other way in: press the cell and slide onto a shape without letting go. */
-export async function slideMark(page: Page, cell: number, pick: number): Promise<void> {
+/**
+ * Put a mark in a cell the way a thumb would: choose it from the palette, then
+ * tap the cell. Where the chip is is read off the board rather than worked out
+ * here, so a change to the layout moves the harness with it.
+ */
+export async function markCell(page: Page, cell: number, pick: number): Promise<void> {
+  await pickMark(page, pick);
   const at = await shapeMapper(page);
   const box = await page.evaluate((c) => (window.__puzzles.board() as ShapeHandle).cellBox(c), cell);
-  const from = at(box.x + box.size / 2, box.y + box.size / 2);
-  await page.mouse.move(from.x, from.y);
+  await tap(page, at(box.x + box.size / 2, box.y + box.size / 2));
+}
+
+/** The other way in: choose a mark and drag a run of cells with it. */
+export async function paintCells(page: Page, cells: number[], pick: number): Promise<void> {
+  await pickMark(page, pick);
+  const at = await shapeMapper(page);
+  const boxes = await page.evaluate(
+    (list) => list.map((c) => (window.__puzzles.board() as ShapeHandle).cellBox(c)),
+    cells,
+  );
+  const first = at(boxes[0].x + boxes[0].size / 2, boxes[0].y + boxes[0].size / 2);
+  await page.mouse.move(first.x, first.y);
   await page.mouse.down();
-  const spot = await page.evaluate((k) => {
-    const h = window.__puzzles.board() as ShapeHandle;
-    const g = h.ring();
-    const s = h.ringSpot(k);
-    return { x: g.cx + s.x, y: g.cy + s.y };
-  }, pick);
-  const to = at(spot.x, spot.y);
-  for (let s = 1; s <= 4; s++) {
-    await page.mouse.move(from.x + (to.x - from.x) * (s / 4), from.y + (to.y - from.y) * (s / 4));
+  for (const b of boxes.slice(1)) {
+    const q = at(b.x + b.size / 2, b.y + b.size / 2);
+    await page.mouse.move(q.x, q.y, { steps: 3 });
   }
   await page.mouse.up();
 }
 
+/**
+ * Fill a whole board, one mark at a time.
+ *
+ * Grouped by mark rather than by cell, because that is how the palette is
+ * meant to be used and it is a fair test of it: choose a shape once, then put
+ * it everywhere it goes.
+ */
 export async function solveShape(page: Page, board: ShapeBoard): Promise<void> {
-  for (let i = 0; i < board.answer.length; i++) await markCell(page, i, board.answer[i]);
+  const at = await shapeMapper(page);
+  const picks = [...new Set(board.answer)].sort((a, b) => a - b);
+  for (const pick of picks) {
+    await pickMark(page, pick);
+    const cells = board.answer
+      .map((v, i) => (v === pick ? i : -1))
+      .filter((i) => i >= 0);
+    const boxes = await page.evaluate(
+      (list) => list.map((c) => (window.__puzzles.board() as ShapeHandle).cellBox(c)),
+      cells,
+    );
+    for (const b of boxes) await tap(page, at(b.x + b.size / 2, b.y + b.size / 2));
+  }
 }
 
 // ---------------------------------------------------------------------------

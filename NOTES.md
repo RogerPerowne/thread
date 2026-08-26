@@ -82,10 +82,16 @@ is the only way back and there is nothing else to explain.
   caught it because it re-checked from a smaller clue set where the search
   exploded. `isUnique()` now means one answer AND an exhausted search. Any new
   engine with a bounded solver needs the same distinction.
-- **A menu is not part of the board.** Shape Up's ring of options was sized in
-  board units, so it shrank as the grid grew — thirty-five pixels across on a
-  seven-wide board on the narrowest phone. It is measured in pixels at the
-  moment it opens now, from the scale the board is actually drawn at.
+- **Shape Up's ring is gone, and a palette replaced it.** The ring was a good
+  menu and the wrong idea: every mark cost a press, a pause and an aimed second
+  press at a target that had just appeared under the thumb already covering it,
+  and where an option sat depended on where you pressed, because the ring had
+  to dodge the edges of the board. A palette costs one tap to choose and one
+  per cell after that, it does not move, and a drag paints a run. Tapping a
+  cell that already holds the chosen mark takes it off, so there is no eraser
+  to find. Chips are sized so that the narrowest phone still gives forty-four
+  pixels — and when six chips want more room than the grid does, the palette
+  sets the width of the drawing rather than shrinking to fit.
 - **A harness must read the geometry, not recompute it.** The Shape Up e2e
   carried its own copy of the ring's clamping arithmetic and broke the moment
   the ring started sizing itself. It asks the board where the option is.

@@ -76,39 +76,26 @@
 .shape-clue.off .shape-glyph { fill: var(--bad); }
 .shape-clue.off .shape-pip { fill: var(--bad); }
 
-/* --- the ring ------------------------------------------------------------- */
+/* --- the palette ---------------------------------------------------------- */
 /*
- * A menu under the finger. The scrim behind it is not decoration: without it
- * the options sit on top of the board and the eye cannot tell which marks are
- * the puzzle and which are the choice being offered.
+ * The marks you can make, always in the same place under the board. A chip is
+ * a chip whether it is in the palette or on the grid: same glyph, same weight,
+ * so choosing one and putting it down reads as one object moving rather than
+ * two objects agreeing about a state.
  */
-.shape-scrim {
-  fill: var(--paper);
-  fill-opacity: 0.94;
-  stroke: var(--line);
-  stroke-width: 0.6;
-}
-.shape-ring { pointer-events: none; }
-.shape-ring.open { pointer-events: auto; }
+.shape-rule { stroke: var(--line); stroke-width: 0.6; }
 
-.shape-optbg {
+.shape-chip { cursor: pointer; }
+.shape-chipbg {
   fill: var(--paper);
   stroke: var(--line-2);
   stroke-width: 0.7;
   transition: fill var(--fast) var(--ease), stroke var(--fast) var(--ease);
 }
-.shape-opt.over .shape-optbg { fill: var(--accent); stroke: var(--accent); }
-.shape-opt.over .shape-glyph { fill: var(--paper); }
-.shape-opt.over .shape-clearmark { stroke: var(--paper); }
+/* The one in your hand. Filled rather than outlined, because at a glance an
+   outline is a chip with a slightly thicker edge and a fill is the answer. */
+.shape-chip.on .shape-chipbg { fill: var(--accent); stroke: var(--accent); }
+.shape-chip.on .shape-glyph { fill: var(--paper); }
+.shape-chip.on .shape-blank { fill: var(--paper); }
 
-.shape-clearmark {
-  stroke: var(--mute);
-  stroke-width: 1.1;
-  stroke-linecap: round;
-  fill: none;
-}
-
-.shape-ring.open { animation: shape-pop var(--fast) var(--ease); }
-@keyframes shape-pop {
-  from { opacity: 0; }
 }

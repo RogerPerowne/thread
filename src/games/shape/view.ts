@@ -1,21 +1,23 @@
 /**
  * Shape Up's board.
  *
- * A cell holds one of five things, so cycling through them with taps would be
- * five taps to reach the fifth, over and over, on a board of thirty-six. The
- * brief is right that that is the wrong interaction and right about the fix:
- * put the choice under the finger rather than at the edge of the screen.
+ * Pick up a shape, then put it wherever it goes — the same two-part move as
+ * One to Nine and Hexagony, and for the same reason: on a board of thirty-six
+ * cells you are rarely placing one mark, you are placing six of the same kind
+ * and then six of the next.
  *
- * Press a cell and a ring of shapes opens around it. Slide onto one and let
- * go, or let go and tap one — the same gesture works either way, because a
- * player who has never seen a radial menu will lift their finger and a player
- * who has will not, and neither should be wrong. The ring puts every choice
- * the same short distance away, which is the whole point of a ring: no option
- * is further to reach than any other, and the distance does not grow when a
- * sixth shape is added.
+ * This used to open a ring of options around whatever cell you pressed. A ring
+ * is a fine menu and it was the wrong idea here. Every mark cost a press, a
+ * pause and an aimed second press at a target the size of a thumbnail that had
+ * just appeared under the thumb already covering it; the ring had to dodge the
+ * edges of the board, so where an option was depended on where you pressed;
+ * and filling a row of empties — the commonest thing anybody does — was that
+ * whole dance, six times over.
  *
- * The one thing that is not on the ring is "empty", because empty is what a
- * cell already is, and it sits in the middle where the finger already is.
+ * A palette costs one press to choose and then one tap per cell, the choice
+ * stays where it was put, and a drag paints a whole run of cells. Tapping a
+ * cell that already holds the chosen mark takes it off again, so rubbing out
+ * is the same gesture as writing and there is no eraser to find.
  */
 
 import { svg } from '../../platform/dom.js';
@@ -43,24 +45,35 @@ const MARK_R = CELL * 0.29;
 /** A shape drawn as a clue, in the gutter. */
 const CLUE_R = EDGE * 0.30;
 /**
- * The ring is measured in PIXELS, not in board units.
+ * A palette chip, and the gap between two of them.
  *
- * Everything else here scales with the board, and it should: a mark belongs to
- * its cell. The ring does not — it is a menu, and a menu has to fit a thumb
- * whatever it happens to be sitting on top of. Sized in board units it came
- * out at thirty-five pixels across on a seven-wide board on the narrowest
- * phone, which is under the forty-four a thumb needs, and it got smaller the
- * bigger the puzzle grew. So its size is worked out at the moment it opens,
- * from the scale the board is actually being drawn at.
+ * Twenty-six board units rather than a number chosen by eye. The narrowest
+ * phone still in use gives a board 296 css pixels; the widest board is seven
+ * cells and 174 units across, so a unit is 1.70 pixels there and a chip comes
+ * to forty-four — the smallest target a thumb can be asked for.
+ *
+ * And the palette is never allowed to be narrower than that: when six chips
+ * want more room than the grid does, THEY set the width of the drawing and the
+ * grid is centred inside it (see W below). So the ratio of chip to drawing is
+ * at worst 26 in 174 and the forty-four holds on every board, which is
+ * precisely what the ring this replaced could not manage.
  */
-const OPT_PX = 46;
+const CHIP = 26;
+const CHIP_GAP = 3;
+/** Between the grid and the palette, with the rule halfway. */
+const SPLIT = 14;
 
 export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewHost): View {
   const board = session.board;
   const { w, h, shapes } = board;
   const total = w * h;
-  const W = w * CELL + EDGE * 2;
-  const H = h * CELL + EDGE * 2;
+  /** The marks you can make: one per shape, and one for "known empty". */
+  const PICKS = shapes + 1;
+  const PAL_W = PICKS * CHIP + (PICKS - 1) * CHIP_GAP;
+  const W = Math.max(w * CELL + EDGE * 2, PAL_W);
+  const GRID_H = h * CELL + EDGE * 2;
+  const PAL_TOP = GRID_H + SPLIT;
+  const H = PAL_TOP + CHIP;
 
   const wrap = document.createElement('div');
   wrap.className = 'shape-board';
@@ -80,10 +93,12 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
   const gCells = svg('g', { class: 'shape-cells' });
   const gMarks = svg('g', { class: 'shape-marks' });
   const gClues = svg('g', { class: 'shape-clues' });
-  const gRing = svg('g', { class: 'shape-ring' });
-  el.append(gCells, gClues, gMarks, gRing);
+  const gPal = svg('g', { class: 'shape-palette' });
+  el.append(gCells, gClues, gMarks, gPal);
 
-  const x0 = EDGE;
+  /* The grid is centred in whatever width the drawing ended up with, so a
+     board narrower than its own palette simply gets a wider clue gutter. */
+  const x0 = (W - w * CELL) / 2;
   const y0 = EDGE;
   const cellX = (i: number) => x0 + (i % w) * CELL;
   const cellY = (i: number) => y0 + ((i / w) | 0) * CELL;
@@ -115,9 +130,9 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     let cx = 0;
     let cy = 0;
     if (clue.side === 'top') { cx = x0 + clue.line * CELL + CELL / 2; cy = EDGE / 2; }
-    else if (clue.side === 'bottom') { cx = x0 + clue.line * CELL + CELL / 2; cy = H - EDGE / 2; }
-    else if (clue.side === 'left') { cx = EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; }
-    else { cx = W - EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; }
+    else if (clue.side === 'bottom') { cx = x0 + clue.line * CELL + CELL / 2; cy = GRID_H - EDGE / 2; }
+    else if (clue.side === 'left') { cx = x0 - EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; }
+    else { cx = x0 + w * CELL + EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; }
 
     g.setAttribute('transform', `translate(${cx.toFixed(2)} ${cy.toFixed(2)})`);
     g.appendChild(svg('path', {
@@ -136,105 +151,61 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     clueEl.push(g);
   });
 
-  // --- the ring ------------------------------------------------------------
-  let openAt = -1;
-  let hoverPick = -1;
-  /** Worked out afresh every time the ring opens; see OPT_PX. */
-  let geom = { cx: 0, cy: 0, optR: 9.5, ring: 22 };
-
-  /**
-   * How big the ring is, in board units, for the scale the board is drawn at.
+  // --- the palette ---------------------------------------------------------
+  /*
+   * One chip per mark, laid in a row under the board and never anywhere else.
+   * A menu that appears where you pressed makes the player look for it every
+   * time; a palette that is always in the same place is one the hand learns in
+   * a couple of moves and then stops looking at.
    *
-   * The radius follows from the pixel size. The ring's own radius then follows
-   * from the radius and from how many options there are: `shapes` circles of
-   * radius r round a ring of radius R are 2 R sin(pi/shapes) apart, which has
-   * to clear 2r — and the middle option needs its own clearance too, which is
-   * the term that wins for three or four shapes.
+   * "Known empty" is a chip like any other rather than a special case. It is
+   * the mark a player makes most, and on the ring it was the one option you
+   * could not slide to, because it sat where the finger already was.
    */
-  const measure = (): { optR: number; ring: number } => {
-    const box = el.getBoundingClientRect();
-    const px = box.width > 0 ? box.width / W : 1;
-    const optR = Math.max(9.5, OPT_PX / 2 / px);
-    /*
-     * Two things have to clear, and the second is the one that usually wins:
-     * neighbours on the ring, and every option against the one in the middle.
-     * The middle is drawn at the same size as the rest — it is a choice like
-     * any other and a thumb does not care that it means "empty" — so the ring
-     * has to be at least two radii out, with a little air.
-     */
-    const apart = 1 / Math.sin(Math.PI / shapes) + 0.16;
-    return { optR, ring: optR * Math.max(2.15, apart) };
-  };
+  let picked = 1;
 
-  const ringSpot = (k: number): { x: number; y: number } => {
-    /* Fanned round the cell, starting at the top and going clockwise. The
-       whole ring is nudged back inside the board when it opens on an edge. */
-    const a = -Math.PI / 2 + (k * 2 * Math.PI) / shapes;
-    return { x: Math.cos(a) * geom.ring, y: Math.sin(a) * geom.ring };
-  };
+  const chipX = (pick: number): number => (W - PAL_W) / 2 + pick * (CHIP + CHIP_GAP);
 
-  function closeRing(): void {
-    openAt = -1;
-    hoverPick = -1;
-    gRing.replaceChildren();
-    gRing.classList.remove('open');
-    paint();
-  }
+  el.insertBefore(svg('line', {
+    class: 'shape-rule', x1: (W - PAL_W) / 2, x2: (W + PAL_W) / 2,
+    y1: GRID_H + SPLIT / 2, y2: GRID_H + SPLIT / 2,
+  }), gPal);
 
-  function openRing(cell: number): void {
-    openAt = cell;
-    hoverPick = -1;
-    gRing.replaceChildren();
-    gRing.classList.add('open');
-
-    const { optR, ring } = measure();
-    let cx = cellX(cell) + CELL / 2;
-    let cy = cellY(cell) + CELL / 2;
-    /* Keep the ring on the board: it is a menu, and a menu half off the screen
-       is a menu with options nobody can reach. */
-    cx = Math.max(ring + optR, Math.min(W - ring - optR, cx));
-    cy = Math.max(ring + optR, Math.min(H - ring - optR, cy));
-    geom = { cx, cy, optR, ring };
-
-    gRing.appendChild(svg('circle', { class: 'shape-scrim', cx, cy, r: ring + optR + 2 }));
-    /* The middle is "empty", where the finger already is. */
-    const mid = svg('g', { class: 'shape-opt clear', 'data-pick': 0 });
-    mid.append(
-      svg('circle', { cx, cy, r: optR, class: 'shape-optbg' }),
-      svg('path', {
-        class: 'shape-clearmark',
-        d: `M ${cx - optR * 0.3} ${cy - optR * 0.3} L ${cx + optR * 0.3} ${cy + optR * 0.3}`
-          + ` M ${cx + optR * 0.3} ${cy - optR * 0.3} L ${cx - optR * 0.3} ${cy + optR * 0.3}`,
-      }),
-    );
-    gRing.appendChild(mid);
-
-    for (let s = 1; s <= shapes; s++) {
-      const p = ringSpot(s - 1);
-      const g = svg('g', { class: 'shape-opt', 'data-pick': s });
-      g.append(
-        svg('circle', { cx: cx + p.x, cy: cy + p.y, r: optR, class: 'shape-optbg' }),
-        svg('path', {
-          class: `shape-glyph s${s}`, d: glyphPath(s, optR * 0.6),
-          transform: `translate(${(cx + p.x).toFixed(2)} ${(cy + p.y).toFixed(2)})`,
-        }),
-      );
-      gRing.appendChild(g);
+  const chipEl: SVGGElement[] = [];
+  for (let k = 0; k < PICKS; k++) {
+    /* Shapes first, in the order the clues name them, and the empty mark last:
+       it is a note about the answer rather than part of it. */
+    const pick = k < shapes ? k + 1 : 0;
+    const x = chipX(k) + CHIP / 2;
+    const y = PAL_TOP + CHIP / 2;
+    const g = svg('g', {
+      class: 'shape-chip', 'data-pick': pick, role: 'button', tabindex: -1,
+      'aria-label': pick === 0 ? 'Mark a cell empty' : `Shape ${pick}`,
+    });
+    g.appendChild(svg('rect', {
+      class: 'shape-chipbg', x: chipX(k), y: PAL_TOP, width: CHIP, height: CHIP, rx: 3,
+    }));
+    if (pick === 0) {
+      g.appendChild(svg('circle', { class: 'shape-blank', cx: x, cy: y, r: 1.9 }));
+    } else {
+      g.appendChild(svg('path', {
+        class: `shape-glyph s${pick}`, d: glyphPath(pick, CHIP * 0.28),
+        transform: `translate(${x.toFixed(2)} ${y.toFixed(2)})`,
+      }));
     }
-    paint();
+    gPal.appendChild(g);
+    chipEl.push(g);
   }
 
-  /** Which option a board point is over, or -1 for none. 0 is "empty". */
-  const optionAt = (p: { x: number; y: number }): number => {
-    if (openAt < 0) return -1;
-    const dx = p.x - geom.cx;
-    const dy = p.y - geom.cy;
-    if (Math.hypot(dx, dy) < geom.optR * 1.05) return 0;
-    for (let s = 1; s <= shapes; s++) {
-      const q = ringSpot(s - 1);
-      /* A shade wider than the option is drawn: a finger that lands between
-         two of them should get the nearer one rather than nothing. */
-      if (Math.hypot(dx - q.x, dy - q.y) < geom.optR * 1.25) return s;
+  /** Which chip a board point is over, or -1. The gap counts, so nothing between
+      two chips is dead. */
+  const chipAt = (p: { x: number; y: number }): number => {
+    if (p.y < PAL_TOP - CHIP_GAP || p.y > PAL_TOP + CHIP + CHIP_GAP) return -1;
+    for (let k = 0; k < PICKS; k++) {
+      const x = chipX(k);
+      if (p.x >= x - CHIP_GAP / 2 && p.x <= x + CHIP + CHIP_GAP / 2) {
+        return k < shapes ? k + 1 : 0;
+      }
     }
     return -1;
   };
@@ -255,16 +226,15 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
           class: 'shape-blank', cx: cellX(i) + CELL / 2, cy: cellY(i) + CELL / 2, r: 1.5,
         }));
       }
-      holeEl[i].classList.toggle('open', i === openAt);
       holeEl[i].classList.toggle('cursor', i === cursor && el === document.activeElement);
     }
     board.clues.forEach((_, i) => {
       clueEl[i].classList.toggle('off', j.badClues.includes(i));
       clueEl[i].classList.toggle('out', j.goodClues.includes(i));
     });
-    for (const g of gRing.querySelectorAll('.shape-opt')) {
-      g.classList.toggle('over', Number(g.getAttribute('data-pick')) === hoverPick);
-    }
+    chipEl.forEach((g) => {
+      g.classList.toggle('on', Number(g.getAttribute('data-pick')) === picked);
+    });
   }
 
   function settle(): void {
@@ -292,24 +262,39 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
 
   let cursor = 0;
   let pointerId = -1;
-  let moved = false;
+  /*
+   * What a drag is doing, decided by the cell it starts on and then held for
+   * the whole sweep. A drag that changed its mind halfway — writing over an
+   * empty cell and rubbing out the next one that already had the mark — would
+   * be a gesture whose result depended on what it happened to pass over.
+   */
+  let painting = 0;
+  let lastCell = -1;
 
   const put = (cell: number, value: number): void => {
+    if (session.cells[cell] === value) return;
     session.openGesture();
     session.set(cell, value);
-    host.buzz(value === 0 ? 'tick' : 'notch');
+    host.buzz(value < 0 ? 'tick' : 'notch');
     settle();
+  };
+
+  /** Write the chosen mark here, or take it off if it is already here. */
+  const stroke = (cell: number): void => {
+    if (cell === lastCell) return;
+    lastCell = cell;
+    put(cell, painting === 1 ? picked : -1);
   };
 
   const onDown = (e: PointerEvent): void => {
     if (pointerId !== -1) return;
     const p = point(e);
-    moved = false;
 
-    if (openAt >= 0) {
-      const pick = optionAt(p);
-      if (pick >= 0) { put(openAt, pick); closeRing(); }
-      else closeRing();
+    const chip = chipAt(p);
+    if (chip >= 0) {
+      picked = chip;
+      host.buzz('tick');
+      paint();
       e.preventDefault();
       return;
     }
@@ -319,43 +304,31 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     pointerId = e.pointerId;
     el.setPointerCapture(e.pointerId);
     cursor = cell;
-    openRing(cell);
+    /* Rubbing out is the same gesture as writing: the cell that starts the
+       drag says which of the two the whole drag is. */
+    painting = session.cells[cell] === picked ? 0 : 1;
+    lastCell = -1;
+    stroke(cell);
     e.preventDefault();
   };
 
   const onMove = (e: PointerEvent): void => {
-    if (e.pointerId !== pointerId || openAt < 0) return;
-    const p = point(e);
-    const cx = cellX(openAt) + CELL / 2;
-    const cy = cellY(openAt) + CELL / 2;
-    if (!moved && Math.hypot(p.x - cx, p.y - cy) > 3) moved = true;
-    const pick = optionAt(p);
-    if (pick !== hoverPick) {
-      hoverPick = pick;
-      if (pick >= 0) host.buzz('tick');
-      paint();
-    }
+    if (e.pointerId !== pointerId) return;
+    const cell = cellAt(point(e));
+    if (cell >= 0) { cursor = cell; stroke(cell); }
+    e.preventDefault();
   };
 
   const onUp = (e: PointerEvent): void => {
     if (e.pointerId !== pointerId) return;
     pointerId = -1;
-    if (openAt < 0) return;
-    /*
-     * A gesture that moved onto an option chose it. One that did not is a
-     * press: the ring stays open and waits to be tapped. Nobody is asked
-     * which of the two they meant.
-     */
-    if (!moved) return;
-    const pick = optionAt(point(e));
-    if (pick >= 0) put(openAt, pick);
-    closeRing();
+    lastCell = -1;
   };
 
   el.addEventListener('pointerdown', onDown);
   el.addEventListener('pointermove', onMove);
   el.addEventListener('pointerup', onUp);
-  el.addEventListener('pointercancel', () => { pointerId = -1; closeRing(); });
+  el.addEventListener('pointercancel', onUp);
 
   // --- keyboard ------------------------------------------------------------
   const onKey = (e: KeyboardEvent): void => {
@@ -368,14 +341,17 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
       paint();
       return;
     }
+    /* A digit chooses the mark AND makes it, so the keyboard is one keystroke
+       per cell like the palette is one tap. */
     if (/^[1-9]$/.test(e.key) && Number(e.key) <= shapes) {
-      put(cursor, Number(e.key));
+      picked = Number(e.key);
+      put(cursor, picked);
       e.preventDefault();
       return;
     }
-    if (e.key === '0' || e.key === ' ') { put(cursor, 0); e.preventDefault(); return; }
-    if (e.key === 'Backspace' || e.key === 'Delete') { put(cursor, -1); e.preventDefault(); return; }
-    if (e.key === 'Escape' && openAt >= 0) { closeRing(); e.preventDefault(); }
+    if (e.key === '0') { picked = 0; put(cursor, 0); e.preventDefault(); return; }
+    if (e.key === 'Enter' || e.key === ' ') { put(cursor, picked); e.preventDefault(); return; }
+    if (e.key === 'Backspace' || e.key === 'Delete') { put(cursor, -1); e.preventDefault(); }
   };
   el.addEventListener('keydown', onKey);
   el.addEventListener('focus', paint);
@@ -387,11 +363,13 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     shape: board,
     cells: () => session.cells.slice(),
     cellBox: (cell: number) => ({ x: cellX(cell), y: cellY(cell), size: CELL }),
-    /* Where an option sits, once the ring is open, and how big it is drawn.
-       Read rather than recomputed, so a harness cannot drift from the menu. */
-    ring: () => ({ ...geom }),
-    ringSpot: (pick: number) => (pick === 0 ? { x: 0, y: 0 } : ringSpot(pick - 1)),
-    measureRing: () => measure(),
+    /* Where a palette chip sits, read rather than recomputed, so a harness
+       cannot drift from the thing a thumb actually hits. */
+    chipBox: (pick: number) => {
+      const k = pick === 0 ? shapes : pick - 1;
+      return { x: chipX(k), y: PAL_TOP, size: CHIP };
+    },
+    picked: () => picked,
     sight: (side: string, line: number) => sightLine(board, side as never, line),
     view: { W, H },
   };
