@@ -27,7 +27,7 @@ import {
 } from './board.js';
 import { judge } from './check.js';
 import { search } from './search.js';
-import type { Rng } from './rng.js';
+import type { Rng } from '../../platform/rng.js';
 
 export type Made = {
   readonly board: Board;

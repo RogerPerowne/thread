@@ -18,9 +18,9 @@
 import { readFileSync } from 'node:fs';
 import {
   compile, segPointDist2, grabRadius, type Board,
-} from '../src/core/board.js';
-import { judge } from '../src/core/check.js';
-import { search } from '../src/core/search.js';
+} from '../src/games/thread/board.js';
+import { judge } from '../src/games/thread/check.js';
+import { search } from '../src/games/thread/search.js';
 
 const MODES = ['classic', 'coloured', 'grid'] as const;
 /*

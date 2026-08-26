@@ -1,0 +1,134 @@
+/**
+ * The page itself: how the app sits in a phone.
+ *
+ * The rules here exist because of specific things phones do. Each one is
+ * commented with the thing, because otherwise the next person deletes it.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* `hidden` has to beat a display rule from a layout, or a hidden flex child is
+   still a flex child and still takes its share of the row. */
+[hidden] { display: none !important; }
+
+html {
+  /* iOS inflates type when the phone turns, which silently breaks any layout
+     that was measured in portrait. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--text);
+  font-size: var(--t-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* A rubber-band scroll at the top of a puzzle reads as the board coming
+     loose. The app owns its own scrolling; the document does not bounce. */
+  overscroll-behavior-y: none;
+}
+
+#app {
+  width: 100%;
+  max-width: var(--page);
+  margin: 0 auto;
+  /*
+   * Order matters. On iOS `100vh` is the LARGE viewport — the page as it would
+   * be with the browser's bars hidden — so a page sized to it runs underneath
+   * the address bar the whole time the bar is showing. The static unit is the
+   * fallback for anything that does not know `dvh`; the dynamic unit wins
+   * where it is understood, which is everywhere that matters.
+   */
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding-left: var(--safe-l);
+  padding-right: var(--safe-r);
+}
+
+/* The chrome must not be draggable or selectable under a thumb: a long press
+   on a button should feel like a long press, not like selecting text. */
+button, .chrome {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+a { color: inherit; }
+
+/* Focus is visible, and visible in the same way everywhere. Never removed —
+   the keyboard is a supported way to play. */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--r1);
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Said to a screen reader, shown to nobody. */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- screens -------------------------------------------------------------
+   A screen is a place. Lists scroll; a board does not. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.screen.scrolls {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(var(--s6) + var(--safe-b));
+}
+
+/*
+ * A board is pinned to the viewport. Everything around it scrolls as a list
+ * should; the one thing that must never move under a thumb is the thing the
+ * thumb is drawing on.
+ */
+.screen.fixed {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.display {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.label {
+  font-size: var(--t-xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--mute);
+}
+
+.num { font-variant-numeric: tabular-nums; }

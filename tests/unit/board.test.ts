@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   compile, runIsLegal, runsConflict, segSegDist2, segPointDist2, segRectDist2,
   turnAngle, CLEAR_POST, viewOf, DRAW_R, type Board, type Pt,
-} from '../../src/core/board.js';
-import { judge, firstBreak, whatIsLeft } from '../../src/core/check.js';
-import { search } from '../../src/core/search.js';
+} from '../../src/games/thread/board.js';
+import { judge, firstBreak, whatIsLeft } from '../../src/games/thread/check.js';
+import { search } from '../../src/games/thread/search.js';
 
 const board = (over: Partial<Board> = {}): Board => ({
   id: 't', mode: 'classic', chapter: 1, posts: [], blocks: [],

@@ -8,8 +8,8 @@
  * almost never the way the string actually goes.
  */
 
-import { svg } from './dom.js';
-import { POST_R, viewOf, type Board } from '../core/board.js';
+import { svg } from '../../platform/dom.js';
+import { POST_R, viewOf, type Board } from './board.js';
 
 export function miniBoard(board: Board, ink: string): SVGSVGElement {
   const view = viewOf(board);

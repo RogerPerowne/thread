@@ -1,0 +1,18 @@
+import { chromium } from '@playwright/test';
+const b = await chromium.launch({ args: ['--disable-gpu'] });
+const page = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+const errs = [];
+page.on('pageerror', e => errs.push('ERROR: ' + e.message));
+page.on('console', m => { if (m.type() === 'error') errs.push('CONSOLE: ' + m.text()); });
+await page.goto('http://127.0.0.1:4190/');
+await page.waitForTimeout(900);
+await page.screenshot({ path: 'scratch/library.png' });
+const ids = await page.evaluate(() => window.__puzzles?.games?.() ?? null);
+console.log('games:', JSON.stringify(ids));
+const first = await page.locator('[data-card]').first();
+await first.click();
+await page.waitForTimeout(700);
+await page.screenshot({ path: 'scratch/play.png' });
+console.log('url after card:', page.url());
+console.log('errors:', errs.length ? errs : 'none');
+await b.close();

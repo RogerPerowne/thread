@@ -1,0 +1,126 @@
+/**
+ * The design tokens.
+ *
+ * The register to aim for is editorial rather than app-like: a warm near-white
+ * page, charcoal type, one accent per game drawn from a single family, and
+ * geometry that is precise rather than soft. Nothing here is a rainbow and
+ * nothing is a pill unless being a pill is the point.
+ *
+ * Everything below is a decision, not a default. Where a number looks
+ * arbitrary it is usually derived — the spacing scale is a fourth, the type
+ * scale a major second, and the accents are one hue wheel at one weight so
+ * that six games can sit on one screen without arguing.
+ */
+
+:root {
+  /* --- paper and ink ------------------------------------------------------
+     Warm near-white, because pure white on an OLED phone at night is a lamp.
+     The ink is charcoal rather than black for the same reason: #000 on #fff is
+     a contrast ratio nobody asked for. */
+  --paper: #faf8f4;
+  --paper-2: #f3efe8;
+  --paper-3: #ebe5db;
+  --ink: #16150f;
+  --ink-2: #3a382f;
+  --mute: #6d6a5e;
+  --line: #ddd6c9;
+  --line-2: #c8c0b0;
+
+  /* Something has gone wrong, and something has gone right. Two colours, used
+     nowhere else, so that seeing either one means exactly one thing. */
+  --bad: #b3311c;
+  --good: #1d6b46;
+
+  /* --- the accents --------------------------------------------------------
+     One per game, one family: mid-weight, slightly desaturated, all of them
+     legible as a solid fill under charcoal type. Deliberately not a spectrum
+     — no neon, no primaries, nothing that reads as a toy. */
+  --a-thread: #b6472e;
+  --a-shape: #2f6f8f;
+  --a-hex: #8a6d1f;
+  --a-nine: #4b5aa8;
+  --a-isolate: #386b4f;
+  --a-zigzag: #8c3f6d;
+
+  /* The paper tint that goes behind each accent on a card. */
+  --t-thread: #f4e2db;
+  --t-shape: #dceaf1;
+  --t-hex: #f1e8cf;
+  --t-nine: #e2e4f4;
+  --t-isolate: #dcebe1;
+  --t-zigzag: #f2dfeb;
+
+  /* --- type ---------------------------------------------------------------
+     Two faces and no more. The display face carries titles and numerals that
+     want to be looked at; the text face carries everything that wants to be
+     read. Both are stacks that degrade to something reasonable, because a
+     puzzle that waits on a webfont is a puzzle nobody plays. */
+  --display: 'Rockwell', 'Roboto Slab', 'Bookman Old Style', Georgia, serif;
+  --text: 'Inter', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  /* Board numerals: tabular, so a column of digits lines up. */
+  --digits: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+
+  --t-xs: 11.5px;
+  --t-sm: 13px;
+  --t-md: 15px;
+  --t-lg: 18px;
+  --t-xl: 23px;
+  --t-2xl: 30px;
+  --t-3xl: 40px;
+
+  /* --- space --------------------------------------------------------------
+     A fourth, rounded to whole pixels. Six steps is enough for any layout and
+     few enough that spacing stays consistent by accident rather than by care. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  /* --- shape --------------------------------------------------------------
+     Small radii. A puzzle is made of geometry and rounding it heavily makes
+     the whole thing look apologetic. */
+  --r1: 3px;
+  --r2: 6px;
+  --r3: 10px;
+  --r4: 16px;
+
+  --edge: 1px solid var(--line);
+  --lift: 0 1px 2px rgba(22, 21, 15, 0.06), 0 6px 18px rgba(22, 21, 15, 0.06);
+  --lift-2: 0 2px 6px rgba(22, 21, 15, 0.1), 0 18px 40px rgba(22, 21, 15, 0.12);
+
+  /* --- motion -------------------------------------------------------------
+     Animation is here to explain state and causality, so it is short and it
+     decelerates: things arrive, they do not bounce. */
+  --ease: cubic-bezier(0.2, 0.7, 0.25, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --fast: 120ms;
+  --mid: 200ms;
+  --slow: 320ms;
+
+  --page: 560px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+/*
+ * A player who has asked for less movement has asked for less movement, not
+ * for a game that skips its own feedback. Durations collapse; nothing that
+ * carries meaning is removed.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fast: 1ms;
+    --mid: 1ms;
+    --slow: 1ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

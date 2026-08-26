@@ -10,9 +10,9 @@
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { makeRng } from '../src/core/rng.js';
-import { makeBoard, type Recipe } from '../src/core/make.js';
-import type { Board } from '../src/core/board.js';
+import { makeRng } from '../src/platform/rng.js';
+import { makeBoard, type Recipe } from '../src/games/thread/make.js';
+import type { Board } from '../src/games/thread/board.js';
 
 type Band = { readonly count: number } & Recipe;
 

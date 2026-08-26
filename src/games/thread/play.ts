@@ -1,118 +1,49 @@
 /**
- * Playing a board.
+ * Thread's board, and how it is played.
  *
- * WHAT GOOD CONTROLS ARE, FOR THIS GAME
+ * The screen around this — bar, clock, controls, result — belongs to the
+ * platform. What is here is the board and the thumb, and nothing else.
  *
- * The player's whole job is to put the posts in an order. Everything below
- * follows from taking that seriously, and from one further observation: the
- * thing that makes a puzzle game hard to put down is not that the input is
- * clever, it is that the input is never in the way. Every rule here is chosen
- * so that being wrong costs nothing.
+ * THE CONTROLS, written down because the rest follows from them. The player's
+ * whole job is to put the posts in an order, and what makes a puzzle hard to
+ * put down is not that the input is clever but that it is never in the way.
  *
- *   1. ONE VERB. Point at a post. That is the entire input. Tapping a post and
- *      sweeping a thumb through it do exactly the same thing, so there is no
- *      mode to be in and nothing that has to be learned twice.
- *
- *   2. TAP AND DRAG ARE BOTH FIRST CLASS. Dragging is fast, and it is also a
- *      hand held over the board you are trying to read, and a thirty-post
- *      board is a long thing to hold. Tapping is precise, keeps the board
- *      visible, and can be put down mid-solve. A player should be able to
- *      switch between them in the middle of a string without thinking about
- *      it, and here they can, because of rule 1.
- *
- *   3. WHAT YOU SEE IS THE WHOLE STATE. Nothing is held back, remembered, or
- *      restored later. An earlier version kept the part of the string past
- *      where you grabbed in a hidden tail and rejoined it when you let go; it
- *      was clever and it was the direct cause of a bug where a warning could
- *      not be cleared, because taking the bad run off and letting go put it
- *      straight back. Predictable beats clever.
- *
- *   4. LIFTING YOUR FINGER IS A PAUSE, NEVER A DECISION. It does not commit
- *      and it does not discard. The next touch carries on from where the
- *      string ends.
- *
- *   5. GOING BACK IS THE SAME GESTURE AS GOING FORWARD. Point at a post that
- *      is already on the string and the string ends there again. One post back
- *      or six, tapped or dragged. Correcting a mistake should cost what making
- *      it cost — never a careful reverse over every post in turn.
- *
- *   6. A REFUSED MOVE CHANGES NOTHING, AND SAYS SO. You are never left undoing
- *      something that did not happen. But silence is not an option either:
- *      nothing happening is exactly what a missed touch looks like, so the
- *      string glows.
- *
- *   7. NOTHING IS EVER LOST TO A MIS-TOUCH. Pressing the board and letting go
- *      without moving changes nothing. Every gesture is one Undo.
- *
- *   8. THE ANSWER IS INSTANT AND SPECIFIC. The post you catch pulses, the
- *      string you cannot extend glows, the stretch you take off is drawn
- *      coming off. All of it CSS, so none of it costs a frame of the drag.
- *
- *   9. THE BOARD NEVER MOVES. No scroll, no zoom, no reflow. The line carrying
- *      the warning holds its height whether or not it has anything in it, and
- *      Next holds its place from the start.
- *
- * WHAT TURNS RED
- *
- * A warning means a rule BROKEN — a post used twice, two strings lying on each
- * other. How much is left to do is not a warning and is never shown as one: it
- * is true from the first move to the last, so a red line saying it would be on
- * for the whole game, and one that is always on is one nobody can read.
+ *   1. One verb. Point at a post. That is the entire input.
+ *   2. Tap and drag are both first class, and mixing them mid-string costs
+ *      nothing, because of 1. Dragging is fast; it is also a hand held over
+ *      the board you are trying to read.
+ *   3. What you see is the whole state. Nothing is held back or restored.
+ *   4. Lifting your finger is a pause, never a decision.
+ *   5. Going back is the same gesture as going forward: point at a post
+ *      already on a string and the string ends there again.
+ *   6. A refused move changes nothing, and says so.
+ *   7. Nothing is lost to a mis-touch. Every gesture is one Undo.
+ *   8. Feedback is instant, specific, and free: CSS, never a frame of the drag.
+ *   9. The board never moves.
  */
 
-import { h } from './dom.js';
-import { topBar, pill } from './components.js';
 import { mountBoard } from './render.js';
 import {
-  compile, runBetween, segPointDist2, POST_R, grabRadius, type Board,
-} from '../core/board.js';
-import { judge, firstBreak, whatIsLeft } from '../core/check.js';
-import * as haptics from '../render/haptics.js';
+  runBetween, segPointDist2, POST_R, grabRadius,
+} from './board.js';
+import type { ThreadSession, Piece } from './session.js';
+import type { View, ViewHost } from '../../platform/types.js';
 
 /** How close to catch the string itself, between posts, as a share of the
  * reach for a post — so it scales with the board like the reach does. */
 const GRAB_STRING = 0.72;
 
-export type PlayHooks = {
-  onSolved(): void;
-  onNext(): void;
-  onBack(): void;
-  /** 1-based position in its mode, and how many there are. */
-  readonly place: { index: number; total: number };
-  /** Mode and chapter, for the top bar. */
-  readonly chapter: string;
-  readonly done: boolean;
-};
-
-export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; dispose(): void } {
-  const c = compile(board);
+export function mountThread(
+  root: HTMLElement, session: ThreadSession, host: ViewHost,
+): View {
+  const board = session.board;
+  const c = session.c;
   const view = mountBoard(c);
   /** This board's thumb reach: see `grabRadius`. */
   const GRAB_POST = grabRadius(board);
   const GRAB_LINE = GRAB_POST * GRAB_STRING;
 
-  /*
-   * The board holds PIECES of string, each a contiguous run of posts belonging
-   * to a known strand. A strand is one piece when it is finished, and can be
-   * more than one while it is being built — which is the point:
-   *
-   *   - Start at one pinned end, start at the other, and join them in the
-   *     middle. Working inwards from both ends is how anyone actually solves a
-   *     long string, and with a single path per strand it was impossible.
-   *   - Grab the middle of a finished string and go somewhere else, and it
-   *     simply breaks in two. The far part stays exactly where it is, in full
-   *     view, and joins back on the moment your new route reaches it.
-   *
-   * That second one used to be done with a hidden tail that was put back when
-   * you let go, and it was the direct cause of a warning that could not be
-   * cleared: you took the offending run off, released, and the string laid it
-   * again. A piece you can see cannot do that to you. Nothing here is held
-   * back, and there is nothing to decide between "starting again" and
-   * "changing a bit" — breaking and joining are the same two moves either way.
-   */
-  type Piece = { strand: number; posts: number[] };
-  let pieces: Piece[] = [];
-  const history: Piece[][] = [];
+  let pieces: Piece[] = session.pieces;
   /** Which end of which piece the next post joins onto. */
   let grow: { piece: number; end: 0 | 1 } | null = null;
   /** Is a press in progress? */
@@ -131,121 +62,33 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
    * join it just made.
    */
   let lastPost = -1;
-  let solved = false;
 
-  const clone = (ps: Piece[]): Piece[] => ps.map((p) => ({ strand: p.strand, posts: p.posts.slice() }));
-
-  const meter = h('i');
-  const count = h('span', { class: 'num' });
-  const note = h('span', { class: 'ask' });
-  const hud = h('div', { class: 'hud' },
-    h('div', { class: 'chapter', text: `Level ${hooks.place.index}` }),
-    h('div', { class: 'meta' }, count, h('span', { class: 'spool' }, meter)),
-    note,
-  );
-
-  const surface = h('div', { class: 'boardsurface' }, view.el);
-  const boardBox = h('div', { class: 'board' }, surface);
-
-  const undoBtn = pill('Undo', undo);
-  const clearBtn = pill('Clear', clearAll);
-  const nextBtn = pill('Next', () => hooks.onNext(), 'primary');
-  // Held in place from the start rather than added on the solve: a toolbar
-  // that grows a button rewrites the width of the other two under your thumb.
-  nextBtn.style.visibility = 'hidden';
-  const bar = h('div', { class: 'toolbar' }, undoBtn, clearBtn, nextBtn);
-
-  const el = h('div', { class: 'screen play' },
-    topBar(hooks.chapter, { onBack: () => hooks.onBack() }),
-    h('div', { class: 'playwrap' }, hud, boardBox, bar),
-  );
+  const surface = document.createElement('div');
+  surface.className = 'boardsurface';
+  surface.appendChild(view.el);
+  const boardBox = document.createElement('div');
+  boardBox.className = 'board';
+  boardBox.appendChild(surface);
+  root.appendChild(boardBox);
 
   // --- state ---------------------------------------------------------------
 
-  function snapshot(): void {
-    history.push(clone(pieces));
-    if (history.length > 80) history.shift();
-  }
-
   /**
-   * The pieces as an attempt the judge can read: one entry per strand, plus
-   * any extra pieces on the end.
+   * Repaint, and tell the frame.
    *
-   * A strand with two pieces cannot have both its ends joined yet, so the
-   * ends check fails on it — which is correct, and reads as "not finished"
-   * rather than as a fault. Every run on the board is checked either way,
-   * because the contact test walks all the entries.
+   * The board redraws itself from the pieces and the verdict; the frame reads
+   * the same verdict for its note, its meter and its controls. One judgement
+   * per change, read twice, so the two can never disagree.
    */
-  function attemptOf(): number[][] {
-    const out: number[][] = board.strands.map(() => []);
-    const extra: number[][] = [];
-    const taken = new Uint8Array(board.strands.length);
-    for (const piece of pieces) {
-      if (!taken[piece.strand]) {
-        taken[piece.strand] = 1;
-        out[piece.strand] = piece.posts;
-      } else extra.push(piece.posts);
-    }
-    return [...out, ...extra];
+  function paint(): void {
+    pieces = session.pieces;
+    view.update(pieces, session.raw());
+    host.changed();
   }
 
-  function repaint(partial: boolean): void {
-    /*
-     * A board nobody has touched is judged as work in progress, not as a wrong
-     * answer. Otherwise the first thing a player is told, before they have
-     * done anything at all, is that they have broken a rule.
-     */
-    const laid = pieces.some((p) => p.posts.length > 1);
-    const v = judge(c, attemptOf(), partial || !laid);
-    view.update(pieces, v);
-
-    const used = Math.round(v.progress * c.n);
-    count.textContent = `${used} of ${c.n} posts`;
-    meter.style.width = `${Math.round(v.progress * 100)}%`;
-
-    /*
-     * Red is for something that is WRONG, and nothing else. "Posts left over"
-     * and "ends not joined" are true from the moment a board opens until the
-     * moment it is solved, so showing them as warnings put the board in red for
-     * the whole game — and a warning that never goes cannot be acted on, or
-     * even noticed. They are said quietly, as what is left to do, and the line
-     * turns red only for a rule the player has actually broken.
-     */
-    const broken = laid ? firstBreak(v) : '';
-    const left = laid ? whatIsLeft(v) : 'Drag from a coloured post';
-    note.textContent = v.solved ? 'Solved' : (broken || left);
-    note.classList.toggle('bad', !v.solved && broken !== '');
-    note.classList.toggle('good', v.solved);
-
-    if (v.solved && !solved) {
-      solved = true;
-      haptics.win();
-      nextBtn.style.visibility = 'visible';
-      el.classList.add('won');
-      view.celebrate();
-      hooks.onSolved();
-    } else if (!v.solved && solved) {
-      solved = false;
-      nextBtn.style.visibility = hooks.done ? 'visible' : 'hidden';
-      el.classList.remove('won');
-    }
-  }
-
-  function undo(): void {
-    const prev = history.pop();
-    if (!prev) return;
-    pieces = prev;
-    grow = null;
-    haptics.tick();
-    repaint(false);
-  }
-
-  function clearAll(): void {
-    snapshot();
-    pieces = [];
-    grow = null;
-    haptics.tick();
-    repaint(false);
+  function touch(): void {
+    session.mark();
+    changed = true;
   }
 
   /** Which piece holds this post, and where along it. */
@@ -314,15 +157,8 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
    * the point at which you have said what you want.
    */
   let cutFrom: { piece: number; at: number } | null = null;
-  /** Has this gesture changed the board? Drives undo, and tap-to-wind-back. */
+  /** Has this gesture changed the board? Drives tap-to-wind-back. */
   let changed = false;
-  /** One undo step per gesture, taken before the first change it makes. */
-  let snapped = false;
-
-  function touch(): void {
-    if (!snapped) { snapshot(); snapped = true; }
-    changed = true;
-  }
 
   /*
    * The post the last refusal was about. Saying it again on every pointer
@@ -334,7 +170,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     if (post === refused) return;
     refused = post;
     view.refuse(grow ? pieces[grow.piece].posts : []);
-    haptics.bump();
+    host.buzz('bump');
   }
 
   /** The post a piece is currently growing from. */
@@ -399,8 +235,8 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
           posts.splice(0, held.at);
         }
         refused = -1;
-        haptics.notch();
-        repaint(true);
+        host.buzz('notch');
+        paint();
         return;
       }
 
@@ -428,8 +264,8 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
         joinTo(held.piece);
         refused = -1;
         view.flashPost(post);
-        haptics.tie();
-        repaint(true);
+        host.buzz('tie');
+        paint();
         return;
       }
 
@@ -439,12 +275,12 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
       if (dropped && grow && grow.piece > held.piece) grow.piece--;
       if (!grow) { startAt(post); return; }
       const head = headOf(grow);
-      if (runBetween(c, head, post) < 0) { repaint(true); return; }
+      if (runBetween(c, head, post) < 0) { paint(); return; }
       addToGrowing(post);
       refused = -1;
       view.flashPost(post);
-      haptics.tick();
-      repaint(true);
+      host.buzz('tick');
+      paint();
       return;
     }
 
@@ -466,8 +302,8 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
         addToGrowing(post);
         refused = -1;
         view.flashPost(post);
-        haptics.tick();
-        repaint(true);
+        host.buzz('tick');
+        paint();
         return;
       }
     }
@@ -484,8 +320,8 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     cutFrom = null;
     refused = -1;
     view.flashPost(post);
-    haptics.tick();
-    repaint(true);
+    host.buzz('tick');
+    paint();
   }
 
   /**
@@ -575,14 +411,14 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
   // --- pointer -------------------------------------------------------------
 
   const onDown = (e: PointerEvent) => {
-    if (solved) return;
+    if (session.verdict().solved) return;
     const p = view.at(e.clientX, e.clientY);
     const post = view.nearestPost(p.x, p.y, GRAB_POST);
 
     holding = true;
     lastPost = post;
     changed = false;
-    snapped = false;
+    session.openGesture();
     refused = -1;
     cutFrom = null;
 
@@ -602,7 +438,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     lastAt = p;
     view.el.setPointerCapture(e.pointerId);
     e.preventDefault();
-    repaint(true);
+    paint();
   };
 
   const onMove = (e: PointerEvent) => {
@@ -663,7 +499,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
           view.retract(pieces[cutFrom.piece].strand, posts.slice(0, cutFrom.at + 1).reverse());
           posts.splice(0, cutFrom.at);
         }
-        haptics.notch();
+        host.buzz('notch');
       }
     }
     holding = false;
@@ -672,7 +508,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     lastPost = -1;
     refused = -1;
     view.clearLead();
-    repaint(false);
+    paint();
   };
 
   view.el.addEventListener('pointerdown', onDown);
@@ -718,7 +554,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
     if (e.key === 'Enter' || e.key === ' ') {
       // The same verb the thumb uses, so the keyboard is not a second game.
       reach(cursor);
-      repaint(false);
+      paint();
       e.preventDefault();
       return;
     }
@@ -727,7 +563,8 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
         const piece = pieces[grow.piece];
         const posts = piece.posts;
         if (posts.length > 0) {
-          snapshot();
+          session.openGesture();
+          session.mark();
           if (grow.end === 1) {
             view.retract(piece.strand, posts.slice(Math.max(0, posts.length - 2)));
             posts.pop();
@@ -738,7 +575,7 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
           if (posts.length === 0) { pieces.splice(grow.piece, 1); grow = null; }
         }
       }
-      repaint(false);
+      paint();
       e.preventDefault();
       return;
     }
@@ -754,10 +591,29 @@ export function playScreen(board: Board, hooks: PlayHooks): { el: HTMLElement; d
 
   view.el.addEventListener('keydown', onKey);
 
-  repaint(false);
+  paint();
 
   return {
-    el,
+    el: boardBox,
+
+    /** Something outside changed the state: undo, redo, restart, a resume. */
+    refresh() {
+      pieces = session.pieces;
+      grow = null;
+      view.update(pieces, session.raw());
+    },
+
+    /**
+     * Show a hint's focus. The hint names board things in the game's own
+     * language ("post:14") and this is the only place that language is
+     * understood — the platform passes the strings through without reading
+     * them, which is what lets a hint mean a hexagon in one game and a wall in
+     * another.
+     */
+    spotlight(focus: readonly string[]) {
+      view.spotlight(focus.map((f) => Number(f.split(':')[1])).filter((n) => Number.isInteger(n)));
+    },
+
     dispose() {
       view.el.removeEventListener('pointerdown', onDown);
       view.el.removeEventListener('pointermove', onMove);

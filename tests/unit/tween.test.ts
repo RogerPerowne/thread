@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Ticker, easeOut, easeInOut, linear } from '../../src/render/tween.js';
+import { Ticker, easeOut, easeInOut, linear } from '../../src/platform/tween.js';
 
 // The Ticker only touches rAF when something asks it to run; `advance` steps it
 // deterministically, so these tests never need a real frame loop.

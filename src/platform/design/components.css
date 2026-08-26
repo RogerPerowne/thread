@@ -1,0 +1,348 @@
+/**
+ * The shared furniture: bars, buttons, cards, sheets, meters.
+ *
+ * Every game gets exactly this and nothing of its own. If a game needs a
+ * control that is not here, the control is either wrong or it belongs here for
+ * everyone — a one-off button that only Hexagony uses is how a design system
+ * stops being one.
+ */
+
+/* --- the bar at the top of a game ---------------------------------------- */
+.gamebar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s2);
+  padding: calc(var(--s2) + var(--safe-t)) var(--s3) var(--s2);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: saturate(140%) blur(12px);
+  border-bottom: var(--edge);
+}
+
+.gamebar .middle {
+  min-width: 0;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.gamebar .title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--t-lg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gamebar .sub {
+  font-size: var(--t-xs);
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  gap: var(--s2);
+  justify-content: center;
+  align-items: center;
+}
+
+.gamebar .right { display: flex; gap: var(--s1); justify-content: flex-end; }
+
+/* A dot between two facts, drawn rather than typed so it cannot be selected. */
+.dot::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--line-2);
+  vertical-align: 0.35em;
+  margin-right: var(--s2);
+}
+
+/* --- buttons -------------------------------------------------------------- */
+/* 44px minimum, everywhere, without exception. */
+.icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  border-radius: var(--r2);
+  color: var(--ink);
+  transition: background var(--fast) var(--ease);
+}
+.icon:hover { background: var(--paper-2); }
+.icon:active { background: var(--paper-3); }
+.icon svg { width: 21px; height: 21px; display: block; }
+.icon[disabled] { color: var(--line-2); pointer-events: none; }
+
+.btn {
+  min-height: 44px;
+  padding: 0 var(--s4);
+  border: var(--edge);
+  border-radius: var(--r2);
+  background: var(--paper);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.btn:active { transform: scale(0.97); background: var(--paper-2); }
+.btn[disabled] { color: var(--line-2); border-color: var(--paper-3); pointer-events: none; }
+.btn.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn.accent { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+.btn.wide { width: 100%; }
+.btn svg { width: 17px; height: 17px; }
+
+/* The row of controls under a board. */
+.controls {
+  display: flex;
+  gap: var(--s2);
+  padding: var(--s3) var(--s3) calc(var(--s3) + var(--safe-b));
+  border-top: var(--edge);
+  background: var(--paper);
+}
+.controls .btn { flex: 1 1 0; padding: 0 var(--s2); }
+
+/* --- the note line above a board ------------------------------------------
+   Holds its height whether or not it has anything in it. A board that jumps
+   under your thumb because a word appeared is worse than the word missing. */
+.note {
+  min-height: 2.6em;
+  font-size: var(--t-sm);
+  line-height: 1.3;
+  color: var(--mute);
+  padding: 0 var(--s3);
+  display: flex;
+  align-items: center;
+  transition: color var(--fast) var(--ease);
+}
+.note.bad { color: var(--bad); font-weight: 600; }
+.note.good { color: var(--good); font-weight: 700; }
+
+.meter {
+  flex: 1;
+  height: 5px;
+  min-width: 44px;
+  border-radius: 999px;
+  background: var(--paper-3);
+  overflow: hidden;
+}
+.meter > i {
+  display: block;
+  height: 100%;
+  background: var(--accent, var(--ink-2));
+  transition: width var(--mid) var(--ease);
+}
+
+/* --- library cards -------------------------------------------------------- */
+.deck { display: flex; flex-direction: column; gap: var(--s3); padding: 0 var(--s3); }
+
+.card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s3);
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: var(--s4);
+  border: var(--edge);
+  border-radius: var(--r3);
+  background: var(--paper);
+  transition: transform var(--fast) var(--ease), box-shadow var(--mid) var(--ease);
+}
+.card:active { transform: scale(0.988); }
+.card:hover { box-shadow: var(--lift); }
+
+.card .name {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--t-xl);
+  line-height: 1.1;
+}
+.card .blurb { font-size: var(--t-sm); color: var(--mute); margin-top: 2px; }
+.card .facts {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s3);
+  font-size: var(--t-xs);
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The animated miniature. Square, tinted, and the only place a game's own
+   drawing appears outside its board. */
+.mini {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--r2);
+  background: var(--tint, var(--paper-2));
+  overflow: hidden;
+  flex: none;
+}
+.mini svg { width: 100%; height: 100%; display: block; }
+.card.feature .mini svg { object-fit: cover; }
+
+/* Today's puzzle: the one card that is allowed to be loud. */
+.card.feature {
+  grid-template-columns: 1fr;
+  padding: 0;
+  overflow: hidden;
+  border-color: transparent;
+  background: var(--tint);
+}
+.card.feature .mini { width: 100%; height: 132px; border-radius: 0; background: none; }
+.card.feature .body { padding: var(--s4); }
+.card.feature .name { font-size: var(--t-2xl); }
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.state.done { color: var(--good); }
+.state svg { width: 13px; height: 13px; }
+
+.band {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--r1);
+  background: var(--paper-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+}
+
+/* --- sections ------------------------------------------------------------- */
+.section { padding: var(--s5) 0 var(--s2); }
+.section > .label { padding: 0 var(--s3) var(--s2); }
+
+.masthead {
+  padding: calc(var(--s5) + var(--safe-t)) var(--s3) var(--s3);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.masthead .wordmark {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--t-2xl);
+  letter-spacing: -0.02em;
+}
+.masthead .date { font-size: var(--t-xs); color: var(--mute); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* --- sheets and modals ---------------------------------------------------- */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(22, 21, 15, 0.34);
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  animation: fade var(--mid) var(--ease);
+}
+@keyframes fade { from { opacity: 0; } }
+
+.sheet {
+  width: 100%;
+  max-width: var(--page);
+  background: var(--paper);
+  border-radius: var(--r4) var(--r4) 0 0;
+  padding: var(--s4) var(--s4) calc(var(--s5) + var(--safe-b));
+  box-shadow: var(--lift-2);
+  animation: rise var(--slow) var(--ease);
+  max-height: 86dvh;
+  overflow-y: auto;
+}
+@keyframes rise { from { transform: translateY(18px); } }
+
+.sheet .grabber {
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-2);
+  margin: 0 auto var(--s4);
+}
+.sheet h2 {
+  font-family: var(--display);
+  font-size: var(--t-xl);
+  margin: 0 0 var(--s3);
+}
+.sheet p, .sheet li { font-size: var(--t-sm); color: var(--ink-2); }
+.sheet ol, .sheet ul { padding-left: var(--s4); margin: 0 0 var(--s4); }
+.sheet li { margin-bottom: var(--s2); }
+
+/* --- the archive ---------------------------------------------------------- */
+.chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: var(--s2);
+  padding: 0 var(--s3);
+}
+.chip {
+  aspect-ratio: 1;
+  border: var(--edge);
+  border-radius: var(--r2);
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--fast) var(--ease);
+}
+.chip:active { transform: scale(0.94); }
+.chip.done { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+.chip.going { border-color: var(--accent); border-width: 2px; color: var(--accent); }
+
+/* --- the result ----------------------------------------------------------- */
+.result { text-align: center; }
+.result .big {
+  font-family: var(--display);
+  font-size: var(--t-3xl);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin: var(--s2) 0;
+}
+.result .row {
+  display: flex;
+  justify-content: center;
+  gap: var(--s5);
+  margin: var(--s4) 0;
+}
+.result .row div { text-align: center; }
+.result .row .v { font-size: var(--t-lg); font-weight: 700; font-variant-numeric: tabular-nums; }
+.result .sig {
+  font-family: var(--digits);
+  font-size: var(--t-lg);
+  letter-spacing: 0.14em;
+  margin: var(--s3) 0;
+  color: var(--ink-2);
+}
+
+@media (min-width: 720px) {
+  /*
+   * Desktop is a different shape, not a stretched phone. The library goes to
+   * two columns with the feature spanning both, and a board gets a frame
+   * around it rather than growing to fill a window it was never designed for.
+   */
+  :root { --page: 900px; }
+  .deck { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+  .card.feature { grid-column: 1 / -1; }
+  .card.feature .mini { height: 190px; }
+  .screen.fixed .stage { max-width: 620px; margin: 0 auto; width: 100%; }
+}

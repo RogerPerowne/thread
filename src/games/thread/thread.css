@@ -1,0 +1,214 @@
+/**
+ * Thread's board.
+ *
+ * Only the board: the screen around it belongs to the platform, and the one
+ * thing a game's stylesheet must never do is reach outside its own surface.
+ * Everything here is inside .board or under .board-svg.
+ */
+
+.board {
+  position: relative;
+  /* A zero basis so the flex line, not the content, decides this box's height
+     — container-type: size needs a definite size in both axes, and would
+     otherwise collapse to nothing. */
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: 2px 10px 8px;
+}
+.boardsurface {
+  /*
+   * The largest square the space allows, in either orientation.
+   *
+   * aspect-ratio alone cannot do this: whichever dimension you make definite,
+   * the other follows, and the max- on the definite one clamps it without the
+   * ratio pulling the first back. Container units give the height of the box
+   * as a length, so the side can simply be the smaller of the two.
+   */
+  position: relative;
+  width: min(100%, 100cqh);
+  height: auto;
+  aspect-ratio: 1;
+  max-width: 560px;
+  max-height: 100%;
+  margin: 0 auto;
+}
+.board-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+  overflow: visible;
+}
+.board-svg:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+.block { fill: var(--ink); }
+.post {
+  fill: var(--ink-2, #2a2a2a);
+  transition: fill 140ms var(--ease), r 140ms var(--ease);
+}
+.post.spare { fill: var(--line); }
+.post.cursor { fill: var(--accent, #cf3520); }
+/* A post the string has just caught. Scaling about its own centre needs
+   transform-box, or an SVG shape scales about the whole canvas origin. */
+.post.caught {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: caught 300ms var(--ease);
+}
+@keyframes caught {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.55); }
+  100% { transform: scale(1); }
+}
+
+/* No `stroke` here: the ring gets its colour from a presentation attribute,
+   and a CSS declaration would win over it and paint every ring the same. */
+/*
+ * String being taken back off. The dash is the path's own length, wound off
+ * from the far end towards the post the string now ends at, thinning as it
+ * goes — string pulled back in rather than a line that stops existing. It is
+ * one attribute on one element, so it costs nothing during a drag.
+ */
+.recoil {
+  opacity: 0;
+  pointer-events: none;
+  stroke-dashoffset: 0;
+}
+.recoil.go {
+  animation: recoil 320ms cubic-bezier(0.32, 0, 0.16, 1) forwards;
+}
+@keyframes recoil {
+  0% { opacity: 0.9; stroke-dashoffset: 0; stroke-width: var(--sw); }
+  60% { opacity: 0.5; }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: var(--len);
+    stroke-width: calc(var(--sw) * 0.5);
+  }
+}
+
+/*
+ * There is no way to lay string from here to there. Every post on the string
+ * lights up red, staggered from the loose end backwards, so the answer says
+ * both that the game heard the move and which string it is talking about.
+ *
+ * A ring, not a glow. A post is two board units across and the board can hold
+ * sixty of them, so a post that only changes colour is a dot changing shade
+ * under the very hand covering it — easy to miss, and easy to mistake for
+ * nothing having happened, which is the one thing it has to be told apart
+ * from. So it needs size. But a soft gradient was the only gradient anywhere
+ * in this game: everything else is flat ink on paper, solid strokes and solid
+ * fills, and the halo read as though it had come from a different app. This
+ * is the same ring the pinned ends wear, in the same weight, thrown outwards
+ * and thinning as it goes.
+ *
+ * A pinned end wears its strand's colour as a presentation attribute, and any
+ * CSS rule beats one of those — so the two ends light with the rest rather
+ * than sitting it out and making the string look only half spoken for.
+ */
+.glow {
+  opacity: 0;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  fill: none;
+  stroke: var(--bad, #cf3520);
+  stroke-width: 1.6;
+}
+.glow.refused {
+  animation: refusering 560ms var(--ease);
+  animation-delay: calc(var(--step, 0) * 26ms);
+}
+@keyframes refusering {
+  0% { opacity: 0; transform: scale(0.34); stroke-width: 2.6; }
+  26% { opacity: 1; }
+  100% { opacity: 0; transform: scale(var(--swell, 1.15)); stroke-width: 0.7; }
+}
+
+.post.refused {
+  animation: refused 620ms var(--ease);
+  animation-delay: calc(var(--step, 0) * 26ms);
+}
+@keyframes refused {
+  0%, 100% { fill: var(--ink-2, #2a2a2a); }
+  32% { fill: var(--bad, #cf3520); }
+}
+.pin { fill: none; stroke-width: 0; }
+/*
+ * A pinned end wears its string's colour, solid. On a Coloured or Grid board
+ * that is the only instruction there is — two dots of one colour say "join
+ * these" without a word of text — so it has to be readable at the size a post
+ * is drawn on a lattice of fifty-six.
+ */
+.post.end { fill: var(--ink, var(--ink-2, #2a2a2a)); }
+.pin.pinned { stroke: var(--ink, currentColor); stroke-width: 1.7; stroke-opacity: 1; }
+.head { fill: var(--paper); }
+
+.clash {
+  stroke: var(--bad, #cf3520);
+  stroke-width: 4.4;
+  stroke-linecap: round;
+  animation: clash 1.1s ease-in-out infinite;
+}
+@keyframes clash {
+  0%, 100% { opacity: 0.18; }
+  50% { opacity: 0.44; }
+}
+
+.string {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke-width 160ms var(--ease);
+}
+
+/*
+ * The loose end. Lighter than laid string, because it is not laid yet, and it
+ * greys out when letting go there would do nothing — so the answer arrives
+ * before the player has to guess it from a move that did not happen.
+ */
+.lead {
+  opacity: 0;
+  stroke-opacity: 0.62;
+  stroke-dasharray: 3 2.4;
+  transition: opacity 90ms linear;
+  pointer-events: none;
+}
+.lead.out-of-reach { stroke: var(--line) !important; stroke-opacity: 0.9; }
+
+/* The game itself never scrolls. Everything it needs is on the screen. */
+.screen.play, .screen.play .playwrap { overflow: hidden; }
+/* The solve runs a highlight round every string once and stops. */
+.board-svg.celebrate .string {
+  animation: settle 700ms var(--ease);
+}
+@keyframes settle {
+  0% { stroke-width: var(--sw); }
+  30% { stroke-width: calc(var(--sw) * 1.5); }
+  100% { stroke-width: var(--sw); }
+}
+
+
+/*
+ * Where a hint is pointing. The same ring the refusal throws, in ink rather
+ * than in the bad colour and left standing rather than fading — one visual
+ * idea doing two jobs keeps the board legible.
+ */
+.post.lookhere {
+  animation: lookhere 1.6s var(--ease) infinite;
+}
+@keyframes lookhere {
+  0%, 100% { r: var(--post-r, 2); }
+  50% { r: calc(var(--post-r, 2) * 1.45); }
+}

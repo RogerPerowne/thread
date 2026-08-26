@@ -12,11 +12,11 @@
  * smooth on a phone.
  */
 
-import { svg } from './dom.js';
+import { svg } from '../../platform/dom.js';
 import {
   type Compiled, POST_R, STRING_W, GLOW_R, GLOW_SWELL, viewOf,
-} from '../core/board.js';
-import type { Verdict } from '../core/check.js';
+} from './board.js';
+import type { Verdict } from './check.js';
 
 /** A contiguous run of string, and the strand it belongs to. */
 export type Piece = { readonly strand: number; readonly posts: readonly number[] };
@@ -44,6 +44,8 @@ export type BoardView = {
   retract(strand: number, path: readonly number[]): void;
   /** There is no way to lay string where the thumb just went: say so. */
   refuse(path: readonly number[]): void;
+  /** Draw attention to some posts, for a hint. Empty clears it. */
+  spotlight(posts: readonly number[]): void;
   /**
    * The loose end, following the finger. `post` is where the string currently
    * ends; x and y are where the thumb is, in board space. `reach` says whether
@@ -374,6 +376,18 @@ export function mountBoard(c: Compiled): BoardView {
     lead.setAttribute('opacity', '1');
   }
 
+  /*
+   * A hint's focus. The same swelling ring the refusal uses, in the ink colour
+   * rather than the bad one and left standing rather than thrown — one visual
+   * idea doing two jobs, which is how a board stays legible.
+   */
+  let spotlit: readonly number[] = [];
+  function spotlight(posts: readonly number[]): void {
+    for (const p of spotlit) postEl[p]?.classList.remove('lookhere');
+    spotlit = posts;
+    for (const p of posts) postEl[p]?.classList.add('lookhere');
+  }
+
   function clearLead(): void {
     lead.setAttribute('opacity', '0');
   }
@@ -404,6 +418,6 @@ export function mountBoard(c: Compiled): BoardView {
   void c;
   return {
     el, update, at, nearestPost, flashPost, markCursor, celebrate,
-    retract, refuse, setLead, clearLead, dispose,
+    retract, refuse, spotlight, setLead, clearLead, dispose,
   };
 }
