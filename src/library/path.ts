@@ -35,6 +35,7 @@ import * as store from '../platform/store.js';
 import * as haptics from '../platform/haptics.js';
 import {
   type Pt2, project, lift, groundOf, isoCam, ISO_PITCH, TILE_H, HALF_W, HALF_H,
+  EXTRUDE_PX,
 } from '../platform/ui/camera.js';
 import type { AnyGame } from '../platform/registry.js';
 import type { Puzzle } from '../platform/types.js';
@@ -52,8 +53,17 @@ const CORNERS: [number, number][] = [
 /** Where the four rows of a turn sit. */
 const ROW_SLOTS: [number, number][] = [[191, 0], [390, 274], [608, 517], [390, 766]];
 const PER_TURN = ROW_SLOTS.length;
-/** The ribbon is a slab: this is how thick, in view units at the iso camera. */
-const RIBBON_D = 9;
+/*
+ * The ribbon is a slab, and it is cut from the same block as the tiles.
+ *
+ * Both stand on one floor and are extruded straight up from it; the only
+ * difference is how far. A path that is a third of a tile's height reads as a
+ * ribbon laid on the ground next to some blocks — two objects. Three quarters
+ * reads as one piece of material with the tiles standing slightly proud of it,
+ * which is what it is meant to be. The fraction is the whole decision, so it
+ * is written as one.
+ */
+const RIBBON_D = EXTRUDE_PX * 0.75;
 /** How far the column of light rises above the tile you are up to. */
 const GLOW_PX = 78;
 
