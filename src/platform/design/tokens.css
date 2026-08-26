@@ -50,13 +50,47 @@
   --t-isolate: #dcebe1;
   --t-zigzag: #f2dfeb;
 
+}
+
+/*
+ * Two faces, self-hosted.
+ *
+ * Self-hosted rather than fetched from a font service, and the reason is a
+ * scar: the request was being blocked, the wordmark had been quietly falling
+ * back to Times, and the design being looked at was not the design that had
+ * been written. Ninety kilobytes on our own origin cannot fail that way.
+ *
+ * `swap` on both, because a puzzle that waits on a font is a puzzle nobody
+ * plays. The fallback stacks are chosen to be close enough in width that the
+ * swap does not throw the layout about.
+ */
+@font-face {
+  font-family: 'Zilla Slab';
+  src: url('/fonts/zilla-slab-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Zilla Slab';
+  src: url('/fonts/zilla-slab-600.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Libre Franklin';
+  src: url('/fonts/libre-franklin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
   /* --- type ---------------------------------------------------------------
      Two faces and no more. The display face carries titles and numerals that
      want to be looked at; the text face carries everything that wants to be
      read. Both are stacks that degrade to something reasonable, because a
      puzzle that waits on a webfont is a puzzle nobody plays. */
-  --display: 'Rockwell', 'Roboto Slab', 'Bookman Old Style', Georgia, serif;
-  --text: 'Inter', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --display: 'Zilla Slab', 'Roboto Slab', Georgia, serif;
+  --text: 'Libre Franklin', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
   /* Board numerals: tabular, so a column of digits lines up. */
   --digits: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
 

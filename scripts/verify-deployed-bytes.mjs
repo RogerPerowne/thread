@@ -32,6 +32,16 @@ const fetchTo = (rel) => {
 const html = await readFile(fetchTo('index.html'), 'utf8');
 const assets = [...new Set([...html.matchAll(/assets\/[\w.-]+/g)].map((m) => m[0]))];
 for (const a of assets) fetchTo(a);
+/*
+ * Anything the page preloads, too. Fonts are linked from the HTML rather than
+ * referenced from a stylesheet, so a mirror that only follows CSS `url()`
+ * serves 404s for them — and then reports the site as broken when the fault is
+ * the mirror's.
+ */
+for (const m of html.matchAll(/(?:href|src)="([^"]+\.(?:woff2|woff|ttf|png|svg|ico))"/g)) {
+  const rel = m[1].replace(`${prefix}/`, '').replace(/^\//, '');
+  try { fetchTo(rel); } catch { /* the site does not have it; the check below will say so */ }
+}
 for (const a of assets.filter((a) => a.endsWith('.css'))) {
   const css = await readFile(join(ROOT, a), 'utf8');
   for (const m of css.matchAll(/url\(([^)]+)\)/g)) {
@@ -40,7 +50,10 @@ for (const a of assets.filter((a) => a.endsWith('.css'))) {
   }
 }
 console.log(`mirrored ${site} — ${assets.length} assets`);
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2' };
+const TYPES = {
+  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+  '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.png': 'image/png',
+};
 const server = createServer(async (req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p === prefix || p === `${prefix}/`) p = `${prefix}/index.html`;
