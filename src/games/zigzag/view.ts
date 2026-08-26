@@ -95,7 +95,7 @@ export function mountZigzag(
   const recoils: SVGPathElement[] = [];
   for (let i = 0; i < 6; i++) {
     const r = svg('path', {
-      class: 'zig-recoil', fill: 'none',
+      class: 'zig-path recoil', fill: 'none',
       'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     });
     gLine.appendChild(r);
@@ -136,10 +136,10 @@ export function mountZigzag(
 
   el.append(gCells, gMarks, gLine);
   const box = document.createElement('div');
-  box.className = 'zig-board';
+  box.className = 'gameboard zig-board';
   // The stylesheet sizes the square from the container; a non-square board
   // needs its own ratio or it is letterboxed and drawn smaller than it needs.
-  box.style.setProperty('--zig-ratio', String((W + 2) / (H + 2)));
+  box.style.setProperty('--board-ratio', String((W + 2) / (H + 2)));
   box.appendChild(el);
   root.appendChild(box);
 

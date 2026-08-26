@@ -14,7 +14,7 @@ import { POST_R, viewOf, type Board } from './board.js';
 export function miniBoard(board: Board, ink: string): SVGSVGElement {
   const view = viewOf(board);
   const root = svg('svg', {
-    viewBox: `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.side.toFixed(2)} ${view.side.toFixed(2)}`,
+    viewBox: `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.w.toFixed(2)} ${view.h.toFixed(2)}`,
     class: 'mini', 'aria-hidden': 'true',
   });
 

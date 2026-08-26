@@ -64,12 +64,10 @@ export function mountThread(
    */
   let refused = -1;
 
-  const surface = document.createElement('div');
-  surface.className = 'boardsurface';
-  surface.appendChild(view.el);
   const boardBox = document.createElement('div');
-  boardBox.className = 'board';
-  boardBox.appendChild(surface);
+  boardBox.className = 'gameboard thread-board';
+  boardBox.style.setProperty('--board-ratio', String(view.ratio));
+  boardBox.appendChild(view.el);
   root.appendChild(boardBox);
 
   // --- the state of one string ---------------------------------------------

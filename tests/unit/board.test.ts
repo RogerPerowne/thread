@@ -182,8 +182,8 @@ describe('the window on the board', () => {
     const v = viewOf(b);
     expect(v.x).toBeLessThanOrEqual(6 - DRAW_R);
     expect(v.y).toBeLessThanOrEqual(6 - DRAW_R);
-    expect(v.x + v.side).toBeGreaterThanOrEqual(90 + DRAW_R);
-    expect(v.y + v.side).toBeGreaterThanOrEqual(90 + DRAW_R);
+    expect(v.x + v.w).toBeGreaterThanOrEqual(90 + DRAW_R);
+    expect(v.y + v.h).toBeGreaterThanOrEqual(90 + DRAW_R);
   });
 
   it('covers the blocks too', () => {
@@ -196,15 +196,18 @@ describe('the window on the board', () => {
     expect(v.y).toBeLessThanOrEqual(3);
   });
 
-  it('is square, because the surface is', () => {
-    // A board wider than it is tall still gets a square window, centred —
-    // otherwise the shorter axis letterboxes and thumb-to-board needs to know.
+  it('is the shape of what it holds, so a wide board fills a wide screen', () => {
+    /*
+     * It used to be squared up, on the grounds that the surface was square.
+     * The surface takes its shape from this instead now, so a board wider than
+     * it is tall is drawn across the whole width rather than being given a
+     * margin down each side that nothing is in.
+     */
     const b = board({ posts: [[10, 48], [90, 52]] });
     const v = viewOf(b);
-    const midX = v.x + v.side / 2;
-    const midY = v.y + v.side / 2;
-    expect(midX).toBeCloseTo(50);
-    expect(midY).toBeCloseTo(50);
+    expect(v.w / v.h).toBeGreaterThan(2);
+    expect(v.x + v.w / 2).toBeCloseTo(50);
+    expect(v.y + v.h / 2).toBeCloseTo(50);
   });
 });
 

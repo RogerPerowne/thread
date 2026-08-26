@@ -119,16 +119,27 @@ export function latticePath(cols: number, rows: number, rng: Rng): number[] | nu
   return null;
 }
 
-/** Lattice cell centres, evenly spread inside the board's margin. */
+/**
+ * Lattice cell centres, on a SQUARE grid centred in the board.
+ *
+ * The same step across as down. It used to spread the posts over the whole
+ * square in both directions, which made a seven-by-six board's rows sit
+ * further apart than its columns — the runs were then different lengths
+ * depending on which way they went, which is a difference the rules do not
+ * make and the eye should not be shown.
+ */
 export function latticePosts(cols: number, rows: number): Pt[] {
   const margin = 12;
   const span = BOARD - margin * 2;
+  const step = span / Math.max(1, Math.max(cols, rows) - 1);
+  const x0 = (BOARD - (cols - 1) * step) / 2;
+  const y0 = (BOARD - (rows - 1) * step) / 2;
   const out: Pt[] = [];
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       out.push([
-        Math.round((margin + (cols === 1 ? span / 2 : (x * span) / (cols - 1))) * 100) / 100,
-        Math.round((margin + (rows === 1 ? span / 2 : (y * span) / (rows - 1))) * 100) / 100,
+        Math.round((x0 + x * step) * 100) / 100,
+        Math.round((y0 + y * step) * 100) / 100,
       ]);
     }
   }
@@ -194,12 +205,17 @@ const BLOCK_SIDE = 4.2;
  * ends it will usually be too close to the answer's own runs.
  */
 function blockAcross(
-  board: Board, a: number, b: number, keep: Set<string>, rng: Rng,
+  board: Board, a: number, b: number, keep: Set<string>, _rng: Rng,
 ): Block | null {
   const pa = board.posts[a];
   const pb = board.posts[b];
-  const ts = rng.shuffle([0.5, 0.42, 0.58, 0.35, 0.65]);
-  for (const t of ts) {
+  /*
+   * The middle of the run, and nowhere else. On a lattice every run is the
+   * same length and the middle of one is the furthest point from both posts,
+   * so if a wall fits at all it fits there — and a wall that sits two thirds
+   * of the way along looks like a wall that missed.
+   */
+  for (const t of [0.5]) {
     const cx = pa[0] + (pb[0] - pa[0]) * t;
     const cy = pa[1] + (pb[1] - pa[1]) * t;
     const blk: Block = {

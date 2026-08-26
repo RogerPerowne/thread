@@ -162,3 +162,60 @@ describe('the palette', () => {
     expect(tokens).toMatch(/--fast:\s*1ms/);
   });
 });
+
+describe('one register across five games', () => {
+  /**
+   * The board box, the washes, the spotlight and the wind-off each have ONE
+   * owner, in design/board.css. They were five copies with a different prefix
+   * on each, and the copies had already drifted: one board's "look here" ran at
+   * a different speed, another's spotlight class had a different name — so the
+   * shell could light up four boards and not the fifth.
+   */
+  const board = readFileSync('src/platform/design/board.css', 'utf8');
+
+  it('lets only the platform own the board box', () => {
+    for (const sheet of gameSheets) {
+      expect(sheet.css, `${sheet.game} sizes its own board box`)
+        .not.toMatch(/container-type:\s*size/);
+      expect(sheet.css, `${sheet.game} has its own focus ring`)
+        .not.toMatch(/focus-visible/);
+      expect(sheet.css, `${sheet.game} sets its own aspect-ratio`)
+        .not.toMatch(/aspect-ratio:/);
+    }
+    expect(board).toMatch(/container-type:\s*size/);
+    expect(board).toMatch(/focus-visible/);
+  });
+
+  it('gives the hint one pulse, at one speed, in every game', () => {
+    expect(board).toMatch(/@keyframes lookhere/);
+    for (const sheet of gameSheets) {
+      expect(sheet.css, `${sheet.game} has its own look-here animation`)
+        .not.toMatch(/@keyframes [\w-]*look/);
+      if (!/\.lookhere/.test(sheet.css)) continue;
+      expect(sheet.css, `${sheet.game} pulses its hint at its own speed`)
+        .toMatch(/animation: lookhere(-swell)? var\(--look\)/);
+    }
+  });
+
+  it('measures every movement in the shared beats', () => {
+    /*
+     * No raw durations in a game's stylesheet. Two games flinching at a
+     * refusal for two different lengths of time is not two designs, it is one
+     * design with a typo in it.
+     */
+    for (const sheet of gameSheets) {
+      const raw = sheet.css.match(/(?<![\w-])\d+(\.\d+)?m?s(?![\w-])/g) ?? [];
+      expect(raw, `${sheet.game} times something in ${raw.join(', ')}`).toEqual([]);
+    }
+  });
+
+  it('mixes the game colour into paper at three strengths and no others', () => {
+    for (const sheet of gameSheets) {
+      const mixes = sheet.css.match(/color-mix\([^)]*--accent[^)]*\)/g) ?? [];
+      expect(mixes, `${sheet.game} mixes its own wash: ${mixes.join(' ')}`).toEqual([]);
+    }
+    expect(board).toMatch(/--wash:/);
+    expect(board).toMatch(/--wash-2:/);
+    expect(board).toMatch(/--wash-3:/);
+  });
+});

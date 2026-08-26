@@ -6,60 +6,16 @@
  * Everything here is inside .board or under .board-svg.
  */
 
-.board {
-  position: relative;
-  /* A zero basis so the flex line, not the content, decides this box's height
-     — container-type: size needs a definite size in both axes, and would
-     otherwise collapse to nothing. */
-  flex: 1 1 0;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  container-type: size;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  /* Symmetric, so the square sits where the grid centres it. The old figures
-     were nudged to look right against a layout that no longer exists, and a
-     nudge is a bug waiting for the layout to change. */
-  padding: var(--s2) var(--s3);
-}
-.boardsurface {
-  /*
-   * The largest square the space allows, in either orientation.
-   *
-   * aspect-ratio alone cannot do this: whichever dimension you make definite,
-   * the other follows, and the max- on the definite one clamps it without the
-   * ratio pulling the first back. Container units give the height of the box
-   * as a length, so the side can simply be the smaller of the two.
-   */
-  position: relative;
-  width: min(100%, 100cqh);
-  height: auto;
-  aspect-ratio: 1;
-  max-width: 560px;
-  max-height: 100%;
-  margin: 0 auto;
-}
-.board-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  outline: none;
-  overflow: visible;
-}
-.board-svg:focus-visible {
-  outline: 3px solid var(--ink);
-  outline-offset: 4px;
-  border-radius: 10px;
-}
+/*
+ * The box the board sits in belongs to the platform (see design/board.css);
+ * its shape comes from the drawing, which is measured in `viewOf`.
+ */
+.board-svg { overflow: visible; }
 
 .block { fill: var(--ink); }
 .post {
   fill: var(--ink-2, #2a2a2a);
-  transition: fill 140ms var(--ease), r 140ms var(--ease);
+  transition: fill var(--fast) var(--ease), r var(--fast) var(--ease);
 }
 .post.spare { fill: var(--line); }
 .post.cursor { fill: var(--accent, #cf3520); }
@@ -68,7 +24,7 @@
 .post.caught {
   transform-box: fill-box;
   transform-origin: center;
-  animation: caught 300ms var(--ease);
+  animation: caught var(--slow) var(--ease);
 }
 @keyframes caught {
   0% { transform: scale(1); }
@@ -84,23 +40,7 @@
  * goes — string pulled back in rather than a line that stops existing. It is
  * one attribute on one element, so it costs nothing during a drag.
  */
-.recoil {
-  opacity: 0;
-  pointer-events: none;
-  stroke-dashoffset: 0;
-}
-.recoil.go {
-  animation: recoil 320ms cubic-bezier(0.32, 0, 0.16, 1) forwards;
-}
-@keyframes recoil {
-  0% { opacity: 0.9; stroke-dashoffset: 0; stroke-width: var(--sw); }
-  60% { opacity: 0.5; }
-  100% {
-    opacity: 0;
-    stroke-dashoffset: var(--len);
-    stroke-width: calc(var(--sw) * 0.5);
-  }
-}
+.recoil { stroke-width: var(--sw); }
 
 /*
  * There is no way to lay string from here to there. Every post on the string
@@ -131,8 +71,8 @@
   stroke-width: 1.6;
 }
 .glow.refused {
-  animation: refusering 560ms var(--ease);
-  animation-delay: calc(var(--step, 0) * 26ms);
+  animation: refusering var(--pulse) var(--ease);
+  animation-delay: calc(var(--step, 0) * var(--stagger));
 }
 @keyframes refusering {
   0% { opacity: 0; transform: scale(0.34); stroke-width: 2.6; }
@@ -141,8 +81,8 @@
 }
 
 .post.refused {
-  animation: refused 620ms var(--ease);
-  animation-delay: calc(var(--step, 0) * 26ms);
+  animation: refused var(--pulse) var(--ease);
+  animation-delay: calc(var(--step, 0) * var(--stagger));
 }
 @keyframes refused {
   0%, 100% { fill: var(--ink-2, #2a2a2a); }
@@ -163,7 +103,7 @@
   stroke: var(--bad, #cf3520);
   stroke-width: 4.4;
   stroke-linecap: round;
-  animation: clash 1.1s ease-in-out infinite;
+  animation: clash var(--look) ease-in-out infinite;
 }
 @keyframes clash {
   0%, 100% { opacity: 0.18; }
@@ -173,7 +113,7 @@
 .string {
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: stroke-width 160ms var(--ease);
+  transition: stroke-width var(--fast) var(--ease);
 }
 
 /*
@@ -185,7 +125,7 @@
   opacity: 0;
   stroke-opacity: 0.62;
   stroke-dasharray: 3 2.4;
-  transition: opacity 90ms linear;
+  transition: opacity var(--fast) linear;
   pointer-events: none;
 }
 .lead.out-of-reach { stroke: var(--line) !important; stroke-opacity: 0.9; }
@@ -194,7 +134,7 @@
 .screen.play, .screen.play .playwrap { overflow: hidden; }
 /* The solve runs a highlight round every string once and stops. */
 .board-svg.celebrate .string {
-  animation: settle 700ms var(--ease);
+  animation: settle var(--cheer) var(--ease);
 }
 @keyframes settle {
   0% { stroke-width: var(--sw); }
@@ -208,10 +148,8 @@
  * than in the bad colour and left standing rather than fading — one visual
  * idea doing two jobs keeps the board legible.
  */
+/* A post is a dot with no area to wash, so it swells instead — the platform's
+   other spotlight, same length and same meaning. */
 .post.lookhere {
-  animation: lookhere 1.6s var(--ease) infinite;
-}
-@keyframes lookhere {
-  0%, 100% { r: var(--post-r, 2); }
-  50% { r: calc(var(--post-r, 2) * 1.45); }
+  animation: lookhere-swell var(--look) var(--ease) infinite;
 }

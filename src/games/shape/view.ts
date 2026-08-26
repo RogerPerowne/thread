@@ -76,8 +76,8 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
   const H = PAL_TOP + CHIP;
 
   const wrap = document.createElement('div');
-  wrap.className = 'shape-board';
-  wrap.style.setProperty('--shape-ratio', String(W / H));
+  wrap.className = 'gameboard shape-board';
+  wrap.style.setProperty('--board-ratio', String(W / H));
 
   const el = svg('svg', {
     class: 'shape-svg',

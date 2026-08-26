@@ -13,6 +13,7 @@ import './platform/design/tokens.css';
 import './platform/design/base.css';
 import './platform/design/components.css';
 import './platform/design/play.css';
+import './platform/design/board.css';
 import './platform/design/path.css';
 
 import { App, testHandle } from './platform/app.js';

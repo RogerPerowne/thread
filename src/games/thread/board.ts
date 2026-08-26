@@ -133,8 +133,11 @@ export function grabRadius(board: Board): number {
   return Math.min(GRAB_MAX, 0.45 * Math.sqrt(closest));
 }
 
-/** A square window on board space, in board units. */
-export type View = { readonly x: number; readonly y: number; readonly side: number };
+/** The window on board space that the drawing needs, in board units. */
+export type View = {
+  readonly x: number; readonly y: number;
+  readonly w: number; readonly h: number;
+};
 
 /**
  * The part of board space this board actually occupies, squared up.
@@ -149,9 +152,9 @@ export type View = { readonly x: number; readonly y: number; readonly side: numb
  *
  * Measuring the board instead fixes both: nothing can be cut off, because the
  * window is defined as everything that gets drawn, and a board that occupies
- * less of the square is drawn larger. The square-up is because the surface is
- * square and the projection is xMidYMid meet — without it the shorter axis
- * would letterbox and the mapping from thumb to board would need to know it.
+ * less of the square is drawn larger. It is not squared up: the box the board
+ * is given takes its shape from this, so a lattice wider than it is tall fills
+ * the width of the screen instead of leaving a margin down each side.
  */
 export function viewOf(board: Board): View {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -163,9 +166,8 @@ export function viewOf(board: Board): View {
     x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
     x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
   }
-  if (!Number.isFinite(x0)) return { x: 0, y: 0, side: BOARD };
-  const side = Math.max(x1 - x0, y1 - y0);
-  return { x: x0 - (side - (x1 - x0)) / 2, y: y0 - (side - (y1 - y0)) / 2, side };
+  if (!Number.isFinite(x0)) return { x: 0, y: 0, w: BOARD, h: BOARD };
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
 // ---------------------------------------------------------------------------

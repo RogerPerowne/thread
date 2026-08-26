@@ -25,6 +25,8 @@ const SW = STRING_W * 2;
 
 export type BoardView = {
   readonly el: SVGSVGElement;
+  /** The drawing's width over its height, for the box it is put in. */
+  readonly ratio: number;
   /** Repaint from the strings on the board and their verdict. */
   update(paths: Paths, verdict: Verdict): void;
   /** Board-space point from a client point, and the post nearest it. */
@@ -61,9 +63,11 @@ export function mountBoard(c: Compiled): BoardView {
   // The window is this board's own extent, so nothing it draws can fall off
   // the edge and a board that does not fill the square is drawn larger.
   const view = viewOf(board);
+  /* The box this is drawn in takes its shape from the drawing, so a lattice
+     wider than it is tall fills the width rather than leaving a margin. */
   const el = svg('svg', {
     class: 'board-svg',
-    viewBox: `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.side.toFixed(2)} ${view.side.toFixed(2)}`,
+    viewBox: `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.w.toFixed(2)} ${view.h.toFixed(2)}`,
     preserveAspectRatio: 'xMidYMid meet',
     'aria-label': 'board',
     // The solve animation grows the stroke from whatever it is, so the width
@@ -71,7 +75,7 @@ export function mountBoard(c: Compiled): BoardView {
     // The keyframes grow these from whatever they are, so the numbers live in
     // variables rather than being repeated — and the halo's swell is the same
     // number the board's window was sized from.
-    style: `--sw:${SW};--swell:${GLOW_SWELL}`,
+    style: `--sw:${SW};--swell:${GLOW_SWELL};--dot-r:${POST_R}`,
   });
 
   // --- blocks ---------------------------------------------------------------
@@ -403,14 +407,22 @@ export function mountBoard(c: Compiled): BoardView {
     lead.setAttribute('opacity', '0');
   }
 
+  /**
+   * Board space from a client point, through the SVG's own window.
+   *
+   * The drawing is fitted inside the element with xMidYMid meet, so the scale
+   * is the smaller of the two ratios and whatever is left over is split evenly
+   * either side. Read off the element every time rather than cached: the box
+   * changes with the phone, the keyboard and the orientation.
+   */
   function at(clientX: number, clientY: number): { x: number; y: number } {
     const r = el.getBoundingClientRect();
-    const side = Math.min(r.width, r.height);
-    const ox = r.left + (r.width - side) / 2;
-    const oy = r.top + (r.height - side) / 2;
+    const scale = Math.min(r.width / view.w, r.height / view.h);
+    const ox = r.left + (r.width - scale * view.w) / 2;
+    const oy = r.top + (r.height - scale * view.h) / 2;
     return {
-      x: view.x + ((clientX - ox) / side) * view.side,
-      y: view.y + ((clientY - oy) / side) * view.side,
+      x: view.x + (clientX - ox) / scale,
+      y: view.y + (clientY - oy) / scale,
     };
   }
 
@@ -429,6 +441,7 @@ export function mountBoard(c: Compiled): BoardView {
   void c;
   return {
     el, update, at, nearestPost, flashPost, markCursor, celebrate,
+    ratio: view.w / view.h,
     retract, refuse, spotlight, setLead, clearLead, dispose,
   };
 }

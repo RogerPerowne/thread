@@ -11,43 +11,16 @@
  * board reads the same to everyone.
  */
 
-.shape-board {
-  flex: 1 1 0;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  container-type: size;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  padding: var(--s2) 0;
-}
-.shape-svg {
-  width: min(100%, calc(100cqh * var(--shape-ratio, 1)));
-  height: auto;
-  max-height: 100%;
-  aspect-ratio: var(--shape-ratio, 1);
-  display: block;
-}
-.shape-svg:focus { outline: none; }
-.shape-svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }
-
 /* --- the grid ------------------------------------------------------------- */
 .shape-hole {
   fill: var(--paper-2);
   transition: fill var(--fast) var(--ease);
 }
-.shape-hole.cursor { fill: color-mix(in srgb, var(--accent) 12%, var(--paper)); }
-.shape-hole.open { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); }
+.shape-hole.cursor { fill: var(--wash); }
 .shape-hole.lookhere {
-  fill: color-mix(in srgb, var(--accent) 20%, var(--paper));
-  animation: shape-look 1.6s var(--ease) infinite;
+  fill: var(--wash-2);
+  animation: lookhere var(--look) var(--ease) infinite;
 }
-@keyframes shape-look {
-  0%, 100% { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); }
-  50% { fill: color-mix(in srgb, var(--accent) 34%, var(--paper)); }
-}
-
 /* --- the marks ------------------------------------------------------------ */
 .shape-glyph { fill: var(--ink); }
 

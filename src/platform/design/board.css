@@ -1,0 +1,118 @@
+/**
+ * What every board shares.
+ *
+ * Five games, five sets of rules, five sets of geometry — and one register.
+ * A player moving from one to the next should find the same board box, the
+ * same washes of the game's colour under the same meanings, the same focus
+ * ring, the same length of the same easing on the same kinds of movement. Only
+ * the COLOUR changes, and only because each game owns one.
+ *
+ * Everything here was five copies of itself, one per game, with a different
+ * prefix on each; the copies had already drifted (one board's "look here" ran
+ * at a different speed, one game's spotlight class had a different name, so
+ * the shell could light up four boards and not the fifth). One owner per idea
+ * is the only way that stays fixed.
+ */
+
+/* --- the board box -------------------------------------------------------- */
+/*
+ * The largest the drawing can be in the space it is given, in either
+ * orientation. A game says what shape its drawing is, through --board-ratio,
+ * and this works out the rest.
+ *
+ * aspect-ratio alone cannot do it: whichever dimension you make definite, the
+ * other follows, and a max- on the definite one clamps it without the ratio
+ * pulling the first back. Container units give the height of the box as a
+ * length, so the width can simply be the smaller of the two.
+ */
+.gameboard {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: var(--s2) 0;
+}
+.gameboard > svg {
+  width: min(100%, calc(100cqh * var(--board-ratio, 1)));
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: var(--board-ratio, 1);
+  display: block;
+}
+/*
+ * A board is focusable because every game can be played from the keyboard, but
+ * a ring round it on a tap is noise — so it shows only for the players who
+ * asked for it by using a keyboard.
+ */
+.gameboard > svg:focus { outline: none; }
+.gameboard > svg:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* --- the washes ----------------------------------------------------------- */
+/*
+ * The game's colour, mixed into paper at three strengths, meaning the same
+ * three things everywhere: where the keyboard is, where the thing you are
+ * dragging would land, and where the hint is pointing.
+ *
+ * They are declared where --accent is, because a custom property resolves
+ * against the element it is declared on: put these on :root and they would mix
+ * an accent that is not set there.
+ */
+.screen {
+  --wash: color-mix(in srgb, var(--accent) 12%, var(--paper));
+  --wash-2: color-mix(in srgb, var(--accent) 22%, var(--paper));
+  --wash-3: color-mix(in srgb, var(--accent) 34%, var(--paper));
+}
+
+/*
+ * Where the hint is pointing. A slow pulse rather than a flash: it has to be
+ * findable a second after it starts, because the player is reading a sentence
+ * about it, and it has to stop being interesting after that.
+ *
+ * Two of them, and both live here. A board made of cells can wash the cell in
+ * the game's colour; a board made of dots has no area to wash, so it swells
+ * the dot instead. Same length, same easing, same meaning — and one owner, so
+ * that two games cannot end up defining one name differently and quietly
+ * overwriting each other, which is exactly what had happened.
+ */
+@keyframes lookhere {
+  0%, 100% { fill: var(--wash-2); }
+  50% { fill: var(--wash-3); }
+}
+@keyframes lookhere-swell {
+  0%, 100% { r: var(--dot-r, 2); }
+  50% { r: calc(var(--dot-r, 2) * 1.45); }
+}
+
+/* --- taking a line back --------------------------------------------------- */
+/*
+ * String, or a drawn line, coming back off. The dash is the path's own length,
+ * wound off from the far end towards where the line now ends, thinning as it
+ * goes — a line pulled back in rather than a line that stops existing. Two
+ * games do this and they did it with two copies of the same animation.
+ *
+ * The game sets --sw to its own stroke width and --len to the measured length
+ * of the path; nothing here knows either.
+ */
+.recoil {
+  opacity: 0;
+  pointer-events: none;
+  stroke-dashoffset: 0;
+}
+.recoil.go { animation: recoil var(--slow) cubic-bezier(0.32, 0, 0.16, 1) forwards; }
+@keyframes recoil {
+  0% { opacity: 0.8; stroke-dashoffset: 0; stroke-width: var(--sw); }
+  60% { opacity: 0.45; }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: var(--len);
+    stroke-width: calc(var(--sw) * 0.5);
+  }
+}

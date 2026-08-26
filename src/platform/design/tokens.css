@@ -162,6 +162,19 @@
   --fast: 120ms;
   --mid: 200ms;
   --slow: 320ms;
+  /*
+   * Two longer beats, because two things take longer than an interface
+   * movement and always the same longer: a refusal, which has to be seen and
+   * understood rather than merely noticed, and a board coming out, which is
+   * the one moment worth lingering on. And the pulse a hint sits under, slow
+   * enough to still be findable while its sentence is being read.
+   */
+  --pulse: 560ms;
+  --cheer: 700ms;
+  --look: 1.6s;
+  /* How far apart two things stagger when a run of them answers together —
+     a fortieth of a second, which reads as a run rather than a chorus. */
+  --stagger: 26ms;
 
   --page: 560px;
   --safe-t: env(safe-area-inset-top, 0px);
@@ -180,6 +193,8 @@
     --fast: 1ms;
     --mid: 1ms;
     --slow: 1ms;
+    --pulse: 1ms;
+    --cheer: 1ms;
   }
   *, *::before, *::after {
     animation-duration: 1ms !important;

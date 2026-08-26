@@ -10,27 +10,6 @@
  * it down feel like one object moving rather than two objects swapping states.
  */
 
-.nine-board {
-  flex: 1 1 0;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  container-type: size;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  padding: var(--s2) 0;
-}
-.nine-svg {
-  width: min(100%, calc(100cqh * var(--nine-ratio, 0.7)));
-  height: auto;
-  max-height: 100%;
-  aspect-ratio: var(--nine-ratio, 0.7);
-  display: block;
-}
-.nine-svg:focus { outline: none; }
-.nine-svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }
-
 /* --- the holes ------------------------------------------------------------ */
 .nine-hole {
   fill: var(--paper-2);
@@ -39,17 +18,12 @@
 }
 /* Where the next digit will land: while a token is over it, and where the
    keyboard is. */
-.nine-hole.over { fill: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
-.nine-hole.cursor { fill: color-mix(in srgb, var(--accent) 12%, var(--paper)); }
+.nine-hole.over { fill: var(--wash-2); }
+.nine-hole.cursor { fill: var(--wash); }
 .nine-hole.lookhere {
-  fill: color-mix(in srgb, var(--accent) 20%, var(--paper));
-  animation: nine-look 1.6s var(--ease) infinite;
+  fill: var(--wash-2);
+  animation: lookhere var(--look) var(--ease) infinite;
 }
-@keyframes nine-look {
-  0%, 100% { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); }
-  50% { fill: color-mix(in srgb, var(--accent) 34%, var(--paper)); }
-}
-
 /* The empty tray slot, so the tray reads as nine places rather than a row of
    loose objects — and so a digit's place is still there once it has left. */
 .nine-slot {

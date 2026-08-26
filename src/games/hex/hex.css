@@ -11,27 +11,6 @@
  * tile's fill when it is placed.
  */
 
-.hex-board {
-  flex: 1 1 0;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  container-type: size;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  padding: var(--s2) 0;
-}
-.hex-svg {
-  width: min(100%, calc(100cqh * var(--hex-ratio, 0.8)));
-  height: auto;
-  max-height: 100%;
-  aspect-ratio: var(--hex-ratio, 0.8);
-  display: block;
-}
-.hex-svg:focus { outline: none; }
-.hex-svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }
-
 /* --- the spaces ----------------------------------------------------------- */
 /*
  * An empty space is a hole in the paper, and a full one is nothing at all —
@@ -44,17 +23,12 @@
   stroke: none;
   transition: fill var(--fast) var(--ease);
 }
-.hex-hole.over { fill: color-mix(in srgb, var(--accent) 26%, var(--paper)); }
-.hex-hole.cursor { fill: color-mix(in srgb, var(--accent) 14%, var(--paper)); }
+.hex-hole.over { fill: var(--wash-2); }
+.hex-hole.cursor { fill: var(--wash); }
 .hex-hole.lookhere {
-  fill: color-mix(in srgb, var(--accent) 22%, var(--paper));
-  animation: hex-look 1.6s var(--ease) infinite;
+  fill: var(--wash-2);
+  animation: lookhere var(--look) var(--ease) infinite;
 }
-@keyframes hex-look {
-  0%, 100% { fill: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
-  50% { fill: color-mix(in srgb, var(--accent) 38%, var(--paper)); }
-}
-
 /* The tray's empty places, so a tile's home is still visible once it has left. */
 .hex-slot {
   fill: none;

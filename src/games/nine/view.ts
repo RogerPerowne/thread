@@ -54,8 +54,8 @@ export function mountNine(root: HTMLElement, session: NineSession, host: ViewHos
   const H = TRAY_TOP + TOKEN * 2 + TRAY_GAP;
 
   const board = document.createElement('div');
-  board.className = 'nine-board';
-  board.style.setProperty('--nine-ratio', String((W + 6) / (H + 6)));
+  board.className = 'gameboard nine-board';
+  board.style.setProperty('--board-ratio', String((W + 6) / (H + 6)));
 
   const el = svg('svg', {
     class: 'nine-svg',

@@ -8,48 +8,25 @@
  * reading the run back.
  */
 
-.zig-board {
-  flex: 1 1 0;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  container-type: size;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  padding: var(--s2) 0;
-}
-.zig-svg {
-  width: min(100%, calc(100cqh * var(--zig-ratio, 1)));
-  height: auto;
-  max-height: 100%;
-  aspect-ratio: var(--zig-ratio, 1);
-  display: block;
-}
-
 .zig-cell {
   fill: var(--paper-2);
   stroke: none;
   transition: fill var(--fast) var(--ease);
 }
-.zig-cell.on { fill: color-mix(in srgb, var(--accent) 16%, var(--paper)); }
+.zig-cell.on { fill: var(--wash); }
 
 /* A refused step. The cell flinches rather than the board shouting. */
-.zig-cell.no { animation: zig-no 420ms var(--ease); }
+.zig-cell.no { animation: zig-no var(--pulse) var(--ease); }
 @keyframes zig-no {
   0%, 100% { fill: var(--paper-2); }
   35% { fill: color-mix(in srgb, var(--bad) 26%, var(--paper)); }
 }
 
-/* Where a hint is pointing. */
+/* Where a hint is pointing — the same pulse, at the same speed, as every
+   other board here. */
 .zig-cell.lookhere {
-  animation: zig-look 1.5s var(--ease) infinite;
-  stroke: var(--ink);
-  stroke-width: 0.35;
-}
-@keyframes zig-look {
-  0%, 100% { stroke-opacity: 0.15; }
-  50% { stroke-opacity: 1; }
+  fill: var(--wash-2);
+  animation: lookhere var(--look) var(--ease) infinite;
 }
 
 .zig-num {
@@ -91,21 +68,12 @@
  * far end to the cell the line now ends at — and it thins as it goes, which is
  * what makes it read as line being taken back rather than line being deleted.
  */
-.zig-recoil {
+.zig-path.recoil {
+  --sw: 3.2;
   stroke: var(--accent);
   stroke-width: 3.2;
-  opacity: 0;
-  pointer-events: none;
-  stroke-dashoffset: 0;
 }
-.zig-recoil.go { animation: zig-recoil 320ms cubic-bezier(0.32, 0, 0.16, 1) forwards; }
-@keyframes zig-recoil {
-  0% { opacity: 0.55; stroke-dashoffset: 0; stroke-width: 3.2; }
-  60% { opacity: 0.32; }
-  100% { opacity: 0; stroke-dashoffset: var(--len); stroke-width: 1.6; }
-}
-
-.won .zig-path { animation: zig-swell 700ms var(--ease); }
+.won .zig-path { animation: zig-swell var(--cheer) var(--ease); }
 @keyframes zig-swell {
   0% { stroke-width: 3.2; }
   35% { stroke-width: 4.6; stroke-opacity: 0.72; }

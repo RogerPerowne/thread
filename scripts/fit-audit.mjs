@@ -90,13 +90,13 @@ for (const [vname, w, h] of VIEWPORTS) {
     // --- has it settled? ----------------------------------------------------
     const before = await page.evaluate(() => {
       const r = (s) => document.querySelector(s)?.getBoundingClientRect();
-      const b = r('.boardsurface') ?? r('.cardlist') ?? r('.scroll');
+      const b = r('.gameboard') ?? r('.cardlist') ?? r('.scroll');
       return b ? [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)] : null;
     });
     await page.waitForTimeout(700);
     const after = await page.evaluate(() => {
       const r = (s) => document.querySelector(s)?.getBoundingClientRect();
-      const b = r('.boardsurface') ?? r('.cardlist') ?? r('.scroll');
+      const b = r('.gameboard') ?? r('.cardlist') ?? r('.scroll');
       return b ? [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)] : null;
     });
     if (before && after && before.join() !== after.join()) {

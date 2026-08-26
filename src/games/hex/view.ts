@@ -116,8 +116,8 @@ export function mountHex(root: HTMLElement, session: HexSession, host: ViewHost)
   // --- the drawing ---------------------------------------------------------
   const PAD = 0.3 * R;
   const board = document.createElement('div');
-  board.className = 'hex-board';
-  board.style.setProperty('--hex-ratio', String((W + PAD * 2) / (H + PAD * 2)));
+  board.className = 'gameboard hex-board';
+  board.style.setProperty('--board-ratio', String((W + PAD * 2) / (H + PAD * 2)));
 
   const el = svg('svg', {
     class: 'hex-svg',
