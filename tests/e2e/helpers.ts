@@ -329,3 +329,80 @@ export async function slideMark(page: Page, cell: number, pick: number): Promise
 export async function solveShape(page: Page, board: ShapeBoard): Promise<void> {
   for (let i = 0; i < board.answer.length; i++) await markCell(page, i, board.answer[i]);
 }
+
+// ---------------------------------------------------------------------------
+// Hexagony
+// ---------------------------------------------------------------------------
+
+export type HexBoard = {
+  cells: [number, number][];
+  tiles: number[][];
+  answer: number[];
+  values: number;
+};
+
+type HexHandle = {
+  hex: HexBoard;
+  placed(): number[];
+  space(at: number): { x: number; y: number };
+  slot(tile: number): { x: number; y: number };
+  radius: number;
+  view: { W: number; H: number; ox: number; oy: number };
+};
+
+export async function hexBoard(page: Page): Promise<HexBoard> {
+  return page.evaluate(() => (window.__puzzles.board() as HexHandle).hex as never);
+}
+
+export async function hexMapper(page: Page): Promise<(x: number, y: number) => { x: number; y: number }> {
+  const box = await page.locator('.hex-svg').boundingBox();
+  if (!box) throw new Error('the board is not on screen');
+  const v = await page.evaluate(() => (window.__puzzles.board() as HexHandle).view);
+  const side = Math.min(box.width / v.W, box.height / v.H);
+  const left = box.x + (box.width - side * v.W) / 2;
+  const top = box.y + (box.height - side * v.H) / 2;
+  return (x, y) => ({ x: left + (x - v.ox) * side, y: top + (y - v.oy) * side });
+}
+
+/** Drag one tile from wherever it is into a space, the way a thumb would. */
+export async function dragTile(page: Page, tile: number, at: number): Promise<void> {
+  const map = await hexMapper(page);
+  const where = await page.evaluate((t) => {
+    const h = window.__puzzles.board() as HexHandle;
+    const on = h.placed().indexOf(t);
+    return on >= 0 ? h.space(on) : h.slot(t);
+  }, tile);
+  const target = await page.evaluate((a) => (window.__puzzles.board() as HexHandle).space(a), at);
+
+  const from = map(where.x, where.y);
+  const to = map(target.x, target.y);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (let s = 1; s <= 4; s++) {
+    await page.mouse.move(from.x + (to.x - from.x) * (s / 4), from.y + (to.y - from.y) * (s / 4));
+  }
+  await page.mouse.up();
+}
+
+/** Tap a tile, then tap a space: the other way of making the same move. */
+export async function tapTileInto(page: Page, tile: number, at: number): Promise<void> {
+  const map = await hexMapper(page);
+  const where = await page.evaluate((t) => {
+    const h = window.__puzzles.board() as HexHandle;
+    const on = h.placed().indexOf(t);
+    return on >= 0 ? h.space(on) : h.slot(t);
+  }, tile);
+  const target = await page.evaluate((a) => (window.__puzzles.board() as HexHandle).space(a), at);
+  const from = map(where.x, where.y);
+  const to = map(target.x, target.y);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.mouse.move(to.x, to.y);
+  await page.mouse.down();
+  await page.mouse.up();
+}
+
+export async function solveHex(page: Page, board: HexBoard): Promise<void> {
+  for (let at = 0; at < board.answer.length; at++) await dragTile(page, board.answer[at], at);
+}

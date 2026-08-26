@@ -188,6 +188,26 @@ for (const game of games) {
       await page.mouse.down();
       await page.mouse.up();
     }
+  } else if (game === 'hex') {
+    const svg = page.locator('.hex-svg');
+    const box = await svg.boundingBox();
+    const v = handle.view;
+    const side = Math.min(box.width / v.W, box.height / v.H);
+    const left = box.x + (box.width - side * v.W) / 2;
+    const top = box.y + (box.height - side * v.H) / 2;
+    const at = (x, y) => ({ x: left + (x - v.ox) * side, y: top + (y - v.oy) * side });
+    for (let space = 0; space < handle.hex.answer.length; space++) {
+      const tile = handle.hex.answer[space];
+      const s = await page.evaluate((t) => window.__puzzles.board().slot(t), tile);
+      const c = await page.evaluate((k) => window.__puzzles.board().space(k), space);
+      const f = at(s.x, s.y);
+      const t = at(c.x, c.y);
+      await page.mouse.move(f.x, f.y);
+      await page.mouse.down();
+      await page.mouse.move((f.x + t.x) / 2, (f.y + t.y) / 2);
+      await page.mouse.move(t.x, t.y);
+      await page.mouse.up();
+    }
   } else {
     /*
      * A game with no driver here is a game this check silently stops checking.

@@ -1,0 +1,155 @@
+/**
+ * Hexagony's board.
+ *
+ * The tiles are the design: everything else — the empty spaces, the slots they
+ * come from, the rule between board and tray — is drawn light enough to leave
+ * a set of coloured wedges as the only thing on the page with any weight.
+ *
+ * A tile looks the same in the tray as it does on the board. That is what
+ * makes picking one up and putting it down read as one object moving rather
+ * than two objects swapping states, and it is why nothing here changes a
+ * tile's fill when it is placed.
+ */
+
+.hex-board {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: var(--s2) 0;
+}
+.hex-svg {
+  width: min(100%, calc(100cqh * var(--hex-ratio, 0.8)));
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: var(--hex-ratio, 0.8);
+  display: block;
+}
+.hex-svg:focus { outline: none; }
+.hex-svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }
+
+/* --- the spaces ----------------------------------------------------------- */
+/*
+ * An empty space is a hole in the paper, and a full one is nothing at all —
+ * the tile covers it. The hole is drawn a hair inside the tile it takes so
+ * that a laid tile always sits proud of the socket rather than lining up with
+ * it exactly, which at one pixel of anti-aliasing reads as a wobble.
+ */
+.hex-hole {
+  fill: var(--paper-2);
+  stroke: none;
+  transition: fill var(--fast) var(--ease);
+}
+.hex-hole.over { fill: color-mix(in srgb, var(--accent) 26%, var(--paper)); }
+.hex-hole.cursor { fill: color-mix(in srgb, var(--accent) 14%, var(--paper)); }
+.hex-hole.lookhere {
+  fill: color-mix(in srgb, var(--accent) 22%, var(--paper));
+  animation: hex-look 1.6s var(--ease) infinite;
+}
+@keyframes hex-look {
+  0%, 100% { fill: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
+  50% { fill: color-mix(in srgb, var(--accent) 38%, var(--paper)); }
+}
+
+/* The tray's empty places, so a tile's home is still visible once it has left. */
+.hex-slot {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.35;
+  stroke-dasharray: 1.2 1.2;
+}
+
+/* The line between the puzzle and the pieces. */
+.hex-rule { stroke: var(--line); stroke-width: 0.35; }
+
+/* --- the tiles ------------------------------------------------------------ */
+/*
+ * Eight sector colours, and every one of them says its number as well.
+ *
+ * The colours are the home screen's card family taken round the wheel: each is
+ * light enough for charcoal numerals to sit on it at 9:1 or better, so a
+ * number on a wedge needs no outline, no shadow and no darker variant to be
+ * read. Colour is never the only channel — the numeral is always there — which
+ * is what makes the board work for a player who cannot tell two of these
+ * apart, and what makes the small boards work at all, since they draw on only
+ * three or four of the eight.
+ */
+.hex-board {
+  --hexv1: #efa980;
+  --hexv2: #8ec8e4;
+  --hexv3: #e8c95e;
+  --hexv4: #8fcb9b;
+  --hexv5: #c4aee6;
+  --hexv6: #f0a6a0;
+  --hexv7: #8ed6c8;
+  --hexv8: #ddc9a8;
+}
+
+.hex-tile { cursor: grab; }
+.hex-tile.held { cursor: grabbing; }
+
+.hex-sec { stroke: none; }
+.hex-sec.v1 { fill: var(--hexv1); }
+.hex-sec.v2 { fill: var(--hexv2); }
+.hex-sec.v3 { fill: var(--hexv3); }
+.hex-sec.v4 { fill: var(--hexv4); }
+.hex-sec.v5 { fill: var(--hexv5); }
+.hex-sec.v6 { fill: var(--hexv6); }
+.hex-sec.v7 { fill: var(--hexv7); }
+.hex-sec.v8 { fill: var(--hexv8); }
+
+/* The hairline round a tile, so two tiles that touch are still two tiles. */
+.hex-edge {
+  fill: none;
+  stroke: var(--paper);
+  stroke-width: 0.55;
+}
+
+.hex-num {
+  fill: var(--ink);
+  font-family: var(--num);
+  font-size: 3.4px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Waiting to be put somewhere, after a tap. */
+.hex-tile.picked .hex-edge { stroke: var(--accent); stroke-width: 1.1; }
+.hex-tile.lookhere .hex-edge { stroke: var(--accent); stroke-width: 1.1; }
+
+/*
+ * In the air. A real shadow rather than a colour change: a colour change reads
+ * as a state and this is a position — it is the only thing that says which of
+ * nineteen similar objects is the one under the finger.
+ */
+.hex-tile.held { filter: drop-shadow(0 0.8px 1.2px rgba(22, 21, 15, 0.36)); }
+.hex-tile.held .hex-edge { stroke: var(--accent); stroke-width: 0.9; }
+
+/* Everything settles rather than snapping, except the one being dragged —
+   that one has to be exactly under the finger, every frame. */
+.hex-tile:not(.held) { transition: transform var(--fast) var(--ease); }
+
+/* --- what is wrong -------------------------------------------------------- */
+/*
+ * A clash is drawn on the join itself. It can only appear where both tiles are
+ * down, so it points at two tiles and an edge rather than announcing that
+ * something somewhere is wrong — and it goes the moment either tile moves.
+ */
+.hex-clash {
+  stroke: var(--bad);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+.hex-clash.on { opacity: 1; }
+
+/* --- the card ------------------------------------------------------------- */
+/* The miniature's arriving tile slides rather than jumps: the whole of what it
+   has to say is that two faces come together. */
+.hexmini g { transition: transform var(--slow) var(--ease); }

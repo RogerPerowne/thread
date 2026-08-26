@@ -44,6 +44,7 @@ const ROUTES = [
   ['archive zigzag', '#/g/zigzag'],
   ['archive nine', '#/g/nine'],
   ['archive shape', '#/g/shape'],
+  ['archive hex', '#/g/hex'],
   ['thread small', '#/g/thread/classic-1'],
   ['thread biggest', '#/g/thread/classic-60'],
   ['thread coloured', '#/g/thread/coloured-50'],
@@ -54,6 +55,8 @@ const ROUTES = [
   ['nine last', '#/g/nine/nine-64'],
   ['shape first', '#/g/shape/shape-1'],
   ['shape last', '#/g/shape/shape-66'],
+  ['hex first', '#/g/hex/hex-1'],
+  ['hex last', '#/g/hex/hex-68'],
 ];
 
 /*
