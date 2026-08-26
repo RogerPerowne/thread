@@ -381,10 +381,10 @@ export function mountZigzag(
     el: box,
     refresh: paint,
     spotlight(focus) {
-      for (const c of cellEl) c.classList.remove('look');
+      for (const c of cellEl) c.classList.remove('lookhere');
       for (const f of focus) {
         const n = Number(f.split(':')[1]);
-        if (Number.isInteger(n)) cellEl[n]?.classList.add('look');
+        if (Number.isInteger(n)) cellEl[n]?.classList.add('lookhere');
       }
     },
     dispose() {

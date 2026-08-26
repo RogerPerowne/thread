@@ -149,16 +149,26 @@ export class ZigSession implements Session<ZigState> {
       };
     }
 
+    /*
+     * More than one way on, so nothing is forced. What IS worth saying is
+     * which of them the board is likeliest to punish you for leaving: the cell
+     * with the fewest ways out of its own is the one that gets stranded, and
+     * that is the deduction a player makes without noticing.
+     *
+     * One cell is named, not all of them — a hint that lights up every option
+     * and then says "the highlighted cell" is a hint about nothing.
+     */
     const used = new Set(this.path);
+    let tightest = moves[0];
     let fewest = Infinity;
     for (const m of moves) {
       const ways = neighbours(this.zig.w, this.zig.h, m).filter((c) => !used.has(c)).length;
-      if (ways < fewest) fewest = ways;
+      if (ways < fewest) { fewest = ways; tightest = m; }
     }
     return {
-      focus: moves.map((m) => `cell:${m}`),
-      reason: `Two ways on from here. The highlighted cell has only ${fewest} neighbours left, so it is the one that gets stranded if you leave it.`,
-      move: `Draw into the cell with ${fewest} neighbours left.`,
+      focus: [`cell:${at}`, `cell:${tightest}`],
+      reason: `${moves.length} ways on from here. The one lit up has only ${fewest} left of its own, so it is the one that gets stranded if you go the other way.`,
+      move: 'Draw into the cell lit up, and see whether the rest still works.',
     };
   }
 }

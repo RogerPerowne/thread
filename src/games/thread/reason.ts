@@ -21,7 +21,7 @@
  * be reasoned out; a board that stalls needs a guess, and is not shipped.
  */
 
-import { conflicts, type Compiled } from './board.js';
+import { conflicts, runBetween, type Compiled } from './board.js';
 
 export type Reading = {
   /** True when the reasoning alone finishes the board. */
@@ -164,4 +164,134 @@ export function scoreOf(r: Reading): number {
     + r.rounds * 3.5
     + r.stuck * 0.6
     + (r.byReason ? 0 : 40);
+}
+
+// ---------------------------------------------------------------------------
+// The next deduction, from where the player actually is
+// ---------------------------------------------------------------------------
+
+export type Step = {
+  /** The run that has to be laid. */
+  readonly a: number;
+  readonly b: number;
+  /** Why, in the words the player would use. */
+  readonly reason: string;
+};
+
+/**
+ * The next run that HAS to be laid, given what is on the board already.
+ *
+ * The same crossing-out as `analyse`, started from the player's own strings
+ * rather than from nothing, and stopped at the first thing it can say that the
+ * player has not already done. So the hint is never "the answer is this": it
+ * is one step, and it is a step the player could have taken themselves from
+ * what is drawn.
+ *
+ * Returns null when nothing is forced — either because the board is finished,
+ * or because what is down cannot be carried on from (which is a different
+ * thing, and the fault line says so).
+ */
+export function nextRun(c: Compiled, paths: readonly (readonly number[])[]): Step | null {
+  const { board, runs, n } = c;
+  const state = new Uint8Array(runs.length);
+
+  const need = new Uint8Array(n).fill(2);
+  const pinOf = new Int32Array(n).fill(-1);
+  board.strands.forEach((s, i) => {
+    for (const p of [s.from, s.to]) {
+      if (p < 0) continue;
+      need[p] = 1;
+      pinOf[p] = i;
+    }
+  });
+
+  const at: number[][] = Array.from({ length: n }, () => []);
+  runs.forEach((r, i) => { at[r.a].push(i); at[r.b].push(i); });
+
+  /* What the player has laid is where the reasoning starts. */
+  const laid = new Set<number>();
+  for (const path of paths) {
+    for (let i = 0; i + 1 < path.length; i++) {
+      const run = runBetween(c, path[i], path[i + 1]);
+      if (run >= 0) { state[run] = ON; laid.add(run); }
+    }
+  }
+
+  const parent = new Int32Array(n).map((_, i) => i);
+  const find = (x: number): number => {
+    let r = x;
+    while (parent[r] !== r) r = parent[r];
+    while (parent[x] !== r) { const up = parent[x]; parent[x] = r; x = up; }
+    return r;
+  };
+  const colour = new Int32Array(n);
+  for (let p = 0; p < n; p++) colour[p] = pinOf[p];
+  const join = (i: number): void => {
+    const ra = find(runs[i].a);
+    const rb = find(runs[i].b);
+    if (ra === rb) return;
+    const hue = colour[ra] >= 0 ? colour[ra] : colour[rb];
+    parent[rb] = ra;
+    colour[ra] = hue;
+  };
+  for (const i of laid) join(i);
+
+  const on = new Uint8Array(n);
+  const count = (): void => {
+    on.fill(0);
+    runs.forEach((r, i) => { if (state[i] === ON) { on[r.a]++; on[r.b]++; } });
+  };
+
+  /** What to say about a post that has exactly as many ways left as it needs. */
+  const why = (p: number, has: number, left: number): string => {
+    if (need[p] === 1) return 'This end has only one way out left, so that is where its string goes.';
+    if (has === 1) return 'This post already has one run and only one way left, and every post needs two.';
+    if (left === 2) return 'Only two runs still reach this post, and every post needs two — so both are laid.';
+    return 'This post has as many ways left as it still needs, so they all have to be laid.';
+  };
+
+  for (let round = 0; round < 200; round++) {
+    let moved = false;
+    count();
+
+    for (let p = 0; p < n; p++) {
+      const open = at[p].filter((i) => state[i] === UNKNOWN);
+      if (open.length === 0) continue;
+      if (on[p] === need[p]) {
+        for (const i of open) { state[i] = OFF; moved = true; }
+      } else if (on[p] + open.length === need[p]) {
+        const reason = why(p, on[p], open.length);
+        for (const i of open) {
+          state[i] = ON;
+          join(i);
+          moved = true;
+          /* The first thing the reasoning can say that the player has not
+             already said is the hint. Nothing deeper is worth showing: a
+             player wants the next step, not the tenth. */
+          if (!laid.has(i)) return { a: runs[i].a, b: runs[i].b, reason };
+        }
+      }
+    }
+
+    for (let i = 0; i < runs.length; i++) {
+      if (state[i] === ON) {
+        for (let j = 0; j < runs.length; j++) {
+          if (j === i || state[j] !== UNKNOWN) continue;
+          if (conflicts(c, i, j)) { state[j] = OFF; moved = true; }
+        }
+        continue;
+      }
+      if (state[i] !== UNKNOWN) continue;
+      const ra = find(runs[i].a);
+      const rb = find(runs[i].b);
+      if (ra === rb) { state[i] = OFF; moved = true; continue; }
+      if (colour[ra] >= 0 && colour[rb] >= 0 && colour[ra] !== colour[rb]) {
+        state[i] = OFF;
+        moved = true;
+      }
+    }
+
+    if (!moved) break;
+  }
+  return null;
 }

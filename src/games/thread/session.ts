@@ -17,6 +17,7 @@ import {
   compile, runBetween, type Board, type Compiled,
 } from './board.js';
 import { judge, firstBreak, whatIsLeft } from './check.js';
+import { nextRun } from './reason.js';
 import { Effort } from '../../platform/signature.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
 
@@ -189,20 +190,44 @@ export class ThreadSession implements Session<ThreadState> {
   /**
    * The next useful deduction.
    *
-   * Thread's is a genuine one rather than a peek at the answer: a post with
-   * only one legal run left to it must be an end of a string, because a post
-   * in the middle of one needs a run in and a run out. That is the deduction a
-   * player makes without noticing, and pointing at it is enough to unstick a
-   * board without spoiling it.
+   * Not a peek at the answer: the same crossing-out the designer used to
+   * certify the board, started from what the player has actually laid and
+   * stopped at the first thing it can say that they have not. So the hint is
+   * always one step, always one the board itself justifies, and always one
+   * they could have found from what is drawn.
    *
-   * Failing that, it looks for the tightest corner — the post with the fewest
-   * ways out that is not yet used — which is where the board is most nearly
-   * decided and therefore where thinking pays best.
+   * When something already down is wrong there is no next step to name, and
+   * saying so is more use than pointing at a post: the reasoning below it is
+   * built on a mistake.
    */
   hint(): Hint | null {
+    const v = this.raw();
+    if (v.broken.length > 0) {
+      const clash = v.clashes[0] ?? v.badRuns[0];
+      return {
+        focus: clash ? [`post:${clash[0]}`, `post:${clash[1]}`] : [],
+        reason: 'Something already on the board breaks the rule, so nothing follows from here.',
+        move: 'Take that bit of string back and the board can be reasoned on again.',
+      };
+    }
+
+    const step = nextRun(this.c, this.paths);
+    if (step) {
+      return {
+        focus: [`post:${step.a}`, `post:${step.b}`],
+        reason: step.reason,
+        move: 'Lay string between the two posts lit up.',
+      };
+    }
+
+    /*
+     * Nothing is forced from here. That is not a dead end — it means the next
+     * move needs two facts at once — so the most useful thing left to say is
+     * where the board is tightest, which is where two facts are likeliest to
+     * meet.
+     */
     const used = new Set<number>();
     for (const path of this.paths) for (const p of path) used.add(p);
-
     let tightest = -1;
     let fewest = Infinity;
     for (let p = 0; p < this.c.n; p++) {
@@ -212,20 +237,9 @@ export class ThreadSession implements Session<ThreadState> {
       if (ways < fewest) { fewest = ways; tightest = p; }
     }
     if (tightest < 0) return null;
-
-    const pinned = this.pinAt(tightest) >= 0;
-    if (fewest === 1) {
-      return {
-        focus: [`post:${tightest}`],
-        reason: pinned
-          ? 'This end has only one way out left, so that run has to be laid.'
-          : 'Only one run still reaches this post, so it has to be the end of a string.',
-        move: 'Lay string between this post and its one remaining neighbour.',
-      };
-    }
     return {
       focus: [`post:${tightest}`],
-      reason: `This post has only ${fewest} ways out — fewer than anything else left, so it is the one most nearly decided.`,
+      reason: `Nothing is forced just now. This post has only ${fewest} ways out — fewer than anything else left, so it is where the next thing will be decided.`,
     };
   }
 }

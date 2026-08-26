@@ -207,13 +207,19 @@ export class ShapeSession implements Session<ShapeState> {
       };
     }
 
-    /* Nothing forced. Point at the clue that rules out the most, which is the
-       one worth reading again. */
-    const clue = board.clues[0];
+    /*
+     * Nothing forced. Name the tightest line, and quote a clue that actually
+     * READS that line — an arbitrary clue from the other side of the board is
+     * true and no use, which is what this used to give.
+     */
+    const looks = board.clues.find((clue) => {
+      const line = sightLine(board, clue.side, clue.line);
+      return line.length === best.cells.length && line.every((i) => best.cells.includes(i));
+    });
     return {
       focus: best.cells.map((i) => `cell:${i}`),
       reason: `${best.label.charAt(0).toUpperCase()}${best.label.slice(1)} is the tightest line left — ${best.ways.length} ways to fill it.`,
-      move: clue ? clueText(clue, NAMES) : undefined,
+      move: looks ? clueText(looks, NAMES) : undefined,
     };
   }
 }

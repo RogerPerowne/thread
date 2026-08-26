@@ -224,10 +224,16 @@ export class NineSession implements Session<NineState> {
         move: `Put ${best.ways[0].join(', ')} in the highlighted cells, in that order.`,
       };
     }
+    /*
+     * Nothing is settled, so the third rung cannot name a move — and naming
+     * one of the four ways as though it were the way would be a hint that is
+     * true and misleading at once. What it can say is what to do with the
+     * line: it is the lines crossing this one that cut four down to one.
+     */
     return {
       focus: best.cells.map((i) => `cell:${i}`),
       reason: `${best.label.charAt(0).toUpperCase()}${best.label.slice(1)} is the tightest line left — only ${best.ways.length} ways to fill it.`,
-      move: `One of them starts with ${best.ways[0][0]}.`,
+      move: `Take each of the ${best.ways.length} against the lines that cross it; only one of them will survive.`,
     };
   }
 

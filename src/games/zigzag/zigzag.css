@@ -42,7 +42,7 @@
 }
 
 /* Where a hint is pointing. */
-.zig-cell.look {
+.zig-cell.lookhere {
   animation: zig-look 1.5s var(--ease) infinite;
   stroke: var(--ink);
   stroke-width: 0.35;

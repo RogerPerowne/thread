@@ -176,3 +176,37 @@ test('an unknown route lands somewhere real rather than on nothing', async ({ pa
   await gotoApp(page, '#/g/nosuchgame/nosuchpuzzle');
   await expect(page.locator('.masthead .wordmark')).toBeVisible();
 });
+
+test('every game answers the Hint button, and escalates rather than telling', async ({ page }) => {
+  /*
+   * The one part of a puzzle that can lie without anybody noticing: nothing
+   * checks a hint, and a player who follows a wrong one blames themselves.
+   * What is checked here is the shell's half of the contract — that every game
+   * has something to say, that it lights something up before it says it, and
+   * that pressing again says more rather than repeating.
+   */
+  await gotoApp(page);
+  const games = await page.evaluate(() => window.__puzzles.games());
+  expect(games.length).toBeGreaterThan(4);
+
+  for (const game of games) {
+    const id = (await page.evaluate((g) => window.__puzzles.puzzles(g), game))[0];
+    await page.goto(`/#/g/${game}/${id}`);
+    await page.waitForSelector('.stage svg');
+
+    const hint = page.locator('.controls .btn', { hasText: 'Hint' });
+    await hint.click();
+    const first = await page.locator('.note').textContent();
+    expect(first, `${game} said nothing`).toBeTruthy();
+    expect(
+      await page.locator('.lookhere').count(),
+      `${game} lit nothing up`,
+    ).toBeGreaterThan(0);
+
+    await hint.click();
+    const second = await page.locator('.note').textContent();
+    expect(second, `${game} repeated itself instead of escalating`).not.toBe(first);
+    expect(second!.trim().length, `${game} said nothing on the second press`)
+      .toBeGreaterThan(12);
+  }
+});
