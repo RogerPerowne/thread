@@ -302,6 +302,37 @@ export function mountBoard(c: Compiled): BoardView {
     }
   }
 
+  /*
+   * The number on a pinned end.
+   *
+   * Colour on its own cannot do this job. A twelve-strand lattice needs twelve
+   * pairs told apart, and twelve inks that a person with ordinary colour vision
+   * can separate collapse to two or three under dichromacy — the palette's
+   * worst pair differs by 1.02:1 in lightness, so hue is carrying all of it.
+   * No re-ordering fixes that; a second channel is the only thing that does.
+   *
+   * It is a number rather than a dash pattern on the string, because a dashed
+   * string would break the one promise this board makes: what is drawn is
+   * exactly the set of points the string occupies. The number goes where the
+   * nail head goes — on top, so laid string passes behind it — and it appears
+   * only when there is more than one strand, because with one there is nothing
+   * to tell apart and the board is better without it.
+   */
+  const numbered = board.strands.length > 1;
+  if (numbered) {
+    board.strands.forEach((s, i) => {
+      if (s.from < 0) return;
+      for (const p of [s.from, s.to]) {
+        const [x, y] = board.posts[p];
+        headEl[p].remove();
+        gHeads.appendChild(svg('text', {
+          class: 'endnum', x, y, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'aria-hidden': 'true', text: String(i + 1),
+        }));
+      }
+    });
+  }
+
   const buf: string[] = [];
 
   /*

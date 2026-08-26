@@ -179,13 +179,15 @@ carries meaning is removed. Focus is visible and never removed; the keyboard is
 a supported way to play. On the path, every state is told by shape and fill as
 well as by colour, and each tile carries its own number.
 
-One gap, stated rather than glossed: on a Thread board with several strands,
-which two pinned ends belong to each other is told by **colour alone**. The
-twelve inks are far apart in hue but not in lightness — the worst pair differs
-by 1.02:1 — so a player who cannot separate those hues cannot read a crowded
-board. Dashing the string is not the fix, because a dashed line would break the
-one promise the board makes (what is drawn is exactly what the string
-occupies); marking the pinned ends would be. It is not done yet.
+Colour is never the only carrier. A Thread board with twelve strands needs
+twelve pairs told apart, and twelve inks that separate cleanly for one player
+collapse to two or three under dichromacy — the palette's worst pair differs by
+1.02:1 in lightness, so hue was carrying all of it, and no re-ordering fixes
+that. Every pinned end carries its strand's **number**. It is a number rather
+than a dash pattern on the string, because a dashed string would break the one
+promise the board makes: what is drawn is exactly the set of points the string
+occupies. A board with a single strand has nothing to tell apart and is left
+plain.
 
 No icon in the interface is a text character. A gear or an arrow typed as a
 glyph changes shape between platforms, ignores the stroke weight around it and

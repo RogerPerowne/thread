@@ -28,6 +28,17 @@ seven, which is the largest size that still reads. Raising the ink count is not
 the fix either: twenty-five hues that a person can tell apart at post size do
 not exist.
 
+## Done since, worth remembering
+
+**Pinned ends are numbered.** Colour alone could not pair twelve strands: the
+ink palette's worst pair differs by 1.02:1 in lightness, so hue was carrying
+all of it, and under dichromacy twelve hues collapse to two or three. No
+re-ordering of the palette fixes that — a second channel is the only thing that
+does. The number goes where the nail head goes, on top of laid string, and only
+on boards with more than one strand. A dash pattern on the string was the
+obvious alternative and is wrong: it breaks the promise that what is drawn is
+exactly the set of points the string occupies.
+
 ## Scars
 
 Each of these cost real time and each one is now held by a test or by a
@@ -71,11 +82,6 @@ construction. They are here so the next change does not undo the fix.
   free, but with no ends given it takes six or seven blocks to pin the answer
   down, and a board that cluttered is worse to look at than the free ends are
   worth. `Recipe.freeEnds` exists and is unused.
-- **Colour is the only thing pairing a Thread strand's two ends.** The twelve
-  inks are far apart in hue and nearly identical in lightness — the worst pair
-  is 1.02:1. Marking the pinned ends (a numeral or a shape on each) would fix
-  it; dashing the string would not, because a dashed line breaks the promise
-  that what is drawn is exactly what the string occupies.
 - **No entry animation into a puzzle.** The path used to fly the camera down
   onto the tile you pressed and turn its face into the board. `camera.ts` still
   carries everything that needs — `lerpCam`, the pitch and yaw — but the flight

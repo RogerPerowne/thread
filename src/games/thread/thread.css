@@ -159,6 +159,21 @@
 .pin.pinned { stroke: var(--ink, currentColor); stroke-width: 1.7; stroke-opacity: 1; }
 .head { fill: var(--paper); }
 
+/*
+ * The number on a pinned end. Sized in board units like everything else here,
+ * so it holds its proportion whether the board is nine posts or fifty-six —
+ * and small enough that two digits still sit inside the post's own dot.
+ */
+.endnum {
+  fill: var(--paper);
+  font-family: var(--text);
+  font-size: 3.4px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.18px;
+  pointer-events: none;
+}
+
 .clash {
   stroke: var(--bad, #cf3520);
   stroke-width: 4.4;

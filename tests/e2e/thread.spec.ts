@@ -181,3 +181,35 @@ test('a half-finished board comes back after a reload', async ({ page }) => {
   );
   expect(back, 'the board did not come back as it was left').toBe(5);
 });
+
+test('a strand can be told from its neighbour without seeing colour', async ({ page }) => {
+  /*
+   * Twelve inks that separate cleanly for one player collapse to two or three
+   * for another: the palette's worst pair differs by 1.02:1 in lightness, so
+   * hue is carrying all of it. Every pinned end therefore carries its strand's
+   * number, and this is the check that it does — on every board that has more
+   * than one strand, both ends of every strand, and nothing on a board where
+   * there is only one pair and nothing to tell apart.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'thread');
+
+  for (const id of [ids[0], ids[64], ids[187]]) {
+    await openPuzzle(page, 'thread', id);
+    const board = await threadBoard(page);
+    const pinned = board.strands.filter((s) => s.from >= 0);
+    const want = pinned.length > 1 ? pinned.length * 2 : 0;
+    await expect(page.locator('.endnum')).toHaveCount(want);
+    if (want === 0) continue;
+
+    // Each number appears exactly twice — once at each end of its strand.
+    const seen = await page.evaluate(
+      () => [...document.querySelectorAll('.endnum')].map((t) => t.textContent),
+    );
+    const counts = new Map<string, number>();
+    for (const n of seen) counts.set(n!, (counts.get(n!) ?? 0) + 1);
+    expect([...counts.keys()].sort((a, b) => Number(a) - Number(b)))
+      .toEqual(pinned.map((_, i) => String(i + 1)));
+    for (const [n, c] of counts) expect(c, `strand ${n} does not have two ends`).toBe(2);
+  }
+});
