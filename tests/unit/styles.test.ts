@@ -1,52 +1,126 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-
-const css = readFileSync('src/ui/styles.css', 'utf8');
+import { readFileSync, readdirSync } from 'node:fs';
 
 /**
- * The bug this holds: the bottom of the play screen sat underneath Safari's
- * search bar.
+ * Things about the stylesheets that no rendered page can catch.
  *
- * On iOS, `100vh` is the LARGE viewport — the page as it would be with the bar
- * hidden — so anything sized to it runs under the bar the whole time the bar is
- * showing. `100dvh` is the viewport as it currently is. Both are needed, since
- * dvh is not everywhere, but the order decides which one wins: the static unit
- * has to come first as the fallback, and the dynamic one after it.
- *
- * Written the wrong way round it still looks correct, and still works on every
- * desktop browser, because there the two are the same number.
+ * A test that renders the app and measures it runs in a desktop browser, where
+ * `100vh` and `100dvh` are the same number and every rule below therefore
+ * looks fine. The bug these exist for only appears on a phone, in Safari, with
+ * the address bar showing — which is to say, on the device most people will
+ * use. So the source is read instead.
  */
-describe('viewport height, and Safari', () => {
-  const rules = css.split('}');
 
-  it('never lets 100vh override 100dvh in the same rule', () => {
-    for (const rule of rules) {
-      const vh = rule.lastIndexOf('100vh');
-      const dvh = rule.lastIndexOf('100dvh');
-      if (vh < 0 || dvh < 0) continue;
-      // lastIndexOf('100vh') also matches inside '100dvh', so only a match
-      // that is not part of a dvh counts.
-      const bareVh = [...rule.matchAll(/100vh/g)]
-        .map((m) => m.index ?? -1)
-        .filter((i) => rule.slice(Math.max(0, i - 1), i) !== 'd');
-      if (bareVh.length === 0) continue;
-      const head = (rule.split('{')[0] ?? '').trim().split('\n').pop();
-      expect(
-        Math.max(...bareVh) < dvh,
-        `${head}: 100vh comes after 100dvh, so it wins and the page runs under Safari's bar`,
-      ).toBe(true);
+const dir = 'src/platform/design';
+const sheets = readdirSync(dir)
+  .filter((f) => f.endsWith('.css'))
+  .map((f) => ({ name: f, css: readFileSync(`${dir}/${f}`, 'utf8') }));
+
+const gameSheets = readdirSync('src/games', { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .flatMap((d) => readdirSync(`src/games/${d.name}`)
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => ({ game: d.name, name: f, css: readFileSync(`src/games/${d.name}/${f}`, 'utf8') })));
+
+describe('the viewport units', () => {
+  /**
+   * Every rule, as its selector and its declarations.
+   */
+  function rules(css: string): { at: string; body: string }[] {
+    const out: { at: string; body: string }[] = [];
+    const re = /([^{}]+)\{([^{}]*)\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(css)) !== null) out.push({ at: m[1].trim(), body: m[2] });
+    return out;
+  }
+
+  it('never lets a bare vh win over a dvh', () => {
+    /*
+     * On iOS `100vh` is the LARGE viewport: the page as it would be with the
+     * browser's bars hidden. A page sized to it runs underneath the address
+     * bar the whole time the bar is showing. Both units belong in the source —
+     * the static one as a fallback — but the dynamic one has to come second,
+     * because the later declaration is the one that applies.
+     */
+    for (const sheet of sheets) {
+      for (const rule of rules(sheet.css)) {
+        for (const prop of ['height', 'min-height', 'max-height']) {
+          const decls = [...rule.body.matchAll(new RegExp(`${prop}\\s*:([^;]*)`, 'g'))]
+            .map((d) => d[1]);
+          const lastVh = decls.findLastIndex((d) => /\d\s*vh\b/.test(d));
+          const lastDvh = decls.findLastIndex((d) => /\d\s*dvh\b/.test(d));
+          if (lastVh === -1 || lastDvh === -1) continue;
+          expect(
+            lastVh,
+            `${sheet.name} — ${rule.at}: ${prop} sets vh after dvh, so vh wins and the page runs under Safari's bar`,
+          ).toBeLessThan(lastDvh);
+        }
+      }
     }
   });
 
-  it('sizes the play screen to the viewport as it actually is', () => {
-    const rule = rules.find((r) => /\.screen\.play\s*\{/.test(r + '}'));
-    expect(rule, 'no .screen.play rule at all').toBeTruthy();
-    expect(rule).toContain('100dvh');
+  it('leaves room for the notch and the home indicator', () => {
+    const all = sheets.map((s) => s.css).join('\n');
+    expect(all).toMatch(/safe-area-inset-top/);
+    expect(all).toMatch(/safe-area-inset-bottom/);
+    // And the controls under a board actually use the bottom one, because that
+    // is the row a home indicator sits on top of.
+    const components = sheets.find((s) => s.name === 'components.css')!.css;
+    expect(components).toMatch(/\.controls\s*\{[^}]*--safe-b/s);
+  });
+});
+
+describe('what a game may style', () => {
+  it('keeps every game inside its own board', () => {
+    /*
+     * The one rule a game's stylesheet must obey. A game that styles `.btn` or
+     * `.gamebar` is a game that has reached out of its box, and the next game
+     * to be added inherits whatever it did — which is how a design system
+     * stops being one.
+     */
+    const platformOnly = [
+      '.gamebar', '.btn', '.icon', '.controls', '.card', '.sheet', '.scrim',
+      '.masthead', '.chip', '.deck', '.note', '.meter', 'body', '#app',
+    ];
+    for (const sheet of gameSheets) {
+      for (const owned of platformOnly) {
+        const re = new RegExp(`(^|[,{}\\s])${owned.replace('.', '\\.')}([\\s,{:]|$)`, 'm');
+        expect(
+          re.test(sheet.css),
+          `${sheet.game}/${sheet.name} styles ${owned}, which belongs to the platform`,
+        ).toBe(false);
+      }
+    }
   });
 
-  it('keeps the play screen toolbar clear of the home indicator', () => {
-    const rule = rules.find((r) => /\.screen\.play \.toolbar\s*\{/.test(r + '}'));
-    expect(rule, 'the toolbar does not clear the safe area').toBeTruthy();
-    expect(rule).toContain('--safe-b');
+  it('gives every game a stylesheet of its own', () => {
+    const games = readdirSync('src/games', { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    for (const game of games) {
+      expect(
+        gameSheets.some((s) => s.game === game),
+        `${game} has no stylesheet, so its board is styled from somewhere it should not be`,
+      ).toBe(true);
+    }
+  });
+});
+
+describe('the palette', () => {
+  const tokens = sheets.find((s) => s.name === 'tokens.css')!.css;
+
+  it('gives every game an accent and a tint from the one family', () => {
+    const accents = [...tokens.matchAll(/--a-([a-z]+):/g)].map((m) => m[1]);
+    const tints = [...tokens.matchAll(/--t-([a-z]+):/g)].map((m) => m[1]);
+    expect(accents.length).toBeGreaterThan(0);
+    for (const a of accents) {
+      expect(tints, `--a-${a} has no matching tint`).toContain(a);
+    }
+  });
+
+  it('honours a request for less movement', () => {
+    expect(tokens).toMatch(/prefers-reduced-motion/);
+    // Durations collapse; nothing that carries meaning is removed.
+    expect(tokens).toMatch(/--fast:\s*1ms/);
   });
 });

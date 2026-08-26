@@ -133,6 +133,14 @@ export function gameFrame(
    * zone at exactly that moment, and the board never appears.
    */
   let saveTimer = 0;
+  /*
+   * The result is shown a beat after the solve, so the board's own
+   * confirmation is seen before a sheet covers it. That beat has to be
+   * cancellable: press Next inside it and the sheet would otherwise open over
+   * the puzzle you have just moved to, and its scrim eats every touch — the
+   * new board looks fine and simply does not respond.
+   */
+  let resultTimer = 0;
 
   // --- the game's own board ------------------------------------------------
   const host: ViewHost = {
@@ -175,7 +183,7 @@ export function gameFrame(
     haptics.win();
     el.classList.add('won');
     // A beat for the board's own confirmation before the result covers it.
-    setTimeout(() => showResult(took), still() ? 0 : 620);
+    resultTimer = window.setTimeout(() => showResult(took), still() ? 0 : 620);
   }
 
   function showResult(took: number): void {
@@ -278,6 +286,7 @@ export function gameFrame(
     dispose() {
       clearInterval(clockTimer);
       clearTimeout(saveTimer);
+      clearTimeout(resultTimer);
       document.removeEventListener('visibilitychange', onHidden);
       if (!finished) store.keep(game.meta.id, puzzle.id, session.save());
       view.dispose();

@@ -1,0 +1,93 @@
+/**
+ * Zigzag's board.
+ *
+ * Numbers first: the board is a field of digits and everything else is drawn
+ * around them, so the type is the design. The line is heavy enough to read as
+ * one continuous thing at a glance and translucent enough that the numbers it
+ * covers can still be read — which matters, because you check your work by
+ * reading the run back.
+ */
+
+.zig-board {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: var(--s2) 0;
+}
+.zig-svg {
+  width: min(100%, calc(100cqh * var(--zig-ratio, 1)));
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: var(--zig-ratio, 1);
+  display: block;
+}
+
+.zig-cell {
+  fill: var(--paper-2);
+  stroke: none;
+  transition: fill var(--fast) var(--ease);
+}
+.zig-cell.on { fill: color-mix(in srgb, var(--accent) 16%, var(--paper)); }
+
+/* A refused step. The cell flinches rather than the board shouting. */
+.zig-cell.no { animation: zig-no 420ms var(--ease); }
+@keyframes zig-no {
+  0%, 100% { fill: var(--paper-2); }
+  35% { fill: color-mix(in srgb, var(--bad) 26%, var(--paper)); }
+}
+
+/* Where a hint is pointing. */
+.zig-cell.look {
+  animation: zig-look 1.5s var(--ease) infinite;
+  stroke: var(--ink);
+  stroke-width: 0.35;
+}
+@keyframes zig-look {
+  0%, 100% { stroke-opacity: 0.15; }
+  50% { stroke-opacity: 1; }
+}
+
+.zig-num {
+  font-family: var(--display);
+  font-size: 4.4px;
+  font-weight: 700;
+  fill: var(--ink-2);
+  pointer-events: none;
+  transition: fill var(--fast) var(--ease);
+}
+.zig-num.on { fill: var(--ink); }
+
+/* The two ends. Drawn as an outline rather than a fill so the number stays
+   readable and the marks cannot be confused with the line itself. */
+.zig-end {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 0.5;
+}
+.zig-end.from { stroke-dasharray: none; }
+.zig-end.to { stroke-dasharray: 1.6 1.4; }
+
+.zig-path {
+  stroke: var(--accent);
+  stroke-width: 3.2;
+  stroke-opacity: 0.5;
+}
+.zig-lead {
+  stroke: var(--accent);
+  stroke-width: 3.2;
+  stroke-opacity: 0.22;
+  stroke-linecap: round;
+  opacity: 0;
+  pointer-events: none;
+}
+.won .zig-path { animation: zig-swell 700ms var(--ease); }
+@keyframes zig-swell {
+  0% { stroke-width: 3.2; }
+  35% { stroke-width: 4.6; stroke-opacity: 0.72; }
+  100% { stroke-width: 3.2; }
+}

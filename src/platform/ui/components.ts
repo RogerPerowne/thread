@@ -46,6 +46,22 @@ export function button(
  * inside itself and gives it back on the way out — a modal that strands the
  * keyboard is not a modal, it is a trap.
  */
+const openSheets = new Set<() => void>();
+
+/**
+ * Shut every sheet.
+ *
+ * Called when the app changes place. A sheet lives on the body rather than
+ * inside a screen — it has to, to sit above everything — which means it does
+ * not go away when its screen does. Left behind, its scrim covers the next
+ * board and silently eats every touch: the puzzle looks fine and simply does
+ * not respond.
+ */
+export function closeSheets(): void {
+  for (const shut of [...openSheets]) shut();
+  openSheets.clear();
+}
+
 export function sheet(title: string, body: Child[], opts: { onClose?: () => void } = {}): () => void {
   const before = document.activeElement as HTMLElement | null;
   const panel = h('div', {
@@ -61,11 +77,13 @@ export function sheet(title: string, body: Child[], opts: { onClose?: () => void
   const scrim = h('div', { class: 'scrim' }, panel);
 
   const shut = () => {
+    openSheets.delete(shut);
     document.removeEventListener('keydown', onKey);
     scrim.remove();
     before?.focus?.();
     opts.onClose?.();
   };
+  openSheets.add(shut);
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') { e.preventDefault(); shut(); }
   };

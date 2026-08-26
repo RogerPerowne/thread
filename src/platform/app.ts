@@ -15,6 +15,7 @@ import { gameById, allGames } from './registry.js';
 import { libraryScreen, labelOf } from '../library/library.js';
 import { archiveScreen } from '../library/archive.js';
 import { gameFrame } from './ui/frame.js';
+import { closeSheets } from './ui/components.js';
 import type { Puzzle } from './types.js';
 
 type Screen = { el: HTMLElement; dispose(): void };
@@ -32,8 +33,19 @@ export class App {
     else location.hash = hash;
   }
 
-  private show(screen: Screen): void {
+  /**
+   * Swap screens. Takes a factory rather than a screen, and that matters.
+   *
+   * Building the new screen first and disposing the old one after means two
+   * screens are alive at the same moment, and anything global they both touch
+   * belongs to the wrong one when the dust settles. The old screen has to be
+   * gone before the new one exists.
+   */
+  private show(make: () => Screen): void {
+    closeSheets();
     this.current?.dispose();
+    this.current = null;
+    const screen = make();
     this.current = screen;
     this.root.replaceChildren(screen.el);
     /*
@@ -58,7 +70,7 @@ export class App {
         if (at < 0) { this.go(`#/g/${game.meta.id}`); return; }
         const puzzle: Puzzle<unknown> = puzzles[at];
         const next = puzzles[at + 1] ?? null;
-        this.show(gameFrame(game, puzzle, {
+        this.show(() => gameFrame(game, puzzle, {
           label: labelOf(game, puzzle),
           next,
           onBack: () => this.go(`#/g/${game.meta.id}`),
@@ -67,14 +79,14 @@ export class App {
         return;
       }
 
-      this.show(archiveScreen(game, {
+      this.show(() => archiveScreen(game, {
         onBack: () => this.go('#/'),
         open: (id) => this.go(`#/g/${game.meta.id}/${id}`),
       }));
       return;
     }
 
-    this.show(libraryScreen({
+    this.show(() => libraryScreen({
       open: (gameId, puzzleId) => this.go(`#/g/${gameId}/${puzzleId}`),
       archive: (gameId) => this.go(`#/g/${gameId}`),
     }));
@@ -94,6 +106,15 @@ export function testHandle(): unknown {
     games: () => allGames().map((g) => g.meta.id),
     puzzles: (id: string) => gameById(id)?.puzzles().map((p) => p.id) ?? [],
     puzzle: (id: string, pid: string) => gameById(id)?.puzzles().find((p) => p.id === pid) ?? null,
+    /**
+     * Whatever the game on screen wants to tell a test about its own board.
+     *
+     * Read-only, and in the game's own terms — Thread answers questions about
+     * runs, Zigzag about cells. Without it a harness has to hard-code board
+     * geometry, which is how a test comes to tap somewhere no player taps and
+     * still go green.
+     */
+    board: () => (window as unknown as { __board?: unknown }).__board ?? null,
   };
 }
 

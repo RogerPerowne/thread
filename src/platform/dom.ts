@@ -26,6 +26,9 @@ export function svg<K extends keyof SVGElementTagNameMap>(
     const v = attrs[k];
     if (v === undefined || v === null || v === false) continue;
     if (typeof v === 'function') el.addEventListener(k.replace(/^on/, '').toLowerCase(), v as EventListener);
+    // `text` is content, not an attribute — SVG has no `text` attribute, so
+    // setting one silently draws nothing at all.
+    else if (k === 'text') el.textContent = String(v);
     else el.setAttribute(k, String(v));
   }
   add(el, children);

@@ -1,64 +1,87 @@
 import type { Page } from '@playwright/test';
 
 /**
- * Every helper here drives the game through REAL pointer events. Solving a
- * board by calling into the app would prove the rules work and nothing at all
- * about whether the game is PLAYABLE, and those are different questions. The
- * window hook is read-only: it says where the posts are, as a player's eyes
- * would.
+ * Every helper here drives the app through REAL pointer events. Solving a
+ * board by calling into it would prove the rules work and nothing at all about
+ * whether the game is PLAYABLE, and those are different questions.
+ *
+ * The read-only handles say where things are, as a player's eyes would. They
+ * are read in the game's own terms rather than in board coordinates copied
+ * into this file, because a copied constant is how a harness comes to tap
+ * somewhere no player taps and still go green.
  */
 
-export type Strand = { from: number; to: number; color: string };
-
-export type Board = {
-  id: string;
-  mode: 'classic' | 'coloured' | 'grid';
-  posts: [number, number][];
-  blocks: { x: number; y: number; w: number; h: number }[];
-  strands: Strand[];
-  solution: number[][];
+type Handle = {
+  games(): string[];
+  puzzles(game: string): string[];
+  puzzle(game: string, id: string): { id: string; band: string; data: unknown } | null;
+  board(): unknown;
 };
+
+declare global {
+  interface Window { __puzzles: Handle }
+}
 
 export async function gotoApp(page: Page, hash = '#/'): Promise<void> {
   await page.goto(`/${hash}`);
-  await page.waitForFunction(() => Boolean((window as never as { __thread?: unknown }).__thread));
+  await page.waitForFunction(() => Boolean(window.__puzzles));
 }
 
-/** Open one board and read it back. */
-export async function openBoard(page: Page, mode: string, n: number): Promise<Board> {
-  const want = `#/p/${mode}/${n}`;
+/** Open one puzzle and wait for its board. */
+export async function openPuzzle(page: Page, game: string, id: string): Promise<void> {
+  const want = `#/g/${game}/${id}`;
   // A goto that only changes the fragment is a same-document navigation and
-  // would not re-run the app, so returning to the board we are on needs a real
-  // reload.
+  // would not re-run the app, so returning to the puzzle we are on needs a
+  // real reload.
   if (page.url().endsWith(want)) await page.reload();
   else await page.goto(`/${want}`);
-  await page.waitForFunction(() => Boolean((window as never as { __thread?: unknown }).__thread));
-  await page.waitForSelector('.board-svg');
-  return readBoard(page);
+  await page.waitForFunction(() => Boolean(window.__puzzles));
+  await page.waitForSelector('.stage svg');
 }
 
-/** The board's own record of itself, straight off the read-only hook. */
-export async function readBoard(page: Page): Promise<Board> {
+export async function puzzleIds(page: Page, game: string): Promise<string[]> {
+  return page.evaluate((g) => window.__puzzles.puzzles(g), game);
+}
+
+export async function isSolved(page: Page): Promise<boolean> {
+  return page.locator('.screen.play.won').count().then((n) => n > 0);
+}
+
+export function noteOf(page: Page) {
+  return page.locator('.note');
+}
+
+/** A button in the control row, by its label. */
+export function control(page: Page, label: string) {
+  return page.locator('.controls .btn', { hasText: label });
+}
+
+// ---------------------------------------------------------------------------
+// Thread
+// ---------------------------------------------------------------------------
+
+export type ThreadBoard = {
+  id: string;
+  posts: [number, number][];
+  blocks: { x: number; y: number; w: number; h: number }[];
+  strands: { from: number; to: number; color: string }[];
+  solution: number[][];
+};
+
+export async function threadBoard(page: Page): Promise<ThreadBoard> {
   return page.evaluate(
-    () => (window as never as { __thread: { board(): unknown } }).__thread.board() as never,
+    () => (window.__puzzles.board() as { board: ThreadBoard }).board as never,
   );
 }
 
-export async function solvedIds(page: Page): Promise<string[]> {
-  return page.evaluate(() => (window as never as { __thread: { solved(): string[] } }).__thread.solved());
-}
-
 /**
- * Board space to viewport pixels, via the SVG's own square.
+ * Board space to viewport pixels, via the SVG's own window.
  *
- * The window is read off the drawn element rather than copied from the source.
- * It used to be two constants here that had to match `VIEW` in core/board.ts,
- * with a comment saying so — and the moment the window became each board's own
- * extent, constants like that would have had the harness tapping somewhere no
- * player ever taps, while still passing. Asking the page where it is looking
- * is the only version that cannot drift.
+ * Read off the element rather than copied from the source: each board has its
+ * own window, so a pair of constants here would drift the moment a board's
+ * extent changed, and drift silently.
  */
-export async function pointMapper(page: Page): Promise<(p: [number, number]) => { x: number; y: number }> {
+export async function threadMapper(page: Page): Promise<(p: [number, number]) => { x: number; y: number }> {
   const svg = page.locator('.board-svg').first();
   const box = await svg.boundingBox();
   if (!box) throw new Error('the board is not on screen');
@@ -74,15 +97,11 @@ export async function pointMapper(page: Page): Promise<(p: [number, number]) => 
   });
 }
 
-/**
- * Lay one string the way a thumb would: press its first post, sweep through
- * every post in turn, let go. The sweep is stepped so the app sees a run of
- * moves rather than one jump, which is what a real drag looks like.
- */
+/** Lay one string the way a thumb would. */
 export async function dragStrand(
-  page: Page, board: Board, path: number[], steps = 3,
+  page: Page, board: ThreadBoard, path: number[], steps = 3,
 ): Promise<void> {
-  const at = await pointMapper(page);
+  const at = await threadMapper(page);
   const first = at(board.posts[path[0]]);
   await page.mouse.move(first.x, first.y);
   await page.mouse.down();
@@ -97,66 +116,48 @@ export async function dragStrand(
   await page.mouse.up();
 }
 
-/** Lay every string of the board's own answer. */
-export async function solveByDragging(page: Page, board: Board): Promise<void> {
+export async function solveThread(page: Page, board: ThreadBoard): Promise<void> {
   for (const path of board.solution) await dragStrand(page, board, path);
 }
 
-export async function isSolved(page: Page): Promise<boolean> {
-  return page.locator('.screen.play.won').count().then((n) => n > 0);
+// ---------------------------------------------------------------------------
+// Zigzag
+// ---------------------------------------------------------------------------
+
+export type ZigBoard = {
+  w: number; h: number; cells: number[]; sequence: number[];
+  start: number; finish: number; answer: number[];
+};
+
+export async function zigBoard(page: Page): Promise<ZigBoard> {
+  return page.evaluate(() => (window.__puzzles.board() as { zig: ZigBoard }).zig as never);
 }
 
-/**
- * The tightest turn any shipped board will let a thumb make.
- *
- * A test that hard-codes three post numbers breaks the next time the boards
- * are built, and worse, quietly stops testing what it claims to. So the turn
- * is found by looking — and it has to be a move a THUMB could make, not just a
- * shape the geometry allows: a string can only be started at one of its pinned
- * ends, so the route runs along the board's own answer as far as some post and
- * then turns off it. That is why this returns a whole path.
- */
-export async function findTightestTurn(
-  page: Page,
-): Promise<{ board: Board; turn: number[]; degrees: number }> {
-  let best: { board: Board; turn: number[]; degrees: number } | null = null;
-  for (const n of [20, 6, 35, 50, 12, 44, 55, 28, 60, 3]) {
-    const board = await openBoard(page, 'classic', n);
-    const found = await page.evaluate(() => {
-      const t = (window as never as {
-        __thread: {
-          board(): { posts: [number, number][]; solution: number[][] };
-          runIsLegal(a: number, b: number): boolean;
-        };
-      }).__thread;
-      const bd = t.board();
-      const P = bd.posts;
-      const answer = bd.solution[0];
-      const angle = (p: number[], m: number[], q: number[]) => {
-        const ax = p[0] - m[0], ay = p[1] - m[1], bx = q[0] - m[0], by = q[1] - m[1];
-        const c = (ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by));
-        return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
-      };
-      let tightest: { turn: number[]; degrees: number } | null = null;
-      for (let k = 1; k < answer.length; k++) {
-        const prev = answer[k - 1];
-        const head = answer[k];
-        const sofar = answer.slice(0, k + 1);
-        for (let q = 0; q < P.length; q++) {
-          if (sofar.includes(q) || !t.runIsLegal(head, q)) continue;
-          const a = angle(P[prev], P[head], P[q]);
-          if (!tightest || a < tightest.degrees) tightest = { turn: [...sofar, q], degrees: a };
-        }
-      }
-      return tightest;
-    });
-    if (found && (!best || found.degrees < best.degrees)) {
-      best = { board, turn: found.turn, degrees: found.degrees };
-    }
-    if (best && best.degrees < 40) break;
+export async function zigMapper(page: Page): Promise<(cell: number) => { x: number; y: number }> {
+  const svg = page.locator('.zig-svg');
+  const box = await svg.boundingBox();
+  if (!box) throw new Error('the board is not on screen');
+  const zig = await zigBoard(page);
+  const W = zig.w * 10 + 2;
+  const H = zig.h * 10 + 2;
+  const side = Math.min(box.width / W, box.height / H);
+  const ox = box.x + (box.width - side * W) / 2 + side;
+  const oy = box.y + (box.height - side * H) / 2 + side;
+  return (cell) => ({
+    x: ox + ((cell % zig.w) * 10 + 5) * side,
+    y: oy + (Math.floor(cell / zig.w) * 10 + 5) * side,
+  });
+}
+
+/** Draw a line the way a finger would. */
+export async function drawLine(page: Page, cells: number[], steps = 3): Promise<void> {
+  const at = await zigMapper(page);
+  const first = at(cells[0]);
+  await page.mouse.move(first.x, first.y);
+  await page.mouse.down();
+  for (const c of cells.slice(1)) {
+    const p = at(c);
+    await page.mouse.move(p.x, p.y, { steps });
   }
-  if (!best) throw new Error('no shipped board offers a turn off its own answer');
-  // Re-open the board the winner came from, so the caller can drive it.
-  best.board = await openBoard(page, 'classic', Number(best.board.id.split('-')[1]));
-  return best;
+  await page.mouse.up();
 }

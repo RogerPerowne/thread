@@ -591,6 +591,18 @@ export function mountThread(
 
   view.el.addEventListener('keydown', onKey);
 
+  /*
+   * A read-only handle for the end-to-end harness, published while this board
+   * is on screen. It answers questions in Thread's own terms and decides
+   * nothing; every move a test makes still goes through real pointer events.
+   */
+  (window as unknown as { __board: unknown }).__board = {
+    game: 'thread',
+    board,
+    runIsLegal: (a: number, b: number) => runBetween(c, a, b) >= 0,
+    pieces: () => pieces.map((p) => ({ strand: p.strand, posts: [...p.posts] })),
+  };
+
   paint();
 
   return {
@@ -620,6 +632,7 @@ export function mountThread(
       view.el.removeEventListener('pointerup', onUp);
       view.el.removeEventListener('pointercancel', onUp);
       view.el.removeEventListener('keydown', onKey);
+      delete (window as unknown as { __board?: unknown }).__board;
       view.dispose();
     },
   };
