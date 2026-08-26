@@ -143,11 +143,27 @@ test('undo takes back a gesture, and redo puts it on again', async ({ page }) =>
   const posts = () => page.evaluate(
     () => ((window.__puzzles.board() as { pieces(): { posts: number[] }[] }).pieces()[0]?.posts.length ?? 0),
   );
+  /*
+   * The row of controls never changes shape. Hiding a control the moment it
+   * becomes useful is what moves the other three sideways under a thumb that
+   * was already reaching for one of them — so Redo is dimmed, never removed,
+   * and the count is the same before a move, after one, and after undoing it.
+   */
+  const slots = () => page.locator('.controls .btn:visible').count();
+  const width = async () => (await control(page, 'Restart').boundingBox())!.x;
+  const wasSlots = await slots();
+  const wasX = await width();
+
   expect(await posts()).toBe(4);
+  expect(await slots()).toBe(wasSlots);
   await control(page, 'Undo').click();
   expect(await posts()).toBe(0);
+  expect(await slots()).toBe(wasSlots);
+  expect(await width()).toBe(wasX);
   await control(page, 'Redo').click();
   expect(await posts()).toBe(4);
+  expect(await slots()).toBe(wasSlots);
+  expect(await width()).toBe(wasX);
 });
 
 test('a half-finished board comes back after a reload', async ({ page }) => {

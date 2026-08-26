@@ -165,8 +165,11 @@ export function gameFrame(
     note.classList.toggle('good', v.solved);
     bar2.set(v.progress);
 
+    /* Dimmed, never removed. Hiding Redo is what makes the row grow a button
+       the first time you undo, and the three controls beside it move under a
+       thumb that was already reaching for one of them. */
     undoBtn.disabled = !session.canUndo();
-    redoBtn.hidden = !session.canRedo();
+    redoBtn.disabled = !session.canRedo();
     hintBtn.hidden = v.solved;
     nextBtn.hidden = !v.solved || !hooks.next;
 
