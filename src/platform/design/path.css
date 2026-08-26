@@ -57,13 +57,19 @@
 .ribbon .walked.side { stroke: var(--ink); }
 
 /* --- the tiles ------------------------------------------------------------ */
+/*
+ * Every length below is in the drawing's own units, not pixels: a transform or
+ * a stroke on an element inside an SVG is measured in the viewBox's space. On
+ * a phone the drawing is about 0.45 of that, so a number here is worth roughly
+ * half as much as it reads — which is why these are larger than they look.
+ */
 .ptile { cursor: pointer; }
 /* Transparent rather than absent: `fill: none` is not hit by a pointer. */
 .ptile .hit { fill: transparent; }
 .ptile .top, .ptile .side, .ptile .inner { transition: opacity var(--fast) var(--ease); }
-.ptile:active { transform: translateY(3px); }
+.ptile:active { transform: translateY(9px); }
 .ptile:focus { outline: none; }
-.ptile:focus-visible .top { stroke: var(--ink); stroke-width: 4; }
+.ptile:focus-visible .top { stroke: var(--ink); stroke-width: 9; }
 
 /* Ahead: stone. Reachable — nothing on this ladder is locked — but quiet. */
 .ptile .side { fill: var(--line-2); }
@@ -84,7 +90,7 @@
 .ptile.now .pnum { fill: var(--ink); font-weight: 700; }
 
 /* Half-done: the outlined chip, as an edge round the face. */
-.ptile.going .top { stroke: var(--accent); stroke-width: 5; }
+.ptile.going .top { stroke: var(--accent); stroke-width: 7; }
 .ptile.going .pnum { fill: var(--accent); }
 
 .pnum {
@@ -102,7 +108,7 @@
 /* The tile you are up to breathes, once every few seconds. */
 @keyframes ptile-pulse {
   0%, 74%, 100% { transform: translateY(0); }
-  84% { transform: translateY(-7px); }
+  84% { transform: translateY(-16px); }
 }
 .ptile.now { animation: ptile-pulse 3.4s var(--ease) infinite; }
 

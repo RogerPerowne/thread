@@ -52,8 +52,9 @@ test('the path carries a game\'s whole ladder, chapter by chapter', async ({ pag
     const onPath = await page.evaluate(
       () => [...document.querySelectorAll('.ptile')].map((t) => t.getAttribute('data-puzzle')),
     );
-    // The path climbs, so it is drawn bottom-first: reversed, it is the ladder.
-    expect([...onPath].reverse()).toEqual([...ids]);
+    // The path climbs, and it is drawn from its foot upward, so the order it
+    // is written in is the ladder's own order.
+    expect(onPath).toEqual([...ids]);
 
     /*
      * One band per chapter, and the rail has one mark for each — the rail is a
@@ -89,15 +90,25 @@ test('the path opens where the player is, and does not run past its own end', as
 test('the rail swaps chapters', async ({ page }) => {
   await gotoApp(page, '#/g/thread');
   const rail = page.locator('.chaprail');
-  const before = await page.evaluate(() => (document.querySelector('.pathscroll') as HTMLElement).scrollTop);
-  // The top of the rail is the top of the path: the last chapter.
+  const at = () => page.evaluate(() => (document.querySelector('.pathscroll') as HTMLElement).scrollTop);
+  const before = await at();
+  /*
+   * A fresh player is at the foot of the path, which is the BOTTOM of a
+   * drawing that climbs — so the top of the rail is the last chapter, and
+   * jumping to it scrolls up rather than down.
+   */
   const box = (await rail.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.12);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.1);
   await page.mouse.down();
   await page.mouse.up();
-  const after = await page.evaluate(() => (document.querySelector('.pathscroll') as HTMLElement).scrollTop);
-  expect(after).toBeGreaterThan(before);
+  expect(await at()).toBeLessThan(before);
   await expect(page.locator('.chaprail .mark.on')).toHaveCount(1);
+
+  // And back down again: the rail goes both ways.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.95);
+  await page.mouse.down();
+  await page.mouse.up();
+  expect(await at()).toBeGreaterThan(0);
 });
 
 test('an unknown route lands somewhere real rather than on nothing', async ({ page }) => {
