@@ -64,66 +64,81 @@ page.on('requestfailed', (r) => errs.push(`request failed ${r.url()} ${r.failure
 const checks = [];
 const ok = (name, pass, detail = '') => checks.push({ name, pass, detail });
 
+// --- the library ----------------------------------------------------------
 await page.goto(base);
-await page.waitForSelector('.screen');
-ok('home renders its masthead', (await page.locator('.wordmark').textContent()) === 'THREAD');
-ok('one card per mode', (await page.locator('.gamecard').count()) === 3);
+await page.waitForSelector('.masthead .wordmark', { timeout: 15000 });
+ok('the library renders its masthead', (await page.locator('.masthead .wordmark').textContent()) === 'Puzzles');
 
-const fontOk = await page.evaluate(() => document.fonts.check('700 32px "Zilla Slab"'));
-ok('the slab wordmark font actually loaded', fontOk);
+const games = await page.evaluate(() => window.__puzzles.games());
+ok('every registered game has a card',
+  games.length > 1 && (await page.locator('[data-card]').count()) === games.length);
+ok('one puzzle is featured', (await page.locator('.card.feature').count()) === 1);
 
-await page.goto(`${base}#/m/classic`);
-await page.waitForSelector('.gamecard');
-ok('classic has six chapters', (await page.locator('.gamecard').count()) === 6);
+// --- one board of each game, played on the deployed bundle -----------------
+for (const game of games) {
+  const ids = await page.evaluate((g) => window.__puzzles.puzzles(g), game);
+  ok(`${game} ships a ladder`, ids.length > 10);
 
-await page.goto(`${base}#/c/classic/1`);
-await page.waitForSelector('.ptile');
-ok('the chapter path draws its tiles', (await page.locator('.ptile').count()) === 10);
-ok('the tile you are up to carries its light', (await page.locator('.halo').count()) === 1);
+  const id = ids[Math.floor(ids.length / 3)];
+  await page.goto(`${base}#/g/${game}/${id}`);
+  await page.waitForSelector('.stage svg', { timeout: 15000 });
 
-// The one that matters: a board solved through real drags, on the shipped
-// bundle, with the string drawn taut around every post.
-for (const [mode, n] of [['classic', 30], ['coloured', 25], ['grid', 20]]) {
-  await page.goto(`${base}#/p/${mode}/${n}`);
-  await page.waitForSelector('.board-svg', { timeout: 15000 });
-  const board = await page.evaluate(() => window.__thread.board());
-  ok(`${mode} ${n} loaded`, !!board && board.mode === mode);
-  const box = await page.locator('.board-svg').boundingBox();
-  const side = Math.min(box.width, box.height);
-  // Read the window off the element. Each board now has its own, so a pair of
-  // constants here would tap somewhere no player taps and still pass.
-  const [vx, vy, vw] = (await page.locator('.board-svg').getAttribute('viewBox'))
-    .split(/\s+/).map(Number);
-  const at = (p) => ({
-    x: box.x + (box.width - side) / 2 + ((p[0] - vx) / vw) * side,
-    y: box.y + (box.height - side) / 2 + ((p[1] - vy) / vw) * side,
-  });
-  for (const path of board.solution) {
-    const f = at(board.posts[path[0]]);
+  const handle = await page.evaluate(() => window.__puzzles.board());
+  ok(`${game} ${id} opens and publishes its board`, Boolean(handle));
+
+  if (game === 'thread') {
+    const board = handle.board;
+    const svg = page.locator('.board-svg').first();
+    const box = await svg.boundingBox();
+    const [vx, vy, vw] = (await svg.getAttribute('viewBox')).split(/\s+/).map(Number);
+    const side = Math.min(box.width, box.height);
+    const at = (p) => ({
+      x: box.x + (box.width - side) / 2 + ((p[0] - vx) / vw) * side,
+      y: box.y + (box.height - side) / 2 + ((p[1] - vy) / vw) * side,
+    });
+    for (const path of board.solution) {
+      const f = at(board.posts[path[0]]);
+      await page.mouse.move(f.x, f.y);
+      await page.mouse.down();
+      for (const p of path.slice(1)) {
+        const q = at(board.posts[p]);
+        await page.mouse.move(q.x, q.y, { steps: 4 });
+      }
+      await page.mouse.up();
+    }
+  } else if (game === 'zigzag') {
+    const zig = handle.zig;
+    const svg = page.locator('.zig-svg');
+    const box = await svg.boundingBox();
+    const W = zig.w * 10 + 2;
+    const H = zig.h * 10 + 2;
+    const side = Math.min(box.width / W, box.height / H);
+    const ox = box.x + (box.width - side * W) / 2 + side;
+    const oy = box.y + (box.height - side * H) / 2 + side;
+    const at = (c) => ({
+      x: ox + ((c % zig.w) * 10 + 5) * side,
+      y: oy + (Math.floor(c / zig.w) * 10 + 5) * side,
+    });
+    const f = at(zig.answer[0]);
     await page.mouse.move(f.x, f.y);
     await page.mouse.down();
-    for (let i = 1; i < path.length; i++) {
-      const a = at(board.posts[path[i - 1]]);
-      const c = at(board.posts[path[i]]);
-      for (let s = 1; s <= 3; s++) {
-        await page.mouse.move(a.x + (c.x - a.x) * s / 3, a.y + (c.y - a.y) * s / 3);
-      }
+    for (const c of zig.answer.slice(1)) {
+      const q = at(c);
+      await page.mouse.move(q.x, q.y, { steps: 3 });
     }
     await page.mouse.up();
   }
-  ok(`${mode} ${n} solved by real drags on the deployed bundle`,
-     (await page.locator('.screen.play.won').count()) > 0);
-  // Posts have no width as far as the string is concerned: it runs from centre
-  // to centre and straight through. An arc in the path data would mean the
-  // wrapping experiment had come back.
-  const d = await page.locator('.string').first().getAttribute('d');
-  ok(`${mode} ${n} runs its string straight through the posts`,
-     (d ?? '').length > 0 && !/[AaCcQq]/.test(d ?? ''));
+
+  await page.waitForTimeout(500);
+  ok(`${game} ${id} solved by real drags on the deployed bytes`,
+    (await page.locator('.screen.play.won').count()) > 0);
 }
 
-ok('no page errors and no failed requests', errs.length === 0, errs.join(' | '));
+ok('no page errors and no failed requests', errs.length === 0, errs.join('; '));
 
-for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail && !c.pass ? ` — ${c.detail}` : ''}`);
+for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
+const bad = checks.filter((c) => !c.pass).length;
+
 await b.close();
-server.close();
-process.exit(checks.every((c) => c.pass) ? 0 : 1);
+await new Promise((r) => server.close(r));
+process.exit(bad === 0 ? 0 : 1);

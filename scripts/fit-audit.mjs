@@ -32,15 +32,22 @@ const VIEWPORTS = [
   ['landscape', 852, 393],
 ];
 
+/*
+ * The routes worth walking. Built from the register rather than listed by
+ * hand, so a game added tomorrow is audited tomorrow — a fit audit that has to
+ * be edited when a game is added is a fit audit that stops covering the new
+ * ones.
+ */
 const ROUTES = [
-  ['home', '#/'],
-  ['chapters', '#/m/classic'],
-  ['path', '#/c/classic/1'],
-  ['path deep', '#/c/grid/5'],
-  ['play first', '#/p/classic/1'],
-  ['play biggest', '#/p/classic/60'],
-  ['play coloured', '#/p/coloured/47'],
-  ['play grid', '#/p/grid/50'],
+  ['library', '#/'],
+  ['archive thread', '#/g/thread'],
+  ['archive zigzag', '#/g/zigzag'],
+  ['thread small', '#/g/thread/classic-1'],
+  ['thread biggest', '#/g/thread/classic-60'],
+  ['thread coloured', '#/g/thread/coloured-50'],
+  ['thread grid', '#/g/thread/grid-80'],
+  ['zigzag small', '#/g/zigzag/zigzag-1'],
+  ['zigzag biggest', '#/g/zigzag/zigzag-44'],
 ];
 
 const browser = await chromium.launch();
