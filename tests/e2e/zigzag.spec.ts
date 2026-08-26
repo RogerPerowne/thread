@@ -104,3 +104,59 @@ test('restart clears the line', async ({ page }) => {
   const path = await page.evaluate(() => (window.__puzzles.board() as { path(): number[] }).path());
   expect(path).toEqual([]);
 });
+
+test('the line can be grabbed anywhere and drawn on from there', async ({ page }) => {
+  /*
+   * Thread's gesture, in Thread's words: put a finger on the seventh cell of a
+   * line twenty long and the thirteen after it come away, and you carry on
+   * drawing from where your finger is. Otherwise it is thirteen taps of undo
+   * to change your mind about one corner.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'zigzag');
+  await openPuzzle(page, 'zigzag', ids[19]);
+  const zig = await zigBoard(page);
+  const path = () => page.evaluate(() => (window.__puzzles.board() as { path(): number[] }).path());
+
+  const run = zig.answer.slice(0, 12);
+  await drawLine(page, run);
+  expect(await path()).toHaveLength(12);
+
+  // A press on a cell the line already runs through takes it back to there.
+  const at = await zigMapper(page);
+  const grab = at(run[4]);
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  await page.mouse.up();
+  expect(await path()).toHaveLength(5);
+
+  // And the same press, held, carries straight on drawing — one gesture.
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  const on = at(run[5]);
+  await page.mouse.move(on.x, on.y, { steps: 4 });
+  await page.mouse.up();
+  expect(await path()).toHaveLength(6);
+});
+
+test('a stretch taken back winds off rather than vanishing', async ({ page }) => {
+  /*
+   * A line that simply stops being there reads as a bug, and on a board you
+   * are still dragging across it is easy to miss entirely. The recoil is the
+   * only thing that says the game heard you.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'zigzag');
+  await openPuzzle(page, 'zigzag', ids[19]);
+  const zig = await zigBoard(page);
+  const run = zig.answer.slice(0, 10);
+  await drawLine(page, run);
+
+  const at = await zigMapper(page);
+  const grab = at(run[3]);
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  // Caught mid-flight: the animation is 320ms and this looks well inside it.
+  await expect(page.locator('.zig-recoil.go')).not.toHaveCount(0);
+  await page.mouse.up();
+});

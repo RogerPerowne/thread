@@ -85,6 +85,26 @@
   opacity: 0;
   pointer-events: none;
 }
+/*
+ * A stretch of line coming off. The dash is exactly the length of the path it
+ * is drawn on, so winding the offset out to that length retreats it from the
+ * far end to the cell the line now ends at — and it thins as it goes, which is
+ * what makes it read as line being taken back rather than line being deleted.
+ */
+.zig-recoil {
+  stroke: var(--accent);
+  stroke-width: 3.2;
+  opacity: 0;
+  pointer-events: none;
+  stroke-dashoffset: 0;
+}
+.zig-recoil.go { animation: zig-recoil 320ms cubic-bezier(0.32, 0, 0.16, 1) forwards; }
+@keyframes zig-recoil {
+  0% { opacity: 0.55; stroke-dashoffset: 0; stroke-width: 3.2; }
+  60% { opacity: 0.32; }
+  100% { opacity: 0; stroke-dashoffset: var(--len); stroke-width: 1.6; }
+}
+
 .won .zig-path { animation: zig-swell 700ms var(--ease); }
 @keyframes zig-swell {
   0% { stroke-width: 3.2; }

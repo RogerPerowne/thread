@@ -78,6 +78,60 @@ export function mountZigzag(
     'stroke-linecap': 'round', 'stroke-linejoin': 'round',
   });
   const lead = svg('line', { class: 'zig-lead' });
+
+  /*
+   * Taking line back off.
+   *
+   * The discarded stretch is drawn on a spare path and wound off: a dash as
+   * long as the whole thing, retreating from the far end towards the cell the
+   * line now ends at. A line that simply stops being there reads as a bug, and
+   * on a board you are still dragging across it is easy to miss entirely —
+   * which is exactly the complaint Thread had, so this is Thread's answer.
+   *
+   * Several of them, cycled, because winding back over five cells in one sweep
+   * takes five stretches off and each deserves its own recoil rather than
+   * cutting the one before it short.
+   */
+  const recoils: SVGPathElement[] = [];
+  for (let i = 0; i < 6; i++) {
+    const r = svg('path', {
+      class: 'zig-recoil', fill: 'none',
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    });
+    gLine.appendChild(r);
+    recoils.push(r);
+  }
+  let nextRecoil = 0;
+
+  /** Where a cell's middle is, in board units. */
+  const midOf = (c: number) => ({
+    x: (c % zig.w) * U + U / 2,
+    y: ((c / zig.w) | 0) * U + U / 2,
+  });
+
+  const dOf = (cells: readonly number[]): string => cells.map((c, i) => {
+    const m = midOf(c);
+    return `${i === 0 ? 'M' : 'L'}${m.x} ${m.y}`;
+  }).join('');
+
+  /**
+   * Wind a stretch off. `cells` runs from the FAR end to the cell the line now
+   * ends at, because that is the direction the dash retreats in.
+   */
+  function retract(cells: readonly number[]): void {
+    if (cells.length < 2) return;
+    const node = recoils[nextRecoil];
+    nextRecoil = (nextRecoil + 1) % recoils.length;
+    node.setAttribute('d', dOf(cells));
+    node.classList.remove('go');
+    // Measuring the path is what makes the dash exactly its own length, so the
+    // recoil ends at the new head rather than somewhere near it.
+    const len = node.getTotalLength();
+    node.style.setProperty('--len', String(len));
+    node.setAttribute('stroke-dasharray', String(len));
+    node.classList.add('go');
+  }
+
   gLine.append(line, lead);
 
   el.append(gCells, gMarks, gLine);
@@ -141,6 +195,28 @@ export function mountZigzag(
   let lastCell = -1;
   let refused = -1;
 
+  /**
+   * Cut the line back to a cell it already runs through, and wind off what was
+   * beyond it.
+   *
+   * This is the whole "grab it anywhere" gesture. Put a finger on the seventh
+   * cell of a line twenty long and the thirteen after it come away, and you
+   * carry on drawing from where your finger is — which is what you meant, and
+   * is otherwise thirteen taps of undo.
+   */
+  function cutBackTo(cell: number): void {
+    const path = session.path;
+    const at = path.indexOf(cell);
+    if (at < 0 || at === path.length - 1) return;
+    session.mark();
+    /* Far end first: the dash retreats from there towards the new head. */
+    retract(path.slice(at).reverse());
+    path.length = at + 1;
+    host.buzz('notch');
+    refused = -1;
+    paint();
+  }
+
   /** Step to a cell, or take one back. */
   function reach(cell: number): void {
     const path = session.path;
@@ -148,13 +224,22 @@ export function mountZigzag(
     // make while drawing must cost exactly what making the step cost.
     if (path.length >= 2 && cell === path[path.length - 2]) {
       session.mark();
+      retract([path[path.length - 1], cell]);
       path.pop();
       host.buzz('notch');
       refused = -1;
       paint();
       return;
     }
-    if (path.includes(cell)) return;
+    /*
+     * Somewhere further back along the line. Dragging onto it means the same
+     * thing as pressing it: everything past that cell comes off and drawing
+     * carries on from there.
+     */
+    if (path.includes(cell)) {
+      if (cell !== path[path.length - 1]) cutBackTo(cell);
+      return;
+    }
     if (!session.canGo(cell)) {
       if (cell !== refused) {
         refused = cell;
@@ -197,7 +282,13 @@ export function mountZigzag(
     lastCell = cell;
     refused = -1;
     session.openGesture();
-    reach(cell);
+    /*
+     * A press on a cell the line already runs through takes it back to there.
+     * A press anywhere else is a step, as before. Nobody is asked which they
+     * meant: where the finger lands says it.
+     */
+    if (session.path.includes(cell)) cutBackTo(cell);
+    else reach(cell);
     el.setPointerCapture(e.pointerId);
     e.preventDefault();
   };
