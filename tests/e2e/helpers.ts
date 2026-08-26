@@ -230,3 +230,102 @@ export async function dragDigit(page: Page, digit: number, cell: number): Promis
 export async function solveNine(page: Page, board: NineBoard): Promise<void> {
   for (let i = 0; i < board.answer.length; i++) await dragDigit(page, board.answer[i], i);
 }
+
+// ---------------------------------------------------------------------------
+// Shape Up
+// ---------------------------------------------------------------------------
+
+export type ShapeBoard = {
+  w: number;
+  h: number;
+  shapes: number;
+  clues: { side: string; line: number; shape: number; depth: number }[];
+  answer: number[];
+};
+
+type ShapeHandle = {
+  shape: ShapeBoard;
+  cells(): number[];
+  cellBox(cell: number): { x: number; y: number; size: number };
+  ring(): { cx: number; cy: number; optR: number; ring: number };
+  ringSpot(pick: number): { x: number; y: number };
+  measureRing(): { optR: number; ring: number };
+  view: { W: number; H: number };
+};
+
+export async function shapeBoard(page: Page): Promise<ShapeBoard> {
+  return page.evaluate(() => (window.__puzzles.board() as ShapeHandle).shape as never);
+}
+
+export async function shapeMapper(page: Page): Promise<(x: number, y: number) => { x: number; y: number }> {
+  const box = await page.locator('.shape-svg').boundingBox();
+  if (!box) throw new Error('the board is not on screen');
+  const v = await page.evaluate(() => (window.__puzzles.board() as ShapeHandle).view);
+  const side = Math.min(box.width / v.W, box.height / v.H);
+  const left = box.x + (box.width - side * v.W) / 2;
+  const top = box.y + (box.height - side * v.H) / 2;
+  return (x, y) => ({ x: left + x * side, y: top + y * side });
+}
+
+/**
+ * Put a mark in a cell the way a thumb would: press the cell, slide onto the
+ * option, let go. `pick` is 0 for empty and 1 and up for a shape.
+ */
+export async function markCell(page: Page, cell: number, pick: number): Promise<void> {
+  const at = await shapeMapper(page);
+  const box = await page.evaluate((c) => (window.__puzzles.board() as ShapeHandle).cellBox(c), cell);
+  const from = at(box.x + box.size / 2, box.y + box.size / 2);
+
+  /*
+   * Press, let go, tap the option. The other way round — press and slide onto
+   * it — also works and is tested on its own, but it cannot reach the middle
+   * of the ring, because the middle is where the finger already is and there
+   * is nowhere to slide from. This path reaches every option, so it is the one
+   * the harness uses to fill sixty-six boards.
+   */
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.up();
+
+  /*
+   * Where the option is is read off the ring AFTER it opens, not worked out
+   * here. The ring sizes itself from the scale the board is drawn at and moves
+   * back inside the edge when it opens near one, and a harness carrying its
+   * own copy of that arithmetic is a harness that taps empty paper the first
+   * time the rule changes.
+   */
+  const spot = await page.evaluate((k) => {
+    const h = window.__puzzles.board() as ShapeHandle;
+    const g = h.ring();
+    const s = h.ringSpot(k);
+    return { x: g.cx + s.x, y: g.cy + s.y };
+  }, pick);
+  const to = at(spot.x, spot.y);
+  await page.mouse.move(to.x, to.y);
+  await page.mouse.down();
+  await page.mouse.up();
+}
+
+/** The other way in: press the cell and slide onto a shape without letting go. */
+export async function slideMark(page: Page, cell: number, pick: number): Promise<void> {
+  const at = await shapeMapper(page);
+  const box = await page.evaluate((c) => (window.__puzzles.board() as ShapeHandle).cellBox(c), cell);
+  const from = at(box.x + box.size / 2, box.y + box.size / 2);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  const spot = await page.evaluate((k) => {
+    const h = window.__puzzles.board() as ShapeHandle;
+    const g = h.ring();
+    const s = h.ringSpot(k);
+    return { x: g.cx + s.x, y: g.cy + s.y };
+  }, pick);
+  const to = at(spot.x, spot.y);
+  for (let s = 1; s <= 4; s++) {
+    await page.mouse.move(from.x + (to.x - from.x) * (s / 4), from.y + (to.y - from.y) * (s / 4));
+  }
+  await page.mouse.up();
+}
+
+export async function solveShape(page: Page, board: ShapeBoard): Promise<void> {
+  for (let i = 0; i < board.answer.length; i++) await markCell(page, i, board.answer[i]);
+}

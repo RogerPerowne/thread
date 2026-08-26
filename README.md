@@ -1,7 +1,7 @@
 # Puzzles
 
 A small catalogue of logic puzzles that share a shell and share nothing else.
-Three games are in it so far.
+Four games are in it so far.
 
 **Thread** — a board of posts and a piece of string. Use every post. The string
 never lies on other string, or on itself, and it never crosses a block. The
@@ -15,6 +15,10 @@ the line may step to next, and exactly one route uses them all.
 to nine used once, and all three rows and all three columns have to come out at
 the number beside them.
 
+**Shape Up** — one of each shape in every row and column. The clues round the
+outside say what you would see looking in: the shape, and how many shapes deep
+it sits.
+
 ```
 pnpm install
 pnpm dev        # play it
@@ -23,6 +27,7 @@ pnpm validate   # the board gate: every Thread board re-proven unique
 pnpm boards     # regenerate boards/*.json from the designers
 pnpm zigzag     # regenerate puzzles/zigzag.json
 pnpm nine       # regenerate puzzles/nine.json
+pnpm shape      # regenerate puzzles/shape.json
 pnpm e2e        # solve every board through real pointer events
 pnpm ci         # everything CI runs
 ```
@@ -60,8 +65,9 @@ src/library        library.ts (the home screen), path.ts (a game's ladder)
 src/games/thread   board, check, search, make, session, play, render, mini
 src/games/zigzag   model, solve, design, session, view
 src/games/nine     model, solve, design, session, view
+src/games/shape    model, solve, design, session, view, glyphs
 boards/            Thread's 190 boards, generated and proven, never authored
-puzzles/           Zigzag's 44 and One to Nine's 64
+puzzles/           Zigzag's 44, One to Nine's 64, Shape Up's 66
 scripts/           the designers, the gate, and the audits
 tests/             vitest unit tests + playwright end-to-end
 ```
@@ -95,6 +101,18 @@ blocks in one at a time for as long as the solver still finds rival answers —
 up to thirty-two of them, which is what a six-by-five board actually needs. On
 Grid boards there is nothing to carve with, so it pins one more pair of ends
 instead, cutting at the first run a rival does not use.
+
+Shape Up goes the other way and takes clues AWAY. Every clue the answer could
+carry is generated, then removed one at a time for as long as exactly one
+filling still fits. What is left is minimal: every clue on a shipped board was
+removed once, found to cost uniqueness, and put back — so nothing there is
+read for nothing.
+
+That last step has a trap in it, and the gate caught it. A search that runs out
+of its node budget has found one answer and *stopped looking*, which is not the
+same as there being one — and treating the two alike removes the clue that was
+holding the board together. The solver reports whether it finished, and "unique"
+means one answer **and** a search that got to the end.
 
 `pnpm validate` re-proves all 190 from the shipped JSON, not from the
 designer's memory of them:
@@ -182,8 +200,8 @@ space it was given.
 Every end-to-end test drives the app through **real pointer events**. Solving a
 board by calling into it would prove the rules work and nothing at all about
 whether the game is playable, and those are different questions. All 190 Thread
-boards, all 44 Zigzag boards and all 64 One to Nine boards are solved by
-dragging.
+boards, all 44 Zigzag boards, all 64 One to Nine boards and all 66 Shape Up
+boards are solved by dragging.
 
 The read-only handle the harness reads is exactly that — read-only, and in the
 game's own terms. Thread answers questions about runs, Zigzag about cells. A

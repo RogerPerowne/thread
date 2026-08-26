@@ -1,0 +1,114 @@
+/**
+ * Shape Up's board.
+ *
+ * The marks are the design and everything else gets out of their way. Cells
+ * are a flat field with hairlines between; the clues sit in the gutter in the
+ * same ink as the marks they are about, so a clue and the shape it names read
+ * as the same object seen twice.
+ *
+ * The shapes are told apart by outline and nothing else. They carry no colour
+ * of their own — the accent is used for state, never for identity — so the
+ * board reads the same to everyone.
+ */
+
+.shape-board {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: var(--s2) 0;
+}
+.shape-svg {
+  width: min(100%, calc(100cqh * var(--shape-ratio, 1)));
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: var(--shape-ratio, 1);
+  display: block;
+}
+.shape-svg:focus { outline: none; }
+.shape-svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }
+
+/* --- the grid ------------------------------------------------------------- */
+.shape-hole {
+  fill: var(--paper-2);
+  transition: fill var(--fast) var(--ease);
+}
+.shape-hole.cursor { fill: color-mix(in srgb, var(--accent) 12%, var(--paper)); }
+.shape-hole.open { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); }
+.shape-hole.lookhere {
+  fill: color-mix(in srgb, var(--accent) 20%, var(--paper));
+  animation: shape-look 1.6s var(--ease) infinite;
+}
+@keyframes shape-look {
+  0%, 100% { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); }
+  50% { fill: color-mix(in srgb, var(--accent) 34%, var(--paper)); }
+}
+
+/* --- the marks ------------------------------------------------------------ */
+.shape-glyph { fill: var(--ink); }
+
+/*
+ * A cell the player has decided is empty. A small dot, not nothing: "I have
+ * settled this and it holds no shape" and "I have not looked at this yet" are
+ * different states and the board has to show both, or half the deduction
+ * cannot be written down.
+ */
+.shape-blank { fill: var(--line-2); }
+
+/* --- the clues ------------------------------------------------------------ */
+.shape-clue .shape-glyph {
+  fill: var(--ink-2);
+  transition: fill var(--fast) var(--ease);
+}
+.shape-pip { fill: var(--mute); transition: fill var(--fast) var(--ease); }
+
+/* A clue that the board has satisfied fades back: it has done its work and
+   there is no reason for it to keep asking to be read. */
+.shape-clue.out .shape-glyph { fill: var(--line-2); }
+.shape-clue.out .shape-pip { fill: var(--line-2); }
+
+/* One the board has definitely broken. The only red here, and it can only
+   appear once the cells it reads are settled far enough in to tell. */
+.shape-clue.off .shape-glyph { fill: var(--bad); }
+.shape-clue.off .shape-pip { fill: var(--bad); }
+
+/* --- the ring ------------------------------------------------------------- */
+/*
+ * A menu under the finger. The scrim behind it is not decoration: without it
+ * the options sit on top of the board and the eye cannot tell which marks are
+ * the puzzle and which are the choice being offered.
+ */
+.shape-scrim {
+  fill: var(--paper);
+  fill-opacity: 0.94;
+  stroke: var(--line);
+  stroke-width: 0.6;
+}
+.shape-ring { pointer-events: none; }
+.shape-ring.open { pointer-events: auto; }
+
+.shape-optbg {
+  fill: var(--paper);
+  stroke: var(--line-2);
+  stroke-width: 0.7;
+  transition: fill var(--fast) var(--ease), stroke var(--fast) var(--ease);
+}
+.shape-opt.over .shape-optbg { fill: var(--accent); stroke: var(--accent); }
+.shape-opt.over .shape-glyph { fill: var(--paper); }
+.shape-opt.over .shape-clearmark { stroke: var(--paper); }
+
+.shape-clearmark {
+  stroke: var(--mute);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.shape-ring.open { animation: shape-pop var(--fast) var(--ease); }
+@keyframes shape-pop {
+  from { opacity: 0; }
+}

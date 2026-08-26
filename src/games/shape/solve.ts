@@ -86,7 +86,25 @@ function colOk(board: Board, c: number, col: number[]): boolean {
   return true;
 }
 
-export type Found = { readonly count: number; readonly first: number[] | null; readonly nodes: number };
+export type Found = {
+  readonly count: number;
+  readonly first: number[] | null;
+  readonly nodes: number;
+  /**
+   * True when the search finished rather than running out of budget.
+   *
+   * This is the difference between "there is one answer" and "I found one
+   * answer and stopped looking", and conflating them is how a generator comes
+   * to remove a clue the board needed. Stopping because a second answer turned
+   * up is not being cut off — that conclusion is sound.
+   */
+  readonly exhausted: boolean;
+};
+
+/** One answer, and the search proved it. Never "one so far". */
+export function isUnique(found: Found): boolean {
+  return found.count === 1 && found.exhausted;
+}
 
 /**
  * Every filling of the board, up to `limit`.
@@ -122,9 +140,11 @@ export function search(board: Board, limit = 2, budget = 4_000_000): Found {
   let count = 0;
   let nodes = 0;
   let first: number[] | null = null;
+  let cutOff = false;
 
   const go = (r: number): void => {
-    if (count >= limit || nodes > budget) return;
+    if (count >= limit) return;
+    if (nodes > budget) { cutOff = true; return; }
     if (r === h) {
       for (let c = 0; c < w; c++) {
         for (const clue of fromBottom[c]) {
@@ -174,12 +194,13 @@ export function search(board: Board, limit = 2, budget = 4_000_000): Found {
         if (row[c] > 0) colVals[c].pop();
         grid[r * w + c] = 0;
       }
-      if (count >= limit || nodes > budget) return;
+      if (count >= limit) return;
+      if (nodes > budget) { cutOff = true; return; }
     }
   };
 
   go(0);
-  return { count, first, nodes };
+  return { count, first, nodes, exhausted: !cutOff };
 }
 
 // ---------------------------------------------------------------------------

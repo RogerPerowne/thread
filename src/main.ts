@@ -20,10 +20,12 @@ import { register } from './platform/registry.js';
 import { thread } from './games/thread/index.js';
 import { zigzag } from './games/zigzag/index.js';
 import { nine } from './games/nine/index.js';
+import { shape } from './games/shape/index.js';
 
 register(thread);
 register(zigzag);
 register(nine);
+register(shape);
 
 /*
  * Pinch and double-tap zoom, shut off at the source. The viewport meta asks

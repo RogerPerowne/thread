@@ -16,7 +16,8 @@
     "verify:bytes": "node scripts/verify-deployed-bytes.mjs",
     "boards": "tsx scripts/build-boards.ts",
     "zigzag": "tsx scripts/build-zigzag.ts",
-    "nine": "tsx scripts/build-nine.ts"
+    "nine": "tsx scripts/build-nine.ts",
+    "shape": "tsx scripts/build-shape.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",

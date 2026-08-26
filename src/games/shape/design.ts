@@ -14,7 +14,7 @@
  * and put back.
  */
 
-import { search, analyse, allClues, arrangements, type Reading } from './solve.js';
+import { search, isUnique, analyse, allClues, arrangements, type Reading } from './solve.js';
 import { sightLine, type Board } from './model.js';
 import { makeRng, type Rng } from '../../platform/rng.js';
 import type { Band } from '../../platform/types.js';
@@ -92,13 +92,16 @@ export function scoreOf(r: Reading): number {
 }
 
 /*
- * Cut from the measured spread rather than from taste; scripts/build-shape.ts
- * prints it on every run.
+ * Cut from the measured spread rather than from taste. Over a sample of every
+ * size shipped, four by four lands at 68-76, five by five at 90-121, six by
+ * six at 119-152 and seven by seven at about 151; the thresholds sit between
+ * those groups. scripts/build-shape.ts prints the spread on every run, so if
+ * the score ever changes these are re-measured rather than nudged.
  */
 export function bandOf(score: number): Band {
-  if (score < 58) return 'gentle';
-  if (score < 70) return 'steady';
-  if (score < 84) return 'tricky';
+  if (score < 80) return 'gentle';
+  if (score < 115) return 'steady';
+  if (score < 145) return 'tricky';
   return 'severe';
 }
 
@@ -117,15 +120,39 @@ export function makeShape(recipe: Recipe, rng: Rng): Made | null {
   if (!answer) return null;
 
   const full: Board = { ...recipe, clues: [], answer };
-  let clues = rng.shuffle(allClues(full));
+
+  /*
+   * At most one clue per edge position.
+   *
+   * The puzzle this is drawn from marks each place round the outside once, and
+   * so does this — two arrows pointing along the same line from the same end
+   * would sit on top of each other, and stacking them outwards would make the
+   * gutter grow with the deepest pile on any board. Which depth that one clue
+   * says is drawn here, and it is the interesting choice: a clue about the
+   * third shape in tells you more than one about the first, and gives less.
+   */
+  const bySlot = new Map<string, ReturnType<typeof allClues>>();
+  for (const clue of allClues(full)) {
+    const key = `${clue.side}:${clue.line}`;
+    const had = bySlot.get(key);
+    if (had) had.push(clue);
+    else bySlot.set(key, [clue]);
+  }
+  let clues = rng.shuffle([...bySlot.values()].map((list) => rng.pick(list)));
 
   // A board with every clue on it is unique by construction, but check, so a
   // recipe that cannot be pinned down at all fails here rather than silently.
-  if (search({ ...full, clues }, 2).count !== 1) return null;
+  if (!isUnique(search({ ...full, clues }, 2))) return null;
 
+  /*
+   * A clue goes only when the search PROVED the board is still unique without
+   * it. A search that ran out of budget found one answer and stopped looking,
+   * which is a different thing entirely — treating the two the same is how a
+   * generator removes the clue that was holding the board together.
+   */
   for (let i = 0; i < clues.length; i++) {
     const without = clues.filter((_, k) => k !== i);
-    if (search({ ...full, clues: without }, 2).count === 1) {
+    if (isUnique(search({ ...full, clues: without }, 2))) {
       clues = without;
       i--;
     }
@@ -133,7 +160,7 @@ export function makeShape(recipe: Recipe, rng: Rng): Made | null {
 
   const board: Board = { ...recipe, clues, answer };
   const found = search(board, 2);
-  if (found.count !== 1) return null;
+  if (!isUnique(found)) return null;
   return { ...board, reading: analyse(board), nodes: found.nodes };
 }
 
@@ -155,13 +182,14 @@ export type Chapter = {
  */
 export const LADDER: readonly Chapter[] = [
   { name: 'Three Shapes', count: 8, recipe: { w: 4, h: 4, shapes: 3 }, from: 0, to: 999 },
-  { name: 'Room to Hide', count: 8, recipe: { w: 5, h: 5, shapes: 3 }, from: 0, to: 62 },
-  { name: 'Deeper In', count: 8, recipe: { w: 5, h: 5, shapes: 3 }, from: 62, to: 999 },
-  { name: 'Four Shapes', count: 8, recipe: { w: 5, h: 5, shapes: 4 }, from: 0, to: 999 },
-  { name: 'Six by Six', count: 8, recipe: { w: 6, h: 6, shapes: 4 }, from: 0, to: 72 },
-  { name: 'Two Blanks', count: 8, recipe: { w: 6, h: 6, shapes: 4 }, from: 72, to: 999 },
+  { name: 'Room to Hide', count: 8, recipe: { w: 5, h: 5, shapes: 3 }, from: 0, to: 105 },
+  { name: 'Deeper In', count: 8, recipe: { w: 5, h: 5, shapes: 3 }, from: 105, to: 999 },
+  { name: 'Four Shapes', count: 8, recipe: { w: 5, h: 5, shapes: 4 }, from: 0, to: 105 },
+  { name: 'One Blank', count: 8, recipe: { w: 5, h: 5, shapes: 4 }, from: 105, to: 999 },
+  { name: 'Six by Six', count: 8, recipe: { w: 6, h: 6, shapes: 4 }, from: 0, to: 138 },
+  { name: 'Two Blanks', count: 8, recipe: { w: 6, h: 6, shapes: 4 }, from: 138, to: 999 },
   { name: 'Five Shapes', count: 6, recipe: { w: 6, h: 6, shapes: 5 }, from: 0, to: 999 },
-  { name: 'Seven by Seven', count: 6, recipe: { w: 7, h: 7, shapes: 5 }, from: 0, to: 999 },
+  { name: 'Seven Across', count: 4, recipe: { w: 7, h: 7, shapes: 5 }, from: 0, to: 999 },
 ];
 
 export type Built = Board & {

@@ -55,6 +55,20 @@ on boards with more than one strand. A dash pattern on the string was the
 obvious alternative and is wrong: it breaks the promise that what is drawn is
 exactly the set of points the string occupies.
 
+- **"One answer" and "one so far" are different things.** A search that runs
+  out of budget has found one answer and stopped looking. Shape Up's clue
+  minimiser treated them alike and removed clues the board needed; the gate
+  caught it because it re-checked from a smaller clue set where the search
+  exploded. `isUnique()` now means one answer AND an exhausted search. Any new
+  engine with a bounded solver needs the same distinction.
+- **A menu is not part of the board.** Shape Up's ring of options was sized in
+  board units, so it shrank as the grid grew — thirty-five pixels across on a
+  seven-wide board on the narrowest phone. It is measured in pixels at the
+  moment it opens now, from the scale the board is actually drawn at.
+- **A harness must read the geometry, not recompute it.** The Shape Up e2e
+  carried its own copy of the ring's clamping arithmetic and broke the moment
+  the ring started sizing itself. It asks the board where the option is.
+
 ## Scars
 
 Each of these cost real time and each one is now held by a test or by a
@@ -90,10 +104,10 @@ construction. They are here so the next change does not undo the fix.
 
 - **Tutorials.** Both games declare `tutorial: []`. The `TutorialStep` contract
   exists; no steps do.
-- **Three more games**: Shape Up, Hexagony, Isolate. Each needs a model, a
-  validator, a real solver, a generator that works answer-first, a difficulty
-  analyser that measures deduction rather than size, a serializer and unit
-  tests. One to Nine is done.
+- **Two more games**: Hexagony and Isolate. Each needs a model, a validator, a
+  real solver, a generator that works answer-first, a difficulty analyser that
+  measures deduction rather than size, a serializer and unit tests. One to Nine
+  and Shape Up are done.
 - **Thread still pins both ends of every strand.** A purer puzzle leaves them
   free, but with no ends given it takes six or seven blocks to pin the answer
   down, and a board that cluttered is worse to look at than the free ends are
