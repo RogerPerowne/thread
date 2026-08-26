@@ -140,6 +140,34 @@ for (const game of games) {
       await page.mouse.move(q.x, q.y, { steps: 3 });
     }
     await page.mouse.up();
+  } else if (game === 'nine') {
+    const svg = page.locator('.nine-svg');
+    const box = await svg.boundingBox();
+    const v = handle.view;
+    const side = Math.min(box.width / v.W, box.height / v.H);
+    const left = box.x + (box.width - side * v.W) / 2;
+    const top = box.y + (box.height - side * v.H) / 2;
+    const at = (x, y) => ({ x: left + (x - v.ox) * side, y: top + (y - v.oy) * side });
+    for (let cell = 0; cell < handle.nine.answer.length; cell++) {
+      const digit = handle.nine.answer[cell];
+      const s = await page.evaluate((d) => window.__puzzles.board().slot(d), digit);
+      const c = await page.evaluate((k) => window.__puzzles.board().cellBox(k), cell);
+      const f = at(s.x + 9.5, s.y + 9.5);
+      const t = at(c.x + c.size / 2, c.y + c.size / 2);
+      await page.mouse.move(f.x, f.y);
+      await page.mouse.down();
+      await page.mouse.move((f.x + t.x) / 2, (f.y + t.y) / 2);
+      await page.mouse.move(t.x, t.y);
+      await page.mouse.up();
+    }
+  } else {
+    /*
+     * A game with no driver here is a game this check silently stops checking.
+     * Saying so is the whole point: the last time a game was added, this file
+     * carried on printing PASS for the two it knew and nothing at all for the
+     * new one.
+     */
+    ok(`${game} has a driver in this check`, false, 'add one to verify-deployed-bytes.mjs');
   }
 
   await page.waitForTimeout(500);
