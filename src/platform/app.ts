@@ -2,7 +2,7 @@
  * The app: three routes, and each one is a place.
  *
  *   #/                    the library
- *   #/g/<game>            that game's whole ladder
+ *   #/g/<game>            that game's whole ladder, as a path
  *   #/g/<game>/<puzzle>   playing one
  *
  * Back always goes up exactly one level, and the hash is the truth — a route
@@ -13,7 +13,7 @@
 import { h } from './dom.js';
 import { gameById, allGames } from './registry.js';
 import { libraryScreen, labelOf } from '../library/library.js';
-import { archiveScreen } from '../library/archive.js';
+import { pathScreen } from '../library/path.js';
 import { gameFrame } from './ui/frame.js';
 import { closeSheets } from './ui/components.js';
 import type { Puzzle } from './types.js';
@@ -79,7 +79,7 @@ export class App {
         return;
       }
 
-      this.show(() => archiveScreen(game, {
+      this.show(() => pathScreen(game, {
         onBack: () => this.go('#/'),
         open: (id) => this.go(`#/g/${game.meta.id}/${id}`),
       }));

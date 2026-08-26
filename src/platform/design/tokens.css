@@ -50,6 +50,19 @@
   --t-isolate: #dcebe1;
   --t-zigzag: #f2dfeb;
 
+  /* --- the card colours ---------------------------------------------------
+     A game's card on the home screen is a block of colour with black type on
+     it, which is the one thing that makes a shelf of puzzles look like a
+     shelf of puzzles rather than a settings list. Each is its game's accent
+     taken up in lightness until charcoal reads on it: every one below is at
+     least 8:1 against --ink, which is past AA for body text with room to
+     spare, so nothing on a card needs a shadow or an outline to be read. */
+  --c-thread: #efa980;
+  --c-shape: #8ec8e4;
+  --c-hex: #e8c95e;
+  --c-nine: #a9b6e8;
+  --c-isolate: #8fcb9b;
+  --c-zigzag: #dda8cd;
 }
 
 /*

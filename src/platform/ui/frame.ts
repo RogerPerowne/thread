@@ -110,10 +110,17 @@ export function gameFrame(
   const redoBtn = button('Redo', () => { session.redo(); view.refresh(); changed(); }, { glyph: 'redo' });
   const restartBtn = button('Restart', askRestart, { glyph: 'restart' });
   const hintBtn = button('Hint', showHint, { glyph: 'hint' });
-  const nextBtn = button('Next puzzle', () => hooks.onNext(), { kind: 'accent', glyph: 'next' });
+  const nextBtn = button('Next', () => hooks.onNext(), { kind: 'accent', glyph: 'next' });
   nextBtn.hidden = true;
 
-  const controls = h('div', { class: 'controls chrome' }, undoBtn, redoBtn, restartBtn, hintBtn);
+  /*
+   * Four slots, always. Next takes the hint's place when the board is solved
+   * rather than arriving as a fifth control, because a row that grows a button
+   * rewrites the width of the other three under a thumb that is reaching for
+   * one of them. A row that never changes shape cannot do that.
+   */
+  const controls = h('div', { class: 'controls chrome' },
+    undoBtn, redoBtn, restartBtn, hintBtn, nextBtn);
 
   const el = h('div', { class: 'screen fixed play' },
     bar,
@@ -121,7 +128,6 @@ export function gameFrame(
       h('div', { class: 'topline' }, note, bar2.el),
       stage,
       controls,
-      h('div', { class: 'nextline' }, nextBtn),
     ),
   );
   el.style.setProperty('--accent', accent);
@@ -162,6 +168,7 @@ export function gameFrame(
     undoBtn.disabled = !session.canUndo();
     redoBtn.hidden = !session.canRedo();
     hintBtn.hidden = v.solved;
+    nextBtn.hidden = !v.solved || !hooks.next;
 
     /*
      * Written on a short delay rather than on every move: a drag across a
@@ -208,9 +215,7 @@ export function gameFrame(
         ? button('Next puzzle', () => { close(); hooks.onNext(); }, { wide: true, kind: 'accent', glyph: 'next' })
         : button('Back to Games', () => { close(); hooks.onBack(); }, { wide: true, kind: 'accent' }),
     ];
-    const close = sheet('Solved', body, {
-      onClose: () => { nextBtn.hidden = !hooks.next; },
-    });
+    sheet('Solved', body);
   }
 
   async function share(text: string): Promise<void> {

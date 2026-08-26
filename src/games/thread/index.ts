@@ -20,11 +20,27 @@ import './thread.css';
 // JSON widens the point pairs to number[], so the cast goes through unknown.
 // The build script wrote these and the gate re-proves them, so the shape is
 // known and this is the one place it is asserted.
-const ALL: Board[] = [
-  ...(classicRaw as unknown as Board[]),
-  ...(colouredRaw as unknown as Board[]),
-  ...(gridRaw as unknown as Board[]),
-];
+const MODES = [
+  { key: 'classic', name: 'Classic', raw: classicRaw },
+  { key: 'coloured', name: 'Coloured', raw: colouredRaw },
+  { key: 'grid', name: 'Grid', raw: gridRaw },
+] as const;
+
+/*
+ * The chapter names. Each mode climbs its own ladder and the names say what
+ * changes as you climb — the size, or the number of strings — rather than
+ * being decoration.
+ */
+const CHAPTER_NAMES: Record<string, string[]> = {
+  classic: ['First Nine', 'Wider', 'Sixteen', 'Twenty', 'Twenty-Five', 'The Long Way'],
+  coloured: ['Two Strings', 'Sharing', 'Three Strings', 'Crowded', 'Four Strings'],
+  grid: [
+    'The Lattice', 'Twenty', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two',
+    'Seven Square', 'Fifty-Six',
+  ],
+};
+
+const ALL: Board[] = MODES.flatMap((m) => m.raw as unknown as Board[]);
 
 /**
  * The band a board lands in.
@@ -118,6 +134,20 @@ export const thread: GamePackage<Board, ThreadState> = {
     ],
   },
   puzzles: () => puzzles,
+  chapters: () => {
+    const out: { name: string; puzzles: Puzzle<Board>[] }[] = [];
+    for (const mode of MODES) {
+      const mine = puzzles.filter((p) => p.data.mode === mode.key);
+      const numbers = [...new Set(mine.map((p) => p.data.chapter))].sort((a, b) => a - b);
+      for (const n of numbers) {
+        out.push({
+          name: `${mode.name} · ${CHAPTER_NAMES[mode.key][n - 1] ?? `Chapter ${n}`}`,
+          puzzles: mine.filter((p) => p.data.chapter === n),
+        });
+      }
+    }
+    return out;
+  },
   begin: (puzzle) => new ThreadSession(puzzle.data),
   mount: (host, session, view) => mountThread(host, session as ThreadSession, view),
   miniature,

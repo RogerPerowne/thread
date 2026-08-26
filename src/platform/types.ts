@@ -164,11 +164,31 @@ export interface View {
  * `D` is the puzzle data, `S` the player's state. Both stay the game's own
  * types the whole way through; nothing here casts to `unknown` and back.
  */
+/**
+ * A run of puzzles that belong together.
+ *
+ * Chapters are the ladder's own joints: a name, and the puzzles under it, in
+ * order. They exist because a hundred and ninety numbered tiles is a list, and
+ * a list of six chapters of ten is a journey — and because the path screen
+ * needs somewhere to put a heading and something for its rail to jump between.
+ */
+export type Chapter<D> = {
+  readonly name: string;
+  readonly puzzles: readonly Puzzle<D>[];
+};
+
 export interface GamePackage<D, S> {
   readonly meta: GameMeta;
 
   /** Every puzzle this game ships, in ladder order. */
   puzzles(): readonly Puzzle<D>[];
+
+  /**
+   * The same puzzles, grouped. Every puzzle appears in exactly one chapter and
+   * in the same order as `puzzles()` — the path screen relies on both, and the
+   * gate checks it rather than trusting it.
+   */
+  chapters(): readonly Chapter<D>[];
 
   /** Start playing one. */
   begin(puzzle: Puzzle<D>): Session<S>;

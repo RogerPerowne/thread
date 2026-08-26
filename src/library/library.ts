@@ -67,15 +67,17 @@ export function libraryScreen(hooks: LibraryHooks): { el: HTMLElement; dispose()
     );
 
     const el = h('button', {
-      class: `card chrome${big ? ' feature' : ''}`,
+      class: `card game chrome${big ? ' feature' : ''}`,
       type: 'button',
       'data-card': game.meta.id,
       'aria-label': `${game.meta.name}. ${game.meta.tagline} ${STATE_WORD[state]}.`,
       onclick: () => { if (puzzle) hooks.open(game.meta.id, puzzle.id); },
     }, big ? mini : body, big ? body : mini);
 
+    const family = game.meta.accent.replace(/^a-/, '');
     el.style.setProperty('--accent', `var(--${game.meta.accent})`);
-    el.style.setProperty('--tint', `var(--t-${game.meta.accent.replace(/^a-/, '')})`);
+    el.style.setProperty('--tint', `var(--t-${family})`);
+    el.style.setProperty('--card', `var(--c-${family})`);
     teardowns.push(game.miniature(mini, still));
     return el;
   }
@@ -127,7 +129,7 @@ export function libraryScreen(hooks: LibraryHooks): { el: HTMLElement; dispose()
       h('div', { class: 'deck' }, ...games.map((game) => {
         const total = game.puzzles().length;
         const solved = store.doneCount(game.meta.id);
-        return h('button', {
+        const el = h('button', {
           class: 'card chrome',
           type: 'button',
           'data-archive': game.meta.id,
@@ -140,6 +142,8 @@ export function libraryScreen(hooks: LibraryHooks): { el: HTMLElement; dispose()
           ),
           icon.stack(),
         );
+        el.style.setProperty('--accent', `var(--${game.meta.accent})`);
+        return el;
       })),
     ),
   );

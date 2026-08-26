@@ -1,0 +1,214 @@
+/**
+ * The path screen.
+ *
+ * Every colour here comes from the tokens, so the ladder is made of the same
+ * paper and ink as the boards it leads to. Nothing is a rainbow: state is told
+ * by the same three treatments the library uses — solid accent for solved,
+ * paper and an accent edge for where you are, quiet stone for what is ahead.
+ *
+ * The drawing knows nothing about pixels. It is one SVG with its own viewBox,
+ * so type, tiles, bands and ribbon all scale together and a phone gets the
+ * same drawing as a desktop, only smaller.
+ */
+
+.pathscreen { position: relative; }
+
+.pathscroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /*
+   * The rail's column, kept clear of the drawing rather than overlaid on it.
+   * The tiles reach 88% of the drawing's width, so on a narrow phone an
+   * overlaid rail would sit on top of them; taking the width out of the box
+   * the drawing is measured into means it cannot, at any width.
+   */
+  padding-right: 44px;
+}
+
+.pathsvg { display: block; width: 100%; height: auto; }
+
+/* The progress line under the bar: the same fact as "45 of 190", drawn. */
+.pathmeter {
+  height: 3px;
+  background: var(--paper-3);
+  flex: none;
+}
+.pathmeter > i {
+  display: block;
+  height: 100%;
+  background: var(--accent, var(--ink-2));
+}
+
+/* --- the ribbon ----------------------------------------------------------- */
+/* The width is in the drawing's own units, so it scales with everything else;
+   it is what makes the ribbon a slab rather than a wire. */
+.ribbon polyline {
+  fill: none;
+  stroke-width: 11.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.ribbon .ahead { stroke: var(--paper-3); }
+.ribbon .ahead.side { stroke: var(--line); }
+.ribbon .walked { stroke: var(--ink-2); }
+.ribbon .walked.side { stroke: var(--ink); }
+
+/* --- the tiles ------------------------------------------------------------ */
+.ptile { cursor: pointer; }
+/* Transparent rather than absent: `fill: none` is not hit by a pointer. */
+.ptile .hit { fill: transparent; }
+.ptile .top, .ptile .side, .ptile .inner { transition: opacity var(--fast) var(--ease); }
+.ptile:active { transform: translateY(3px); }
+.ptile:focus { outline: none; }
+.ptile:focus-visible .top { stroke: var(--ink); stroke-width: 4; }
+
+/* Ahead: stone. Reachable — nothing on this ladder is locked — but quiet. */
+.ptile .side { fill: var(--line-2); }
+.ptile .top { fill: var(--paper-2); }
+.ptile .inner { fill: var(--paper-3); }
+.ptile .pnum { fill: var(--mute); }
+
+/* Solved: the filled accent of a solved chip, and the same white numeral. */
+.ptile.done .side { fill: color-mix(in srgb, var(--accent) 62%, #000); }
+.ptile.done .top { fill: var(--accent); }
+.ptile.done .inner { fill: color-mix(in srgb, var(--accent) 88%, #fff); }
+.ptile.done .pnum { fill: var(--paper); }
+
+/* Where you are up to: paper, ink, and the only lit thing on the screen. */
+.ptile.now .side { fill: var(--ink-2); }
+.ptile.now .top { fill: var(--paper); }
+.ptile.now .inner { fill: var(--paper); }
+.ptile.now .pnum { fill: var(--ink); font-weight: 700; }
+
+/* Half-done: the outlined chip, as an edge round the face. */
+.ptile.going .top { stroke: var(--accent); stroke-width: 5; }
+.ptile.going .pnum { fill: var(--accent); }
+
+.pnum {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 46px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* The column of light. Accent rather than white: on paper, white is nothing. */
+.halo-far { stop-color: var(--accent); stop-opacity: 0; }
+.halo-near { stop-color: var(--accent); stop-opacity: 0.34; }
+
+/* The tile you are up to breathes, once every few seconds. */
+@keyframes ptile-pulse {
+  0%, 74%, 100% { transform: translateY(0); }
+  84% { transform: translateY(-7px); }
+}
+.ptile.now { animation: ptile-pulse 3.4s var(--ease) infinite; }
+
+/* --- the chapter bands ---------------------------------------------------- */
+/* A ruled divider the path runs behind. A chapter break is a break. */
+.pband .plate { fill: var(--paper); }
+.pband .rule { stroke: var(--line); stroke-width: 2.5; }
+.pband .bnum {
+  font-family: var(--text);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 2.4px;
+  text-transform: uppercase;
+  fill: var(--mute);
+}
+.pband .bname {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 48px;
+  letter-spacing: -0.5px;
+  fill: var(--ink);
+}
+
+/* --- the chapter rail ----------------------------------------------------- */
+/*
+ * Forty-four pixels of hit area round three pixels of line. The whole column
+ * is the control, so a thumb anywhere down the right edge finds it, and no
+ * chapter needs a target of its own — which is what keeps nineteen of them
+ * reachable on a phone.
+ */
+.chaprail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  z-index: 4;
+}
+.chaprail .track {
+  position: relative;
+  width: 3px;
+  height: min(66%, 460px);
+  border-radius: 999px;
+  background: var(--paper-3);
+}
+.chaprail .mark {
+  position: absolute;
+  left: 50%;
+  width: 11px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-2);
+  transform: translate(-50%, -50%);
+  transition: width var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.chaprail .mark.on {
+  width: 19px;
+  height: 3px;
+  background: var(--ink);
+}
+.chaprail .thumb {
+  position: absolute;
+  left: 50%;
+  width: 5px;
+  min-height: 22px;
+  border-radius: 999px;
+  background: var(--accent, var(--ink-2));
+  transform: translate(-50%, -50%);
+}
+.chaprail:focus-visible { outline: none; }
+.chaprail:focus-visible .track { box-shadow: 0 0 0 2px var(--ink); }
+
+/* The name of the chapter under the thumb, while a thumb is on the rail. */
+.chaprail .flag {
+  position: absolute;
+  right: 46px;
+  transform: translateY(-50%);
+  max-width: 62vw;
+  padding: var(--s2) var(--s3);
+  border: var(--edge);
+  border-radius: var(--r2);
+  background: var(--paper);
+  box-shadow: var(--lift);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--fast) var(--ease);
+}
+.chaprail.scrubbing .flag { opacity: 1; }
+.chaprail .flag b {
+  font-family: var(--display);
+  font-size: var(--t-lg);
+  font-variant-numeric: tabular-nums;
+}
+.chaprail .flag span {
+  font-size: var(--t-sm);
+  color: var(--mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

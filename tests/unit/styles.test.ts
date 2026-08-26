@@ -70,10 +70,18 @@ describe('the viewport units', () => {
     const all = sheets.map((s) => s.css).join('\n');
     expect(all).toMatch(/safe-area-inset-top/);
     expect(all).toMatch(/safe-area-inset-bottom/);
-    // And the controls under a board actually use the bottom one, because that
-    // is the row a home indicator sits on top of.
+    /*
+     * And exactly one thing under a board owns the bottom inset.
+     *
+     * Two owners is the bug this catches, and it is invisible on a desktop:
+     * `--safe-b` is zero there, so a layout that adds it twice looks perfect
+     * and pushes the controls thirty-four pixels off the bottom of a phone.
+     * The wrapper owns it; the rows inside it do not.
+     */
+    const play = sheets.find((s) => s.name === 'play.css')!.css;
     const components = sheets.find((s) => s.name === 'components.css')!.css;
-    expect(components).toMatch(/\.controls\s*\{[^}]*--safe-b/s);
+    expect(play).toMatch(/\.playwrap\s*\{[^}]*--safe-b/s);
+    expect(components).not.toMatch(/\.controls\s*\{[^}]*--safe-b/s);
   });
 });
 
@@ -116,12 +124,35 @@ describe('what a game may style', () => {
 describe('the palette', () => {
   const tokens = sheets.find((s) => s.name === 'tokens.css')!.css;
 
-  it('gives every game an accent and a tint from the one family', () => {
+  it('gives every game an accent, a tint and a card colour from the one family', () => {
     const accents = [...tokens.matchAll(/--a-([a-z]+):/g)].map((m) => m[1]);
     const tints = [...tokens.matchAll(/--t-([a-z]+):/g)].map((m) => m[1]);
+    const cards = [...tokens.matchAll(/--c-([a-z]+):/g)].map((m) => m[1]);
     expect(accents.length).toBeGreaterThan(0);
     for (const a of accents) {
       expect(tints, `--a-${a} has no matching tint`).toContain(a);
+      expect(cards, `--a-${a} has no matching card colour`).toContain(a);
+    }
+  });
+
+  it('keeps charcoal readable on every card colour', () => {
+    /*
+     * The card colours carry black type, so this is not a preference — it is
+     * whether the name of the game can be read. Measured rather than eyeballed,
+     * because "looks fine on my screen" is how a 3:1 card ships.
+     */
+    const hex = (h: string): number[] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const lum = (h: string): number => {
+      const [r, g, b] = hex(h).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ink = lum(/--ink:\s*(#[0-9a-f]{6})/.exec(tokens)![1]);
+    const cards = [...tokens.matchAll(/--c-([a-z]+):\s*(#[0-9a-f]{6})/g)];
+    expect(cards.length).toBeGreaterThan(0);
+    for (const [, name, value] of cards) {
+      const l = lum(value);
+      const ratio = (Math.max(l, ink) + 0.05) / (Math.min(l, ink) + 0.05);
+      expect(ratio, `ink on --c-${name} is only ${ratio.toFixed(1)}:1`).toBeGreaterThan(7);
     }
   });
 

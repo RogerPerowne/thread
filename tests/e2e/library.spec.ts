@@ -27,7 +27,7 @@ test('every card carries a moving miniature of its own mechanic', async ({ page 
   expect(new Set(shapes).size).toBe(shapes.length);
 });
 
-test('a card opens today\'s puzzle, and back returns to the archive', async ({ page }) => {
+test('a card opens today\'s puzzle, and back returns to the path', async ({ page }) => {
   await gotoApp(page);
   await page.locator('[data-card]').first().click();
   await expect(page).toHaveURL(/#\/g\/[a-z-]+\/[a-z0-9-]+$/);
@@ -35,23 +35,69 @@ test('a card opens today\'s puzzle, and back returns to the archive', async ({ p
 
   await page.locator('.gamebar .icon').first().click();
   await expect(page).toHaveURL(/#\/g\/[a-z-]+$/);
-  await expect(page.locator('.chip').first()).toBeVisible();
+  await expect(page.locator('.ptile').first()).toBeVisible();
 
   await page.locator('.gamebar .icon').first().click();
   await expect(page.locator('.masthead .wordmark')).toBeVisible();
 });
 
-test('the archive lists a game\'s whole ladder, grouped by how hard it is', async ({ page }) => {
+test('the path carries a game\'s whole ladder, chapter by chapter', async ({ page }) => {
   await gotoApp(page);
   const games = await page.evaluate(() => window.__puzzles.games());
   for (const g of games) {
     await page.goto(`/#/g/${g}`);
     const ids = await page.evaluate((id) => window.__puzzles.puzzles(id), g);
-    await expect(page.locator('.chip')).toHaveCount(ids.length);
-    // Grouped: more than one band, or the game is very short.
-    const groups = await page.locator('.section .label').count();
-    expect(groups).toBeGreaterThan(0);
+    // Every puzzle is on the path exactly once, and in ladder order.
+    await expect(page.locator('.ptile')).toHaveCount(ids.length);
+    const onPath = await page.evaluate(
+      () => [...document.querySelectorAll('.ptile')].map((t) => t.getAttribute('data-puzzle')),
+    );
+    // The path climbs, so it is drawn bottom-first: reversed, it is the ladder.
+    expect([...onPath].reverse()).toEqual([...ids]);
+
+    /*
+     * One band per chapter, and the rail has one mark for each — the rail is a
+     * map of the path, so a mark with no band is a jump to nowhere.
+     */
+    const bands = await page.locator('.pband').count();
+    expect(bands).toBeGreaterThan(0);
+    await expect(page.locator('.chaprail .mark')).toHaveCount(bands);
   }
+});
+
+test('the path opens where the player is, and does not run past its own end', async ({ page }) => {
+  await gotoApp(page, '#/g/thread');
+  const box = await page.evaluate(() => {
+    const scroll = document.querySelector('.pathscroll') as HTMLElement;
+    const svg = document.querySelector('.pathsvg') as SVGSVGElement;
+    return {
+      top: scroll.scrollTop,
+      height: scroll.scrollHeight,
+      client: scroll.clientHeight,
+      drawn: svg.getBoundingClientRect().height,
+    };
+  });
+  /*
+   * There is exactly as much to scroll as there is drawing. The ribbon runs
+   * past the first tile and fades out inside that drawing, so the bottom of
+   * the scroll is the end of the path and never a strip of nothing.
+   */
+  expect(Math.abs(box.height - box.drawn)).toBeLessThan(2);
+  expect(box.height).toBeGreaterThan(box.client);
+});
+
+test('the rail swaps chapters', async ({ page }) => {
+  await gotoApp(page, '#/g/thread');
+  const rail = page.locator('.chaprail');
+  const before = await page.evaluate(() => (document.querySelector('.pathscroll') as HTMLElement).scrollTop);
+  // The top of the rail is the top of the path: the last chapter.
+  const box = (await rail.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.12);
+  await page.mouse.down();
+  await page.mouse.up();
+  const after = await page.evaluate(() => (document.querySelector('.pathscroll') as HTMLElement).scrollTop);
+  expect(after).toBeGreaterThan(before);
+  await expect(page.locator('.chaprail .mark.on')).toHaveCount(1);
 });
 
 test('an unknown route lands somewhere real rather than on nothing', async ({ page }) => {

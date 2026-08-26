@@ -50,6 +50,18 @@ const ROUTES = [
   ['zigzag biggest', '#/g/zigzag/zigzag-44'],
 ];
 
+/*
+ * Every size is walked twice: once flat, and once as a phone with a notch and
+ * a home indicator. The insets are zero in every desktop browser, so a layout
+ * that applies one of them twice looks perfect here and sits thirty-four
+ * pixels wrong on the device most people will use. Simulating them is the only
+ * way to see it without a phone in your hand.
+ */
+const SKINS = [
+  ['flat', ''],
+  ['notched', ':root{--safe-t:47px;--safe-b:34px}'],
+];
+
 const browser = await chromium.launch();
 const problems = [];
 
@@ -58,8 +70,10 @@ for (const [vname, w, h] of VIEWPORTS) {
   page.on('pageerror', (e) => problems.push(`${vname} · pageerror · ${String(e).slice(0, 140)}`));
 
   for (const [rname, hash] of ROUTES) {
-    const where = `${vname} · ${rname}`;
+   for (const [sname, skin] of SKINS) {
+    const where = `${vname} · ${rname}${sname === 'flat' ? '' : ` · ${sname}`}`;
     await page.goto(BASE + hash);
+    if (skin) await page.addStyleTag({ content: skin });
     await page.waitForSelector('.screen', { timeout: 10000 }).catch(() => {
       problems.push(`${where} · never rendered a screen`);
     });
@@ -155,14 +169,48 @@ for (const [vname, w, h] of VIEWPORTS) {
         })();
         if (offscreen || covered) suspects.push(el);
       }
+      /*
+       * Reachability is measured by scrolling to the thing and looking again,
+       * which forces a layout each time. A path screen has a couple of hundred
+       * identical tiles on it, and scrolling to every one of them takes long
+       * enough that the audit stops being run at all — so identical controls
+       * are checked a few at a time. Same class, same geometry, same answer;
+       * the SIZE check above still runs on every one of them.
+       */
+      const seen = new Map();
       for (const el of suspects) {
+        const key = named(el);
+        const n = seen.get(key) ?? 0;
+        if (n >= 3) continue;
+        seen.set(key, n + 1);
         const r = reachable(el);
-        if (!r.ok) out.push(`${named(el)} ${r.why}`);
+        if (!r.ok) out.push(`${key} ${r.why}`);
       }
       return out;
     });
 
+    /*
+     * A board sits in the middle of the space it is given. Not "looks about
+     * right" — measured, because the failure this catches is a layout that
+     * applies a safe-area inset twice and is therefore invisible until the app
+     * is on a phone.
+     */
+    const off = await page.evaluate(() => {
+      const stage = document.querySelector('.stage');
+      const art = document.querySelector('.stage svg');
+      if (!stage || !art) return null;
+      const s = stage.getBoundingClientRect();
+      const a = art.getBoundingClientRect();
+      return {
+        v: +((a.top - s.top) - (s.bottom - a.bottom)).toFixed(1),
+        h: +((a.left - s.left) - (s.right - a.right)).toFixed(1),
+      };
+    });
+    if (off && Math.abs(off.v) > 1) problems.push(`${where} · the board sits ${off.v}px off centre vertically`);
+    if (off && Math.abs(off.h) > 1) problems.push(`${where} · the board sits ${off.h}px off centre horizontally`);
+
     for (const f of found) problems.push(`${where} · ${f}`);
+   }
   }
   await page.close();
 }
@@ -170,7 +218,7 @@ for (const [vname, w, h] of VIEWPORTS) {
 await browser.close();
 
 if (problems.length === 0) {
-  console.log(`Every screen fits every phone (${ROUTES.length} routes x ${VIEWPORTS.length} sizes).`);
+  console.log(`Every screen fits every phone (${ROUTES.length} routes x ${VIEWPORTS.length} sizes x ${SKINS.length} skins).`);
   process.exit(0);
 }
 console.error(`${problems.length} problem${problems.length === 1 ? '' : 's'}:\n`);

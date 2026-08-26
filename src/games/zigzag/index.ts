@@ -94,6 +94,21 @@ export const zigzag: GamePackage<Zig, ZigState> = {
     ],
   },
   puzzles: () => puzzles,
+  chapters: () => {
+    /*
+     * One chapter per board size, in ladder order. The size is what actually
+     * changes between them, so naming them anything else would be decoration
+     * pretending to be structure.
+     */
+    const out: { name: string; puzzles: Puzzle<Zig>[] }[] = [];
+    for (const p of puzzles) {
+      const name = `${p.data.w} by ${p.data.h}`;
+      const last = out[out.length - 1];
+      if (last && last.name === name) last.puzzles.push(p);
+      else out.push({ name, puzzles: [p] });
+    }
+    return out;
+  },
   begin: (puzzle) => new ZigSession(puzzle.data),
   mount: (host, session, view) => mountZigzag(host, session as ZigSession, view),
   miniature,

@@ -19,7 +19,10 @@
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
-  padding: 2px 10px 8px;
+  /* Symmetric, so the square sits where the grid centres it. The old figures
+     were nudged to look right against a layout that no longer exists, and a
+     nudge is a bug waiting for the layout to change. */
+  padding: var(--s2) var(--s3);
 }
 .boardsurface {
   /*

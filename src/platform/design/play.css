@@ -7,11 +7,21 @@
  * board that has moved under the thumb.
  */
 
+/*
+ * The play screen, and the one rule that keeps a board centred on a phone.
+ *
+ * Exactly one element applies the bottom inset, and it is this one. Two nested
+ * elements each adding `safe-area-inset-bottom` is a real bug that no desktop
+ * browser can show you: the inset is zero there, so the layout looks perfect
+ * and the board sits thirty-four pixels high on an iPhone. Owning the inset in
+ * one place makes that impossible rather than unlikely.
+ */
 .playwrap {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding-bottom: var(--safe-b);
 }
 
 .topline {
@@ -31,13 +41,6 @@
   flex-direction: column;
   padding: 0 var(--s3);
 }
-
-.nextline {
-  padding: 0 var(--s3) calc(var(--s3) + var(--safe-b));
-  background: var(--paper);
-}
-.nextline:empty { display: none; }
-.nextline .btn[hidden] { display: none; }
 
 /* Pausing hides the board rather than the clock: the point of a pause is that
    you are not looking at the puzzle. */
