@@ -35,7 +35,6 @@ import * as store from '../platform/store.js';
 import * as haptics from '../platform/haptics.js';
 import {
   type Pt2, project, lift, groundOf, isoCam, ISO_PITCH, TILE_H, HALF_W, HALF_H,
-  EXTRUDE_PX,
 } from '../platform/ui/camera.js';
 import type { AnyGame } from '../platform/registry.js';
 import type { Puzzle } from '../platform/types.js';
@@ -53,17 +52,6 @@ const CORNERS: [number, number][] = [
 /** Where the four rows of a turn sit. */
 const ROW_SLOTS: [number, number][] = [[191, 0], [390, 274], [608, 517], [390, 766]];
 const PER_TURN = ROW_SLOTS.length;
-/*
- * The ribbon is a slab, and it is cut from the same block as the tiles.
- *
- * Both stand on one floor and are extruded straight up from it; the only
- * difference is how far. A path that is a third of a tile's height reads as a
- * ribbon laid on the ground next to some blocks — two objects. Three quarters
- * reads as one piece of material with the tiles standing slightly proud of it,
- * which is what it is meant to be. The fraction is the whole decision, so it
- * is written as one.
- */
-const RIBBON_D = EXTRUDE_PX * 0.75;
 /** How far the column of light rises above the tile you are up to. */
 const GLOW_PX = 78;
 
@@ -100,9 +88,19 @@ const HIT_W = 200;
 const HIT_H = 130;
 
 /*
- * A tile straddles the ribbon: its top face is half its height above the
- * surface and its base half below, so the ribbon runs into the middle of the
- * side face rather than meeting its top or bottom edge.
+ * The ribbon and the tiles are ONE slab.
+ *
+ * They used to be two. The tile straddled the ribbon — half its height above
+ * the surface, half below — and the ribbon was extruded three quarters as far
+ * as the tile was tall, so the path met the middle of the side face and the
+ * tile stood proud of it by a quarter. Every tile therefore read as a block
+ * dropped onto a strip: two objects at two heights, and on a phone the little
+ * step where they met is the first thing the eye finds.
+ *
+ * So the two share both faces. Floor and ceiling are one plane each, and the
+ * tile is simply the place where the slab is wide. That is a construction and
+ * not a fit: there is one pair of heights below, both used by both, so no
+ * later change can pull them apart again.
  */
 const TOP_Z = TILE_H / 2;
 const BOT_Z = -TILE_H / 2;
@@ -110,8 +108,9 @@ const BOT_Z = -TILE_H / 2;
 /** Ground-space versions of the above. Converted once, here. */
 const G_PERIOD = PERIOD / HALF_H;
 const G_CORNERS = CORNERS.map(([x, y]) => groundOf(x, y));
-const G_RIBBON_D = RIBBON_D / (HALF_W * Math.sin(ISO_PITCH));
-const GLOW_H = GLOW_PX / (HALF_W * Math.sin(ISO_PITCH));
+/** A length in the reference's screen pixels, as a height above the ground. */
+const zOfPx = (px: number) => px / (HALF_W * Math.sin(ISO_PITCH));
+const GLOW_H = zOfPx(GLOW_PX);
 
 /** Advance a ground point by `n` turns down the meander. */
 function downTurns(p: Pt2, n: number): Pt2 {
@@ -387,17 +386,17 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   const run = (cls: string, z: number, pts: Pt2[]) => {
     ribbon.appendChild(svg('polyline', { class: cls, points: pointsOf(pts, z) }));
   };
-  const SWEEP_STEP = 1.5;
+  const SWEEP_STEP = zOfPx(1.5);
   const sweep = (cls: string, pts: Pt2[]) => {
-    const step = (SWEEP_STEP / RIBBON_D) * G_RIBBON_D;
-    for (let z = 0; z < G_RIBBON_D; z += step) run(cls, BOT_Z + z, pts);
+    for (let z = BOT_Z; z < TOP_Z; z += SWEEP_STEP) run(cls, z, pts);
   };
-  // The ribbon shares a floor with the tiles: its underside is level with
-  // their bases, so the path does not hover.
+  /* Both faces are shared with the tiles: the underside sits on their floor
+     and the top surface is their top surface, so a tile is a wide place in
+     the ribbon rather than a block standing on it. */
   sweep('ahead side', halves.before);
-  run('ahead', BOT_Z + G_RIBBON_D, halves.before);
+  run('ahead', TOP_Z, halves.before);
   sweep('walked side', halves.after);
-  run('walked', BOT_Z + G_RIBBON_D, halves.after);
+  run('walked', TOP_Z, halves.after);
   scene.appendChild(ribbon);
 
   // --- the chapter bands ---------------------------------------------------

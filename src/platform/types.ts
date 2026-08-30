@@ -121,6 +121,20 @@ export interface Session<S> {
   canUndo(): boolean;
   canRedo(): boolean;
   restart(): void;
+  /**
+   * Fill the board in with the answer, and leave it solved.
+   *
+   * The last door out of a board nobody can finish. Every game here is built
+   * answer-first — the filling, the path, the arrangement of tiles existed
+   * before the puzzle did — so this is never a solver run at play time and
+   * never a thing that can fail: it is the board the puzzle was cut from,
+   * written back onto the board.
+   *
+   * It takes an undo step, so it is not a one-way door either. What it does
+   * NOT do is finish the puzzle: the shell does not record a revealed board
+   * as solved, because a personal best you were handed is not one.
+   */
+  reveal(): void;
   /** The next useful deduction, or null when there is nothing to say. */
   hint(): Hint | null;
   /** The player's state, as a string, for storage. */

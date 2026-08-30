@@ -9,6 +9,12 @@
  * judged honestly. A clue about the second shape along a row cannot be broken
  * until the cells before it are settled, and without the distinction there is
  * no way to know whether a blank cell is a blank or a gap.
+ *
+ * EMPTY is the player's notation and not part of the answer. It is a note that
+ * says "I have settled this", written where the deduction needed it and
+ * nowhere else — so the board is finished when every line holds one of each
+ * shape, and nobody is asked to dot the rest of the grid to be told so. See
+ * `judge` in model.ts, which is where that reading lives.
  */
 
 import {
@@ -93,6 +99,13 @@ export class ShapeSession implements Session<ShapeState> {
     this.snapped = false;
   }
 
+  /** The filling the clues were read off, written back onto the board. */
+  reveal(): void {
+    this.mark();
+    this.cells = this.board.answer.slice();
+    this.snapped = false;
+  }
+
   save(): string {
     const key = this.board.clues.map((c) => `${c.side[0]}${c.line}${c.shape}${c.depth}`).join('');
     return `1;${key};${this.effort.freeze().join(',')};${this.cells.join(',')}`;
@@ -159,7 +172,11 @@ export class ShapeSession implements Session<ShapeState> {
 
     const consider = (cells: number[], stock: number[][], label: string): void => {
       const now = cells.map((i) => this.cells[i]);
-      if (now.every((v) => v !== -1)) return;
+      /* A line with all its shapes down is finished, whether or not its gaps
+         are dotted. There is nothing left to deduce there, so pointing at it
+         and saying "only one arrangement fits" would be telling the player to
+         write out notation the answer does not need. */
+      if (now.filter((v) => v > 0).length >= shapes) return;
       const ways = stock.filter((way) => {
         for (let k = 0; k < now.length; k++) if (now[k] !== -1 && now[k] !== way[k]) return false;
         for (const clue of board.clues) {

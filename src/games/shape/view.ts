@@ -18,10 +18,21 @@
  * stays where it was put, and a drag paints a whole run of cells. Tapping a
  * cell that already holds the chosen mark takes it off again, so rubbing out
  * is the same gesture as writing and there is no eraser to find.
+ *
+ * There are three gestures now and they are one gesture. Tap a chip to choose;
+ * tap cells to place; or press a chip and DRAG it onto the board, which is the
+ * same press and the same release, with the mark carried under the finger the
+ * whole way. Nothing is modal: the drag begins on a chip and simply carries on
+ * into the paint that a drag on the grid already was.
+ *
+ * And the board answers. A line that takes its last shape lights up and stays
+ * lit, the clues it satisfies tick off, and when the last of the mark in your
+ * hand goes down the palette hands you the next one. None of that is decided
+ * by the view: they are all facts the model already knows, drawn.
  */
 
 import { svg } from '../../platform/dom.js';
-import { judge, sightLine } from './model.js';
+import { judge, sightLine, rowCells, colCells } from './model.js';
 import { GLYPHS, glyphPath } from './glyphs.js';
 import type { ShapeSession } from './session.js';
 import type { View, ViewHost } from '../../platform/types.js';
@@ -94,7 +105,10 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
   const gMarks = svg('g', { class: 'shape-marks' });
   const gClues = svg('g', { class: 'shape-clues' });
   const gPal = svg('g', { class: 'shape-palette' });
-  el.append(gCells, gClues, gMarks, gPal);
+  /* The mark under the finger while one is being carried. Last, so it is over
+     everything, and empty whenever nothing is being dragged. */
+  const gCarry = svg('g', { class: 'shape-carry' });
+  el.append(gCells, gClues, gMarks, gPal, gCarry);
 
   /* The grid is centred in whatever width the drawing ended up with, so a
      board narrower than its own palette simply gets a wider clue gutter. */
@@ -119,14 +133,21 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
 
   // --- the clues -----------------------------------------------------------
   /*
-   * A clue sits in the gutter, pointing in. Its depth is drawn as that many
-   * pips beside the shape rather than as a colour, because "the second shape
-   * in" is a count and a count should look like one — and because a third or
-   * fourth would need a third or fourth colour nobody could name.
+   * A clue sits in the gutter, pointing in. Its depth is drawn as one pip for
+   * the first shape you meet and two for the second, rather than as a colour:
+   * "the second shape in" is a count and a count should look like one.
+   *
+   * Two groups per clue and not one. The outer one carries the translation
+   * into the gutter and never moves again; the inner one holds the ink and is
+   * the only thing that ever gets a scale. Animating the outer group instead
+   * would compose a scale with that translation and throw the clue across the
+   * board, and no transform-origin can undo it, because the origin it needs is
+   * inside a box the translation has already moved.
    */
   const clueEl: SVGGElement[] = [];
   board.clues.forEach((clue) => {
     const g = svg('g', { class: 'shape-clue' });
+    const ink = svg('g', { class: 'shape-clueink' });
     let cx = 0;
     let cy = 0;
     if (clue.side === 'top') { cx = x0 + clue.line * CELL + CELL / 2; cy = EDGE / 2; }
@@ -135,7 +156,7 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     else { cx = x0 + w * CELL + EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; }
 
     g.setAttribute('transform', `translate(${cx.toFixed(2)} ${cy.toFixed(2)})`);
-    g.appendChild(svg('path', {
+    ink.appendChild(svg('path', {
       class: `shape-glyph s${clue.shape}`, d: glyphPath(clue.shape, CLUE_R),
       transform: `translate(0 ${(-CLUE_R * 0.3).toFixed(2)})`,
     }));
@@ -143,10 +164,11 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     for (let k = 0; k < clue.depth; k++) {
       const gap = 2.2;
       const spread = (clue.depth - 1) * gap;
-      g.appendChild(svg('circle', {
+      ink.appendChild(svg('circle', {
         class: 'shape-pip', cx: k * gap - spread / 2, cy: CLUE_R + 1.6, r: 0.75,
       }));
     }
+    g.appendChild(ink);
     gClues.appendChild(g);
     clueEl.push(g);
   });
@@ -210,9 +232,58 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     return -1;
   };
 
+  // --- what the board knows about itself -----------------------------------
+  /*
+   * A line is DONE when it holds one of each shape and no shape twice. That is
+   * the rule, not a heuristic: the line is finished at that moment whether or
+   * not its gaps have been dotted, so it is finished on the screen too.
+   *
+   * Done lines are what the board's reward is made of, and they are computed
+   * from the cells every paint rather than tracked, so undo, restart and
+   * reveal all get the right answer without any of them having to know this
+   * exists.
+   */
+  const lineDone = (idx: readonly number[]): boolean => {
+    const count = new Array(shapes + 1).fill(0);
+    for (const i of idx) if (session.cells[i] > 0) count[session.cells[i]]++;
+    for (let s = 1; s <= shapes; s++) if (count[s] !== 1) return false;
+    return true;
+  };
+
+  /** Which lines are done, as `r3` / `c5`. */
+  function doneNow(): Set<string> {
+    const out = new Set<string>();
+    for (let r = 0; r < h; r++) if (lineDone(rowCells(board, r))) out.add(`r${r}`);
+    for (let c = 0; c < w; c++) if (lineDone(colCells(board, c))) out.add(`c${c}`);
+    return out;
+  }
+
+  /** The lines that were done last paint, so a NEW one can be told from an old. */
+  let wasDone = new Set<string>();
+  /** Clues that had come true last paint, for the same reason. */
+  let wasGood = new Set<number>();
+  const timers = new Set<number>();
+
+  /** Run `cls` as a one-shot animation, from a clean start every time. */
+  function flash(node: Element, cls: string, ms: number): void {
+    if (node.classList.contains(cls)) {
+      /* Still running from last time. Take it off and read the box, which is
+         what commits the removal — without that the browser sees no change and
+         a line finished twice in quick succession animates once. Only in that
+         case: a forced reflow per cell of every line is not free. */
+      node.classList.remove(cls);
+      void (node as SVGGraphicsElement).getBoundingClientRect();
+    }
+    node.classList.add(cls);
+    const t = window.setTimeout(() => { node.classList.remove(cls); timers.delete(t); }, ms);
+    timers.add(t);
+  }
+
   // --- painting ------------------------------------------------------------
   function paint(): void {
     const j = judge(board, session.cells);
+    const done = doneNow();
+
     for (let i = 0; i < total; i++) {
       const v = session.cells[i];
       markEl[i].replaceChildren();
@@ -227,14 +298,79 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
         }));
       }
       holeEl[i].classList.toggle('cursor', i === cursor && el === document.activeElement);
+      /*
+       * Settled: this cell sits on a line that is finished. The board fills in
+       * behind you as you go, which is the same fact as the meter and a great
+       * deal easier to read — and a cell where a finished row crosses a
+       * finished column is settled twice over, so it takes the deeper of the
+       * two papers and the last cells to change are the ones that were hardest.
+       */
+      const r = (i / w) | 0;
+      const c = i % w;
+      const both = done.has(`r${r}`) && done.has(`c${c}`);
+      holeEl[i].classList.toggle('settled', both || done.has(`r${r}`) || done.has(`c${c}`));
+      holeEl[i].classList.toggle('settled2', both);
     }
+
+    /*
+     * A line that has just been finished lights up, once. Counted rather than
+     * compared by size: a move can finish one line and break another in the
+     * same breath, and that is still a line finished.
+     */
+    let lit = 0;
+    for (const key of done) {
+      if (wasDone.has(key)) continue;
+      lit++;
+      const n = Number(key.slice(1));
+      const cells = key[0] === 'r' ? rowCells(board, n) : colCells(board, n);
+      for (const i of cells) flash(holeEl[i], 'lit', 620);
+    }
+    if (lit > 0) host.buzz('tie');
+    wasDone = done;
+
+    const good = new Set(j.goodClues);
     board.clues.forEach((_, i) => {
       clueEl[i].classList.toggle('off', j.badClues.includes(i));
-      clueEl[i].classList.toggle('out', j.goodClues.includes(i));
+      clueEl[i].classList.toggle('out', good.has(i));
+      /* A clue that has just come true ticks off. It is the smallest reward on
+         the board and the most frequent one, which is exactly the pair that
+         makes a puzzle hard to put down. */
+      const ink = clueEl[i].firstElementChild;
+      if (ink && good.has(i) && !wasGood.has(i)) flash(ink, 'ding', 420);
     });
+    wasGood = good;
+
     chipEl.forEach((g) => {
-      g.classList.toggle('on', Number(g.getAttribute('data-pick')) === picked);
+      const pick = Number(g.getAttribute('data-pick'));
+      g.classList.toggle('on', pick === picked);
+      /* A shape with all of itself on the board is spent: there are `h` of
+         each, one per row, and no more of them to place. */
+      g.classList.toggle('spent', pick > 0 && countOf(pick) >= h);
     });
+  }
+
+  /** How many of a shape are on the board. */
+  function countOf(pick: number): number {
+    let n = 0;
+    for (const v of session.cells) if (v === pick) n++;
+    return n;
+  }
+
+  /**
+   * Hand over the next mark once the one in your hand is all placed.
+   *
+   * Only between gestures, never during one: a drag that changed what it was
+   * painting halfway along would be a gesture whose result depended on how far
+   * it happened to get. And only forwards onto a shape that is not finished —
+   * it never lands on the blank, which is a note rather than part of the
+   * answer and is therefore never "done".
+   */
+  function handOver(): void {
+    if (picked <= 0 || countOf(picked) < h) return;
+    for (let k = 1; k <= shapes; k++) {
+      const next = ((picked - 1 + k) % shapes) + 1;
+      if (countOf(next) < h) { picked = next; host.buzz('tick'); paint(); return; }
+    }
   }
 
   function settle(): void {
@@ -286,15 +422,45 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     put(cell, painting === 1 ? picked : -1);
   };
 
+  /**
+   * The mark being carried from the palette, drawn under the finger.
+   *
+   * Bigger than the mark in a cell and softened, so what is under the thumb is
+   * plainly the thing being carried rather than a mark that has already been
+   * put down somewhere odd. Cleared the moment the finger lifts.
+   */
+  const carry = (p: { x: number; y: number } | null): void => {
+    gCarry.replaceChildren();
+    if (!p || picked < 0) return;
+    const g = svg('g', { transform: `translate(${p.x.toFixed(2)} ${p.y.toFixed(2)})` });
+    if (picked === 0) g.appendChild(svg('circle', { class: 'shape-blank', r: 2.4 }));
+    else g.appendChild(svg('path', { class: `shape-glyph s${picked}`, d: glyphPath(picked, MARK_R * 1.25) }));
+    gCarry.appendChild(g);
+  };
+
   const onDown = (e: PointerEvent): void => {
     if (pointerId !== -1) return;
     const p = point(e);
 
+    /*
+     * A press on a chip chooses it, and then keeps the pointer, so the same
+     * press can carry the mark onto the board without letting go. Let go over
+     * the palette and it was a tap that chose a mark, which is what it always
+     * was; carry on onto the grid and it is a drag that paints. One gesture,
+     * and nothing had to decide which it was at the start.
+     */
     const chip = chipAt(p);
     if (chip >= 0) {
       picked = chip;
+      pointerId = e.pointerId;
+      el.setPointerCapture(e.pointerId);
+      /* Carried marks are always written. You picked a shape up to put it
+         down, so there is no rubbing out at the far end of this drag. */
+      painting = 1;
+      lastCell = -1;
       host.buzz('tick');
       paint();
+      carry(p);
       e.preventDefault();
       return;
     }
@@ -314,8 +480,13 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
 
   const onMove = (e: PointerEvent): void => {
     if (e.pointerId !== pointerId) return;
-    const cell = cellAt(point(e));
+    const p = point(e);
+    const cell = cellAt(p);
     if (cell >= 0) { cursor = cell; stroke(cell); }
+    /* The carried mark only exists while a drag that began on a chip is still
+       going. `gCarry` is empty otherwise, so this is a no-op for a drag that
+       started on the grid. */
+    if (gCarry.firstChild) carry(p);
     e.preventDefault();
   };
 
@@ -323,6 +494,9 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     if (e.pointerId !== pointerId) return;
     pointerId = -1;
     lastCell = -1;
+    carry(null);
+    /* Between gestures is the only safe place to change what is in the hand. */
+    handOver();
   };
 
   el.addEventListener('pointerdown', onDown);
@@ -346,11 +520,17 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     if (/^[1-9]$/.test(e.key) && Number(e.key) <= shapes) {
       picked = Number(e.key);
       put(cursor, picked);
+      handOver();
       e.preventDefault();
       return;
     }
     if (e.key === '0') { picked = 0; put(cursor, 0); e.preventDefault(); return; }
-    if (e.key === 'Enter' || e.key === ' ') { put(cursor, picked); e.preventDefault(); return; }
+    if (e.key === 'Enter' || e.key === ' ') {
+      put(cursor, picked);
+      handOver();
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Backspace' || e.key === 'Delete') { put(cursor, -1); e.preventDefault(); }
   };
   el.addEventListener('keydown', onKey);
@@ -370,6 +550,8 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
       return { x: chipX(k), y: PAL_TOP, size: CHIP };
     },
     picked: () => picked,
+    /** The rows and columns that already hold one of each shape. */
+    done: () => [...doneNow()],
     sight: (side: string, line: number) => sightLine(board, side as never, line),
     view: { W, H },
   };
@@ -385,7 +567,10 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
       el.removeEventListener('keydown', onKey);
+      for (const t of timers) clearTimeout(t);
+      timers.clear();
       wrap.remove();
       delete (window as unknown as { __board?: unknown }).__board;
     },

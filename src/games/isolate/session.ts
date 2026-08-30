@@ -94,6 +94,17 @@ export class IsolateSession implements Session<IsolateState> {
     this.snapped = false;
   }
 
+  /*
+   * Every wall of the one answer. The given ones are already among them — the
+   * designer only ever promotes a wall the answer has — so this is a set of
+   * walls rather than a union of two, and nothing can be given and wrong.
+   */
+  reveal(): void {
+    this.mark();
+    this.walls = new Set(this.board.answer);
+    this.snapped = false;
+  }
+
   save(): string {
     const drawn = [...this.walls].filter((e) => !this.fixed(e)).sort((a, b) => a - b);
     return `1;${this.board.w}x${this.board.h};${this.effort.freeze().join(',')};${drawn.join(',')}`;

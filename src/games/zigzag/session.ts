@@ -87,6 +87,13 @@ export class ZigSession implements Session<ZigState> {
     this.snapped = false;
   }
 
+  /** The route the designer drew the board from, laid back down. */
+  reveal(): void {
+    this.mark();
+    this.path = this.zig.answer.slice();
+    this.snapped = false;
+  }
+
   save(): string {
     return `1;${this.zig.w}x${this.zig.h};${this.effort.freeze().join(',')};${this.path.join(',')}`;
   }

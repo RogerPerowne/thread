@@ -71,4 +71,87 @@
 .shape-chip.on .shape-glyph { fill: var(--paper); }
 .shape-chip.on .shape-blank { fill: var(--paper); }
 
+/*
+ * A chip whose shape is all on the board. There are `h` of each and no more,
+ * so once they are down the chip has nothing left to give — dimmed rather than
+ * removed, because the row of chips is a fixed row and a chip that vanished
+ * would move every one beside it under the thumb reaching for them.
+ */
+.shape-chip.spent .shape-chipbg { fill: var(--paper-2); stroke: var(--paper-3); }
+.shape-chip.spent .shape-glyph { fill: var(--line-2); }
+.shape-chip.spent.on .shape-chipbg { fill: var(--accent); stroke: var(--accent); }
+.shape-chip.spent.on .shape-glyph { fill: var(--paper); }
+
+/* --- the mark under the finger -------------------------------------------- */
+/*
+ * The shape being carried from the palette onto the board. Slightly larger
+ * than the mark it will become and a touch transparent, so it reads as a thing
+ * in transit rather than a mark already put down in an odd place.
+ */
+.shape-carry { pointer-events: none; }
+.shape-carry .shape-glyph { fill: var(--ink); opacity: 0.72; }
+.shape-carry .shape-blank { fill: var(--ink-2); opacity: 0.72; }
+
+/* --- a line that is finished ----------------------------------------------- */
+/*
+ * The board's reward, and it is a fact rather than a flourish.
+ *
+ * A line holding one of each shape is finished, whether or not its gaps have
+ * been dotted. Two things say so. Its cells settle into deeper paper and stay
+ * there — deeper again where a finished row crosses a finished column — so the
+ * board fills in behind you and the last cells to change are the ones that
+ * were hardest. And the moment a line completes, its cells light once: the
+ * small, frequent answer to a move that is what makes a puzzle hard to put
+ * down.
+ *
+ * Both are drawn on the CELL and never on the mark. The shapes are the answer
+ * and they are told apart by outline alone; anything that tinted them would be
+ * colour carrying identity, which is the one thing this board does not do.
+ *
+ * The settled fills are paper and the flash is a wash, and the split is the
+ * point. The three washes all say the same kind of thing on every board here —
+ * LOOK HERE: at the keyboard's cell, at where a drag would land, at what the
+ * hint is pointing to — and a fourth meaning borrowed from them would leave
+ * all four unreadable. A finished line is not something to look at, it is
+ * something that is done. The moment it completes, though, IS the board saying
+ * look here, so that one is a wash: it runs once and is gone, and cannot be
+ * taken for the hint's slow pulse in the same ink.
+ */
+.shape-hole.settled { fill: var(--paper-3); }
+.shape-hole.settled2 { fill: var(--line); }
+/*
+ * Out to the wash and straight back.
+ *
+ * Both ends written out. A keyframe with only a `to` is meant to take its
+ * start from the element's own computed fill, and here it takes it from the
+ * initial value instead — every cell of a finished line flashed from BLACK.
+ * So the resting fill is stated on the rule as well as in the keyframe, which
+ * also makes the two agree by construction: a lit cell is always a settled
+ * one, so this is the paper it is about to be left in.
+ */
+.shape-hole.lit {
+  fill: var(--paper-3);
+  animation: shape-lockin var(--slow) var(--ease) 2 alternate;
+}
+@keyframes shape-lockin {
+  from { fill: var(--paper-3); }
+  to { fill: var(--wash-2); }
+}
+
+/*
+ * A clue coming true. It ticks off: a short lift and settle, and then it is
+ * one of the faded ones for the rest of the board.
+ *
+ * On the INNER group. The outer one is already translated out into the gutter,
+ * and a scale composed with that translation is a scale about the board's
+ * origin — it would throw the clue clean off the drawing, and no
+ * transform-origin fixes it, because the origin it wants is inside a box the
+ * translation has already moved. The inner group carries no transform of its
+ * own, so `fill-box` and `center` mean what they say there.
+ */
+.shape-clueink { transform-box: fill-box; transform-origin: center; }
+.shape-clueink.ding { animation: shape-ding var(--mid) var(--ease) 2 alternate; }
+@keyframes shape-ding {
+  from { scale: 1; }
+  to { scale: 1.28; }
 }

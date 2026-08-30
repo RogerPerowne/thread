@@ -109,6 +109,36 @@ is the only way back and there is nothing else to explain.
 - **A harness must read the geometry, not recompute it.** The Shape Up e2e
   carried its own copy of the ring's clamping arithmetic and broke the moment
   the ring started sizing itself. It asks the board where the option is.
+- **Shape Up's clues look one shape in or two, and never deeper.** The engine
+  was written for an arbitrary ordinal on the argument that a two-value
+  encoding stops short of a thing with no reason to stop. That was true about
+  the encoding and wrong about the reading: a clue about the fourth shape along
+  can only be used by counting shapes that are not on the board yet. The cap is
+  nearly free and the reason is not obvious — every line holds exactly `shapes`
+  shapes, so the kth from one end is the (shapes + 1 - k)th from the other, and
+  at four shapes or fewer every reading survives on one side or the other. Five
+  loses only its middle clue. Rebuilt from the same seed, the difficulty spread
+  and the band counts barely moved.
+- **A blank in Shape Up is notation, not part of the answer.** The board used
+  to wait for every cell to be decided before it would say "solved", which
+  meant tidying up after winning: people dot the gaps the deduction needed and
+  no others. A line holds exactly `shapes` shapes, so the moment they are all
+  down the rest of that line IS blank whether it was written or not. `judge`
+  reads it that way, which also made every clue answerable earlier — a clue can
+  be settled as soon as its line has all its shapes, rather than waiting for
+  dots nobody owes it.
+- **Every game can show its answer, and it is never recorded as a solve.** The
+  Reveal control is in the platform's row and knows nothing about any board:
+  `Session.reveal()` writes back the answer the designer built the puzzle from,
+  which is why it can never fail and never needs a solver at play time. It
+  takes an undo step. It writes nothing to the history — `gaveUp` is kept apart
+  from `finished` for exactly that reason, because the two want the same things
+  from the clock and opposite things from the record.
+- **The path's ribbon and its tiles are one slab.** The ribbon was extruded
+  three quarters as far as a tile was tall and the tile straddled it, so the
+  two met at a step halfway up the side face and every tile read as a block
+  dropped onto a strip. Both are now swept between the same two heights, so no
+  later change can pull them apart.
 
 ## Scars
 
@@ -138,6 +168,19 @@ construction. They are here so the next change does not undo the fix.
   mirroring `<link rel=preload>`.
 - **Two owners of one safe-area inset.** Invisible on a laptop, thirty-four
   pixels wrong on a phone. One owner, and a unit test that reads the sheets.
+- **CI had never run.** `ci.yml` carried a step named `Board gate: every board
+  has exactly one answer`, unquoted — and a plain YAML scalar cannot hold a
+  colon followed by a space, so GitHub could not read the file. Every run from
+  the first commit on failed instantly with no jobs, which on the runs page
+  looks exactly like a red test suite. Seventy-five red runs and the gate had
+  never once been stood up. `tests/unit/workflows.test.ts` reads the workflow
+  files and fails a value that needs quotes and has not got them.
+- **A keyframe with only a `to` starts from black.** It is meant to take its
+  implicit start from the element's own computed value; for SVG `fill` it takes
+  the initial one instead, so every cell of a finished Shape Up line flashed
+  from black before settling. It read as a rendering fault and it was a
+  one-word omission. `tests/unit/styles.test.ts` now reads every keyframe block
+  in the project and fails one without a starting stop.
 - **`pkill -f "vite preview"` kills its own shell**, because the pattern
   matches the command line it is running in. Kill by pid.
 

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, shapeBoard, markCell, paintCells, pickMark,
-  solveShape, isSolved, noteOf, control,
+  gotoApp, openPuzzle, puzzleIds, shapeBoard, shapeMapper, markCell, paintCells,
+  pickMark, solveShape, isSolved, noteOf, control,
 } from './helpers.js';
 
 /**
@@ -115,6 +115,109 @@ test('the palette is where it was last time, and its chips fit a thumb', async (
     .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
   expect(after).toEqual(before);
   await expect(page.locator('.shape-chip.on')).toHaveCount(1);
+});
+
+test('a shape can be dragged straight from the palette onto a cell', async ({ page }) => {
+  /*
+   * One gesture from the row of chips to the board: press a chip, carry the
+   * mark under the finger, let go over a cell. It is the same press and the
+   * same release that a tap on the chip would have been, so nothing had to
+   * decide which of the two it was at the start.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'shape');
+  await openPuzzle(page, 'shape', ids[0]);
+  const at = await shapeMapper(page);
+  const cells = () => page.evaluate(
+    () => (window.__puzzles.board() as { cells(): number[] }).cells(),
+  );
+
+  const chip = await page.evaluate(
+    () => (window.__puzzles.board() as { chipBox(k: number): { x: number; y: number; size: number } }).chipBox(2),
+  );
+  const from = at(chip.x + chip.size / 2, chip.y + chip.size / 2);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  /* The mark is under the finger from the press, not from the first move: the
+     chip is chosen and picked up in one action. */
+  await expect(page.locator('.shape-carry .shape-glyph')).toHaveCount(1);
+
+  const boxes = await page.evaluate(
+    (list) => list.map((c) => (window.__puzzles.board() as { cellBox(c: number): { x: number; y: number; size: number } }).cellBox(c)),
+    [4, 5],
+  );
+  for (const box of boxes) {
+    const q = at(box.x + box.size / 2, box.y + box.size / 2);
+    await page.mouse.move(q.x, q.y, { steps: 4 });
+  }
+  await expect(page.locator('.shape-carry .shape-glyph')).toHaveCount(1);
+  await page.mouse.up();
+
+  const back = await cells();
+  expect(back[4], 'the drag did not paint the cells it crossed').toBe(2);
+  expect(back[5]).toBe(2);
+  /* And it is put down, not still being carried. */
+  await expect(page.locator('.shape-carry .shape-glyph')).toHaveCount(0);
+});
+
+test('a line that takes its last shape says so and stays said', async ({ page }) => {
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'shape');
+  await openPuzzle(page, 'shape', ids[0]);
+  const board = await shapeBoard(page);
+
+  const doneLines = () => page.evaluate(
+    () => (window.__puzzles.board() as { done(): string[] }).done(),
+  );
+  expect(await doneLines()).toEqual([]);
+
+  /* The first row, and only the first row: its blanks are never drawn. */
+  for (let c = 0; c < board.w; c++) {
+    if (board.answer[c] > 0) await markCell(page, c, board.answer[c]);
+  }
+  expect(await doneLines(), 'a finished row is not finished').toContain('r0');
+  await expect(page.locator('.shape-hole.settled')).toHaveCount(board.w);
+});
+
+test('the palette hands over the next shape when one is all placed', async ({ page }) => {
+  /*
+   * There are exactly `h` of each shape, one per row. Once they are all down
+   * the chip in your hand has nothing left to give, so the board passes you
+   * the next one rather than making you reach back for it.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'shape');
+  await openPuzzle(page, 'shape', ids[0]);
+  const board = await shapeBoard(page);
+  const picked = () => page.evaluate(
+    () => (window.__puzzles.board() as { picked(): number }).picked(),
+  );
+
+  const cells = board.answer.map((v, i) => (v === 1 ? i : -1)).filter((i) => i >= 0);
+  expect(cells).toHaveLength(board.h);
+  for (const i of cells) await markCell(page, i, 1);
+
+  expect(await picked(), 'the spent chip is still in hand').not.toBe(1);
+  await expect(page.locator('.shape-chip.spent')).toHaveCount(1);
+});
+
+test('a board is solved by its shapes, with no blank ever drawn', async ({ page }) => {
+  /*
+   * The dot is the player's own notation. People put one where the deduction
+   * needed it and nowhere else, so a board that waits for a dot in every
+   * remaining cell is a board that makes you tidy up after winning.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'shape');
+  await openPuzzle(page, 'shape', ids[3]);
+  const board = await shapeBoard(page);
+
+  for (const pick of [...new Set(board.answer.filter((v) => v > 0))].sort()) {
+    const cells = board.answer.map((v, i) => (v === pick ? i : -1)).filter((i) => i >= 0);
+    for (const i of cells) await markCell(page, i, pick);
+  }
+  await expect(page.locator('.shape-marks .shape-blank')).toHaveCount(0);
+  expect(await isSolved(page), 'the shapes are all right and it is not solved').toBe(true);
 });
 
 test('a clue only goes red once the line can say so', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  judge, clueHolds, sightLine, rowCells, colCells, type Board,
+  judge, clueHolds, asSettled, sightLine, rowCells, colCells, MAX_DEPTH, type Board,
 } from '../../src/games/shape/model.js';
 import { search, isUnique, analyse, arrangements, allClues } from '../../src/games/shape/solve.js';
 import { fill, makeShape, scoreOf, bandOf } from '../../src/games/shape/design.js';
@@ -27,6 +27,43 @@ describe('what a clue says', () => {
     expect(clueHolds([2, 3, 0], 2, 3)).toBe(true);
     // A line with fewer shapes than the clue needs, all settled, is wrong.
     expect(clueHolds([0, 0, 2], 2, 3)).toBe(false);
+  });
+
+  it('never looks deeper than the second shape in', () => {
+    /*
+     * "The first shape along" and "the one after it" are two things a person
+     * can hold in their head while their eye runs down the line. "The fourth
+     * shape along" is a thing you can only get by counting shapes that are not
+     * on the board yet.
+     */
+    expect(MAX_DEPTH).toBe(2);
+    for (const board of shipped) {
+      for (const c of board.clues) {
+        expect(c.depth, `${board.id} has a clue ${c.depth} deep`).toBeGreaterThanOrEqual(1);
+        expect(c.depth, `${board.id} has a clue ${c.depth} deep`).toBeLessThanOrEqual(2);
+      }
+    }
+    for (const board of shipped) {
+      for (const c of allClues(board)) expect(c.depth).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('gives up nothing at all below five shapes, and one clue at five', () => {
+    /*
+     * The whole argument for the cap, checked rather than asserted. A line
+     * holds exactly `shapes` shapes, so the kth from one end is the
+     * (shapes + 1 - k)th from the other — which means every reading of every
+     * line is still a first or a second SOMEWHERE, right up to four shapes.
+     * Five loses exactly the middle one, a third from both ends.
+     */
+    for (const shapes of [3, 4, 5]) {
+      const lost = [];
+      for (let depth = 1; depth <= shapes; depth++) {
+        const mirrored = shapes + 1 - depth;
+        if (depth > MAX_DEPTH && mirrored > MAX_DEPTH) lost.push(depth);
+      }
+      expect(lost, `${shapes} shapes`).toEqual(shapes === 5 ? [3] : []);
+    }
   });
 
   it('reads each side from the right end', () => {
@@ -85,6 +122,40 @@ describe('judging a board', () => {
     const j = judge(b, cells);
     expect(j.badRows).toContain(0);
     expect(j.faults).toContain('twice');
+  });
+
+  it('is solved by the shapes alone, with no blank ever drawn', () => {
+    /*
+     * A blank is the player's notation, not part of the answer. People put
+     * them where the deduction needed them and nowhere else, so a board that
+     * waits for a dot in every remaining cell is a board that makes you tidy
+     * up after winning.
+     */
+    for (const board of shipped) {
+      const shapesOnly = board.answer.map((v) => (v > 0 ? v : -1));
+      expect(judge(board, shapesOnly).solved, `${board.id} wants its blanks drawn`).toBe(true);
+      expect(judge(board, shapesOnly).progress).toBe(1);
+    }
+  });
+
+  it('judges a clue as soon as its line holds all its shapes', () => {
+    /*
+     * A line holds exactly `shapes` shapes. The moment they are all down every
+     * other cell in it IS blank, whether the player wrote that or not — so a
+     * clue reading along it can be answered then, rather than waiting for
+     * notation the answer does not need.
+     */
+    expect(asSettled([-1, 2, -1, 3], 2)).toEqual([0, 2, 0, 3]);
+    expect(asSettled([-1, 2, -1, 3], 3)).toEqual([-1, 2, -1, 3]);
+
+    const board = shipped.find((b) => b.clues.some((c) => c.side === 'left'))!;
+    const clue = board.clues.find((c) => c.side === 'left')!;
+    const line = sightLine(board, clue.side, clue.line);
+    const cells: number[] = new Array(board.w * board.h).fill(-1);
+    // Only the shapes of that row go down; every gap in it is left undecided.
+    for (const i of line) if (board.answer[i] > 0) cells[i] = board.answer[i];
+    const at = board.clues.indexOf(clue);
+    expect(judge(board, cells).goodClues, 'the clue is still waiting').toContain(at);
   });
 
   it('refuses a full board of blanks', () => {
@@ -237,7 +308,23 @@ describe('playing', () => {
     expect(s.cells.every((v) => v === -1)).toBe(true);
     s.set(0, 0);
     expect(s.cells[0]).toBe(0);
-    expect(judge(board, s.cells).progress).toBeGreaterThan(0);
+    expect(s.cells[1]).toBe(-1);
+  });
+
+  it('measures progress in shapes placed, not cells settled', () => {
+    /*
+     * A blank is the player's own notation. Counting settled CELLS would have
+     * the meter creep up as somebody dots gaps they never had to draw, which
+     * is progress through their notes rather than through the puzzle.
+     */
+    const s = new ShapeSession(board);
+    s.set(0, 0);
+    expect(judge(board, s.cells).progress).toBe(0);
+
+    const shapeAt = board.answer.findIndex((v) => v > 0);
+    s.set(shapeAt, board.answer[shapeAt]);
+    const need = board.shapes * board.h;
+    expect(judge(board, s.cells).progress).toBeCloseTo(1 / need, 6);
   });
 
   it('comes back from a save exactly as it was left', () => {
@@ -269,15 +356,36 @@ describe('playing', () => {
   });
 
   it('has something useful to say at every point of a solve', () => {
+    /*
+     * Up to the point the board is finished, and no further. Blanks are the
+     * player's own notation, so a board can be solved with cells still
+     * undecided — and once it is there is no next deduction to name, only
+     * gaps nobody has to draw.
+     */
     const s = new ShapeSession(board);
-    for (let i = 0; i < board.answer.length; i++) {
+    let steps = 0;
+    for (let i = 0; i < board.answer.length && !s.verdict().solved; i++) {
       const hint = s.hint();
       expect(hint, `no hint with ${i} cells settled`).not.toBeNull();
       expect(hint!.reason.length).toBeGreaterThan(10);
+      steps++;
       s.openGesture();
       s.set(i, board.answer[i]);
     }
+    expect(steps).toBeGreaterThan(4);
     expect(s.verdict().solved).toBe(true);
+    expect(s.hint(), 'a finished board is still being pointed at').toBeNull();
+  });
+
+  it('shows the answer, and the answer can be taken back', () => {
+    const s = new ShapeSession(board);
+    s.set(0, board.answer[0] === 1 ? 2 : 1);
+    expect(s.verdict().solved).toBe(false);
+    s.reveal();
+    expect(s.verdict().solved).toBe(true);
+    expect(s.canUndo()).toBe(true);
+    s.undo();
+    expect(s.verdict().solved).toBe(false);
   });
 
   it('names the broken clue before it looks for the next deduction', () => {

@@ -59,6 +59,16 @@ export function gameFrame(
   let running = true;
   let since = performance.now();
   let finished = false;
+  /*
+   * The board was shown rather than solved.
+   *
+   * Kept apart from `finished` because the two mean opposite things to the
+   * record: `finished` stops the clock and the autosave, which a revealed
+   * board also wants, but a revealed board is never written to the history.
+   * A streak that a Reveal keeps alive is a streak that means nothing, and a
+   * personal best you were handed is not one.
+   */
+  let gaveUp = false;
 
   const tick = (): number => {
     if (running && !finished) {
@@ -109,18 +119,26 @@ export function gameFrame(
   const undoBtn = button('Undo', () => { session.undo(); view.refresh(); changed(); }, { glyph: 'undo' });
   const redoBtn = button('Redo', () => { session.redo(); view.refresh(); changed(); }, { glyph: 'redo' });
   const restartBtn = button('Restart', askRestart, { glyph: 'restart' });
+  const revealBtn = button('Reveal', askReveal, {
+    glyph: 'reveal', label: 'Cannot solve it — show the answer',
+  });
   const hintBtn = button('Hint', showHint, { glyph: 'hint' });
   const nextBtn = button('Next', () => hooks.onNext(), { kind: 'accent', glyph: 'next' });
   nextBtn.hidden = true;
 
   /*
-   * Four slots, always. Next takes the hint's place when the board is solved
-   * rather than arriving as a fifth control, because a row that grows a button
-   * rewrites the width of the other three under a thumb that is reaching for
+   * Five slots, always five. Next takes the hint's place when the board is
+   * solved rather than arriving as a sixth control, because a row that grows a
+   * button rewrites the width of the others under a thumb that is reaching for
    * one of them. A row that never changes shape cannot do that.
+   *
+   * Reveal is the only way out of a board nobody can finish, so it is a slot
+   * and not a thing buried in a sheet — but it is the last slot before the
+   * hint and it never looks like the way on: dimmed the moment the board is
+   * solved, like Undo with nothing to undo.
    */
   const controls = h('div', { class: 'controls chrome' },
-    undoBtn, redoBtn, restartBtn, hintBtn, nextBtn);
+    undoBtn, redoBtn, restartBtn, revealBtn, hintBtn, nextBtn);
 
   const el = h('div', { class: 'screen fixed play' },
     bar,
@@ -160,16 +178,20 @@ export function gameFrame(
   // --- keeping up ----------------------------------------------------------
   function changed(): void {
     const v = session.verdict();
-    note.textContent = v.solved ? 'Solved' : (v.fault || v.left);
+    /* "The answer" only while the board still IS the answer. Take the reveal
+       back and the note goes back to saying what is left, because it is. */
+    note.textContent = gaveUp && v.solved ? 'The answer'
+      : v.solved ? 'Solved' : (v.fault || v.left);
     note.classList.toggle('bad', !v.solved && v.fault !== '');
-    note.classList.toggle('good', v.solved);
+    note.classList.toggle('good', v.solved && !gaveUp);
     bar2.set(v.progress);
 
     /* Dimmed, never removed. Hiding Redo is what makes the row grow a button
-       the first time you undo, and the three controls beside it move under a
-       thumb that was already reaching for one of them. */
+       the first time you undo, and the controls beside it move under a thumb
+       that was already reaching for one of them. */
     undoBtn.disabled = !session.canUndo();
     redoBtn.disabled = !session.canRedo();
+    revealBtn.disabled = v.solved;
     hintBtn.hidden = v.solved;
     nextBtn.hidden = !v.solved || !hooks.next;
 
@@ -246,7 +268,10 @@ export function gameFrame(
   function showHint(): void {
     const hint = session.hint();
     if (!hint) {
-      note.textContent = 'Nothing to point at yet — lay some more string';
+      /* The shell does not know what this game is made of, so it cannot say
+         what to put down next. It used to try, in Thread's words, on all six
+         boards. */
+      note.textContent = 'Nothing to point at from here';
       return;
     }
     if (lastHint && hint.reason === lastHint.reason) rung = Math.min(rung + 1, 2);
@@ -267,6 +292,75 @@ export function gameFrame(
      * then does it name the move. A hint that reveals the answer on the first
      * press is not a hint, it is a quit button.
      */
+  }
+
+  // --- giving up ------------------------------------------------------------
+  /*
+   * The sweep, and why the platform owns it rather than each game.
+   *
+   * A bar of light crosses the board, and the answer is written in UNDER it —
+   * at the moment the bar is over the middle, so what a player sees is the
+   * light passing and the board being different behind it. Nothing here knows
+   * what a cell, a post or a tile is: it dims the board, swaps the state at
+   * the crossing, and brings it back. That is why one animation can serve six
+   * games that share no geometry at all.
+   *
+   * The two halves are equal by construction — `--sweep` is the whole
+   * duration and the swap happens at half of it, read back from the same
+   * custom property the stylesheet animates — so the light cannot drift out of
+   * step with the change it is meant to be hiding.
+   */
+  const SWEEP_MS = 1080;
+  let sweepTimers: number[] = [];
+  /* A sweep already crossing the board. The only thing a second press has to
+     be stopped from doing: showing the answer twice is otherwise harmless, and
+     a control that is lit and does nothing is worse than one that is dimmed. */
+  let sweeping = false;
+
+  function askReveal(): void {
+    const close = sheet('Cannot solve it?', [
+      h('p', {
+        text: 'The answer goes on the board. This puzzle will not be counted as '
+          + 'solved, and it will not add to your streak.',
+      }),
+      button('Show me the answer', () => { close(); doReveal(); },
+        { wide: true, kind: 'solid', glyph: 'reveal' }),
+      h('div', { style: 'height:8px' }),
+      button('Keep trying', () => close(), { wide: true }),
+    ]);
+  }
+
+  function doReveal(): void {
+    if (sweeping) return;
+    sweeping = true;
+    gaveUp = true;
+    /* Bank the clock BEFORE stopping it: `tick` only accumulates while the
+       board is unfinished, so the other order loses the last stretch. */
+    tick();
+    /* Finished, for everything except the record: the clock stops, the board
+       stops being autosaved, and `changed` will not call `finish`. */
+    finished = true;
+    store.forget(game.meta.id, puzzle.id);
+
+    const write = () => {
+      session.reveal();
+      view.refresh();
+      changed();
+      haptics.bump();
+    };
+
+    if (still()) { sweeping = false; write(); return; }
+
+    const light = h('div', { class: 'sweep', 'aria-hidden': 'true' });
+    light.style.setProperty('--sweep', `${SWEEP_MS}ms`);
+    stage.appendChild(light);
+    el.classList.add('revealing');
+    sweepTimers.push(window.setTimeout(write, SWEEP_MS / 2));
+    sweepTimers.push(window.setTimeout(() => {
+      el.classList.remove('revealing');
+      light.remove();
+      sweeping = false;
+    }, SWEEP_MS));
   }
 
   function askRestart(): void {
@@ -302,6 +396,8 @@ export function gameFrame(
       clearInterval(clockTimer);
       clearTimeout(saveTimer);
       clearTimeout(resultTimer);
+      for (const t of sweepTimers) clearTimeout(t);
+      sweepTimers = [];
       document.removeEventListener('visibilitychange', onHidden);
       if (!finished) store.keep(game.meta.id, puzzle.id, session.save());
       view.dispose();

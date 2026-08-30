@@ -127,9 +127,12 @@ export function makeShape(recipe: Recipe, rng: Rng): Made | null {
    * The puzzle this is drawn from marks each place round the outside once, and
    * so does this — two arrows pointing along the same line from the same end
    * would sit on top of each other, and stacking them outwards would make the
-   * gutter grow with the deepest pile on any board. Which depth that one clue
-   * says is drawn here, and it is the interesting choice: a clue about the
-   * third shape in tells you more than one about the first, and gives less.
+   * gutter grow with the deepest pile on any board.
+   *
+   * So each slot holds a first or a second, drawn here. Both readings of a
+   * line are still available to the board, on the two ends: what a slot gives
+   * up is the OTHER depth from its own end, not the deduction, because the kth
+   * shape from the left is the (shapes + 1 - k)th from the right.
    */
   const bySlot = new Map<string, ReturnType<typeof allClues>>();
   for (const clue of allClues(full)) {
