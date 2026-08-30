@@ -27,7 +27,11 @@ jobs:
         run: pnpm typecheck
       - name: Unit tests
         run: pnpm test
-      - name: Board gate: every board has exactly one answer
+        # Quoted, because a plain YAML scalar cannot contain a colon and a
+        # space. Unquoted, this line made the whole file unparseable and every
+        # run failed instantly with no jobs at all — which reads exactly like
+        # a red test suite and is not one.
+      - name: 'Board gate: every board has exactly one answer'
         run: pnpm validate
       - name: Build
         run: pnpm build

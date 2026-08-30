@@ -168,6 +168,13 @@ construction. They are here so the next change does not undo the fix.
   mirroring `<link rel=preload>`.
 - **Two owners of one safe-area inset.** Invisible on a laptop, thirty-four
   pixels wrong on a phone. One owner, and a unit test that reads the sheets.
+- **CI had never run.** `ci.yml` carried a step named `Board gate: every board
+  has exactly one answer`, unquoted — and a plain YAML scalar cannot hold a
+  colon followed by a space, so GitHub could not read the file. Every run from
+  the first commit on failed instantly with no jobs, which on the runs page
+  looks exactly like a red test suite. Seventy-five red runs and the gate had
+  never once been stood up. `tests/unit/workflows.test.ts` reads the workflow
+  files and fails a value that needs quotes and has not got them.
 - **A keyframe with only a `to` starts from black.** It is meant to take its
   implicit start from the element's own computed value; for SVG `fill` it takes
   the initial one instead, so every cell of a finished Shape Up line flashed
