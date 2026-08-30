@@ -1,7 +1,7 @@
 /**
  * The icon set.
  *
- * Drawn here rather than fetched: nine glyphs is not worth a font or a
+ * Drawn here rather than fetched: a dozen glyphs is not worth a font or a
  * request, and drawing them means they inherit the type colour and the stroke
  * weight of everything around them. One grid (24), one weight (1.9), round
  * caps, no fills except where a shape is genuinely solid. They are meant to
@@ -41,6 +41,12 @@ export const icon = {
   next: () => glyph(p('M9 5l7 7-7 7')),
   flame: () => glyph(p('M12 3c3 3.5 4.5 5.8 4.5 8.2a4.5 4.5 0 0 1-9 0C7.5 9.4 9 7.6 10 6c.4 1.4 1 2.2 2 2.6-.3-2-.3-3.8 0-5.6Z')),
   stack: () => glyph(p('M12 4 4 8l8 4 8-4z'), p('M4 13l8 4 8-4')),
+  /* An eye, for the control that shows the answer. Two strokes and no fill,
+     so it carries the same weight as the arrows beside it. */
+  reveal: () => glyph(
+    p('M3 12c2.9-4.4 5.9-6.6 9-6.6s6.1 2.2 9 6.6c-2.9 4.4-5.9 6.6-9 6.6S5.9 16.4 3 12Z'),
+    p('M12 9.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z'),
+  ),
 };
 
 export type IconName = keyof typeof icon;

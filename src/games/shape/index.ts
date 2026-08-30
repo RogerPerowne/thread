@@ -86,9 +86,10 @@ export const shape: GamePackage<Board, ShapeState> = {
     tagline: 'One of each shape in every row and column.',
     rules: [
       'Every row and every column holds one of each shape, and the rest is empty.',
-      'A clue outside the grid says what you would see looking in: the shape, and how many shapes deep it sits.',
-      'The dots under a clue are the depth — one dot for the first shape you meet, two for the second.',
-      'Press a cell and choose from the ring. The middle of the ring marks a cell empty.',
+      'A clue outside the grid says what you would see looking in: one dot under it means the first shape you meet along that line, two dots means the second.',
+      'Choose a shape from the row under the board, then tap the cells it goes in — or drag it straight from there onto the board.',
+      'A drag paints a run, and tapping a cell that already holds the chosen mark takes it off again.',
+      'The dot marks a cell you have settled as empty. It is a note to yourself: the board is solved when the shapes are right, whether or not you drew them.',
     ],
     accent: 'a-shape',
     shareName: 'Shape Up',

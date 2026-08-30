@@ -122,7 +122,16 @@
 }
 .controls .btn {
   flex: 1 1 0;
-  padding: 0 var(--s2);
+  /*
+   * Half the padding a button has anywhere else, and it costs nothing to look
+   * at. The slots here are equal width and the label is centred in its own, so
+   * this padding is never seen — it is only a FLOOR, the width below which the
+   * word starts being cut off. At 8px that floor put "Restart" out of reach of
+   * a 375-pixel phone, which is most of them; at 4px only the 320 falls short,
+   * and 320 is a width where four pixels either side is all the room a word
+   * could have had anyway.
+   */
+  padding: 0 var(--s1);
   /* A flex item will not shrink past its own content unless told it may. */
   min-width: 0;
   overflow: hidden;
@@ -134,20 +143,39 @@
 }
 
 /*
- * Four controls with a glyph and a word each do not fit a 320-pixel phone.
- * The glyph is what goes: a word says which button this is and a glyph only
- * hints at it, so between the two it is the word that has to survive.
+ * Five controls, three tiers, and every number below is measured.
  *
- * 384px is measured, not guessed. The slots are equal width — that is what
- * makes Hint and Next swapping places not move the other three — so what has
- * to fit is four of the WIDEST button, not the sum of four different ones:
- * 4 x 90 for "Restart" plus three 8px gaps. A container query measures the
- * content box, so that is the number to compare with. If the type ever
- * changes, re-measure rather than nudge: set the buttons to `width:
- * max-content` and take the largest.
+ * The slots are equal width — that is what makes Hint and Next swapping places
+ * not move the other four — so what has to fit is five of the WIDEST button,
+ * never the sum of five different ones. Measured by setting the buttons to
+ * `width: max-content` and taking the largest: with the 4px padding above,
+ * "Restart" is 82.4px with its glyph and 57.4px without, and there are four
+ * 8px gaps between five slots.
+ *
+ *   5 x 82.4 + 32 = 444   glyph and word
+ *   5 x 57.4 + 32 = 319   word alone
+ *   below that            glyph alone
+ *
+ * The first drop is the old rule and the old argument: a word says which
+ * button this is and a glyph only hints at it, so the glyph goes first.
+ *
+ * The second drop reverses it, and has to. Below 319 the word does not shrink,
+ * it TRUNCATES — "Restar…", "Reve…" — and a word with its end cut off does not
+ * say which button this is either; it just says it badly and takes the glyph's
+ * place doing it. So at the narrowest widths the whole glyph beats the part of
+ * a word, and every button keeps its aria-label, which is the name a screen
+ * reader was always reading anyway. Only the 320-pixel phone gets there: it
+ * leaves five 52.8px slots, comfortably over the 44px minimum, and every
+ * larger handset keeps its words.
+ *
+ * If the type ever changes, re-measure rather than nudge.
  */
-@container (max-width: 383px) {
+@container (max-width: 443px) {
   .controls .btn svg { display: none; }
+}
+@container (max-width: 318px) {
+  .controls .btn svg { display: block; }
+  .controls .btn span { display: none; }
 }
 
 /* --- the note line above a board ------------------------------------------

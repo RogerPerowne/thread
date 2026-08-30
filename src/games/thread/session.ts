@@ -141,6 +141,13 @@ export class ThreadSession implements Session<ThreadState> {
     this.snapped = false;
   }
 
+  /** Every string run as the designer drew it before the board existed. */
+  reveal(): void {
+    this.mark();
+    this.paths = this.board.solution.map((run) => [...run]);
+    this.snapped = false;
+  }
+
   /**
    * The player's state, as a string.
    *

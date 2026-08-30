@@ -116,6 +116,13 @@ export class NineSession implements Session<NineState> {
     this.snapped = false;
   }
 
+  /** The arrangement the six sums were read off, put back. */
+  reveal(): void {
+    this.mark();
+    this.cells = this.nine.answer.slice();
+    this.snapped = false;
+  }
+
   save(): string {
     return `1;${this.nine.rowTargets.join(',')};${this.effort.freeze().join(',')};${this.cells.join(',')}`;
   }

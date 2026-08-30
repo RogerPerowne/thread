@@ -16,8 +16,8 @@ to nine used once, and all three rows and all three columns have to come out at
 the number beside them.
 
 **Shape Up** — one of each shape in every row and column. The clues round the
-outside say what you would see looking in: the shape, and how many shapes deep
-it sits.
+outside say what you would see looking in: the shape, and whether it is the
+first one you meet along that line or the second.
 
 **Hexagony** — hexagonal tiles cut into six numbered sectors. Every tile has a
 place and every place a tile, and where two of them touch the numbers facing
@@ -122,6 +122,20 @@ filling still fits. What is left is minimal: every clue on a shipped board was
 removed once, found to cost uniqueness, and put back — so nothing there is
 read for nothing.
 
+Its clues look one shape in or two, and never further. That is a rule about
+reading rather than about arithmetic: "the first shape along" and "the one
+after it" are two things you can hold in your head while your eye runs down the
+line, where "the fourth shape along" is something you can only get by counting
+shapes that are not on the board yet. It costs the designer almost nothing, and
+the reason is worth stating because it is not obvious. Every line holds exactly
+as many shapes as the board has, so the kth shape counting from one end is the
+(shapes + 1 - k)th counting from the other — with four shapes or fewer, every
+reading of every line is still a first or a second from ONE end or the other,
+and all the restriction does is decide which side the clue sits on. Five shapes
+gives up exactly one clue, the middle of five, which is a third from both ends.
+The measured difficulty barely moved: the same seed builds 66 boards spread
+across the same bands it did when a clue could look five shapes deep.
+
 That last step has a trap in it, and the gate caught it. A search that runs out
 of its node budget has found one answer and *stopped looking*, which is not the
 same as there being one — and treating the two alike removes the clue that was
@@ -177,6 +191,12 @@ placed by hand goes wrong the moment a size changes:
 - **The chapter bands.** A band is a row of the ladder like any other. It takes
   a slot on the meander, so the space it needs exists in the layout instead of
   being made by pushing tiles about.
+- **One slab.** The ribbon and the tiles are extruded between the same two
+  heights, so their top faces are one plane and their bases another, and a tile
+  is simply the place where the slab is wide. They used to be two objects — a
+  tile straddling a ribbon three quarters as deep — and every tile read as a
+  block dropped onto a strip, because the little step where they met is the
+  first thing the eye finds. There is now one pair of heights, used by both.
 - **The tap targets.** A tile is 144 by 88 in the drawing's units, which on the
   narrowest phone still in use is about thirty pixels tall. Each tile carries a
   rectangle sized so it clears 44px at the smallest width the drawing is ever
@@ -199,15 +219,80 @@ desktop browser, so a layout that applies it twice looks perfect on a laptop
 and sits thirty-four pixels wrong on the phone most people will use. There is
 one owner, and a unit test reads the stylesheets and says so.
 
-The row of controls under a board has four slots and always has four. Hiding a
+The row of controls under a board has five slots and always has five. Hiding a
 control the moment it becomes useful — Redo, the first time you undo — moves
-the other three sideways under a thumb already reaching for one of them.
+the others sideways under a thumb already reaching for one of them. The slots
+are equal width, so what has to fit is five of the WIDEST button and never the
+sum of five different ones: the row drops to words alone at 444 pixels and to
+glyphs alone at 319. Both are measured — set the buttons to `width: max-content`
+and take the largest — and the second drop reverses the first on purpose. Below
+319 a word does not shrink, it truncates, and "Restar…" says no more than the
+glyph did while taking its place. Only the 320-pixel phone gets that far down;
+every larger handset keeps its words, which is what the row's padding is for —
+the slots are equal and the labels centred, so that padding is never seen and
+is only the width below which a word starts being cut off.
 
 `scripts/fit-audit.mjs` walks every route at eight handset sizes in two skins —
 flat, and with a notch and a home indicator simulated — and fails on anything
 running off the edge, anything smaller than 44px to press, anything covered by
 something else, and any board that is not within a pixel of the centre of the
 space it was given.
+
+## What a board gives back
+
+Shape Up is the one with a move loop rather than a single gesture, so it is
+where this is worked out. Three things, and none of them is decoration: each is
+a fact the model already knew, drawn.
+
+**A blank is the player's notation, not part of the answer.** A dot means "I
+have settled this and nothing goes here", and people write one where the
+deduction needed it and nowhere else. The board used to wait for every cell to
+be decided before it would say "solved", which is tidying up after winning. A
+line holds exactly as many shapes as the board has, so the moment they are all
+down the rest of that line *is* blank whether anyone wrote it or not — which is
+also why a clue can now be answered as soon as its line has its shapes, instead
+of waiting for dots it is not owed.
+
+**A finished line says so and keeps saying so.** It lights once as it completes
+and its cells settle into deeper paper, so the board fills in behind you and
+the last cells to change colour are the ones that were hardest. Not the washes:
+those mean the same three things on every board here — where the keyboard is,
+where a drag would land, where the hint points — and a fourth meaning borrowed
+from them would make all four unreadable.
+
+**The palette hands over.** There are exactly as many of each shape as there
+are rows, so when the last one goes down the chip in your hand has nothing left
+to give and the next unfinished shape is chosen for you. Only between gestures,
+never during one — a drag that changed what it was painting halfway along would
+be a gesture whose result depended on how far it happened to get.
+
+And the palette is draggable now: press a chip and carry the mark onto the
+board in the same press, or let go over the palette and it was the tap that
+chose a mark, which is what it always was. Nothing had to decide which of the
+two it was at the start.
+
+## Showing the answer
+
+Every puzzle has a Reveal, because a board nobody can finish needs a way out of
+it that is not the back button. It is a slot in the row rather than something
+buried in a sheet, and it asks once before it does anything.
+
+Three things make it honest. It is never a solver run at play time: every game
+here is built answer-first, so what goes onto the board is the filling, the
+route or the arrangement of tiles that existed before the puzzle did. It takes
+an undo step, so it is not a one-way door. And **a revealed board is not
+recorded as solved** — no time, no streak, nothing written to the history. A
+personal best you were handed is not one.
+
+The animation belongs to the platform and works for all six games because it
+knows nothing about any of them: a bar of light crosses the board and the
+answer is written in underneath it, at the moment it is over the middle. One
+duration, read both by the stylesheet and by the code that waits half of it, so
+the light cannot drift out of step with the change it is hiding.
+
+`tests/unit/reveal.test.ts` reveals every board of every game and checks that
+the game's own judge calls it solved — 256 boards, and the only place a reveal
+that laid a path backwards would be caught.
 
 ## Testing
 

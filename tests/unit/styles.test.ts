@@ -219,3 +219,52 @@ describe('one register across five games', () => {
     expect(board).toMatch(/--wash-3:/);
   });
 });
+
+describe('the keyframes', () => {
+  /*
+   * The scar: a keyframe block with only a `to` is supposed to take its start
+   * from the element's own computed value, and for SVG `fill` it takes it from
+   * the initial value instead — so every cell of a finished Shape Up line
+   * flashed from BLACK before settling. It looked like a rendering fault and
+   * it was a one-word omission.
+   *
+   * Any property whose initial value is nothing like the value it is being
+   * animated to has the same trap in it, so the rule is stated for all of
+   * them rather than for the one that bit: a keyframe block says where it
+   * starts.
+   */
+  const blocks = (css: string): { name: string; body: string }[] => {
+    const out: { name: string; body: string }[] = [];
+    const re = /@keyframes\s+([\w-]+)\s*\{/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(css)) !== null) {
+      let depth = 1;
+      let i = re.lastIndex;
+      while (i < css.length && depth > 0) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}') depth--;
+        i++;
+      }
+      out.push({ name: m[1], body: css.slice(re.lastIndex, i - 1) });
+    }
+    return out;
+  };
+
+  it('say where they start as well as where they end', () => {
+    const all = [...sheets, ...gameSheets];
+    let seen = 0;
+    for (const sheet of all) {
+      for (const kf of blocks(sheet.css)) {
+        seen++;
+        const stops = [...kf.body.matchAll(/(^|[};])\s*(from|to|\d+%(?:\s*,\s*[\w%]+)*)\s*\{/g)]
+          .map((x) => x[2]);
+        expect(stops.length, `${sheet.name} @keyframes ${kf.name} has no stops`)
+          .toBeGreaterThan(0);
+        const starts = stops.some((x) => x === 'from' || /(^|,)\s*0%/.test(x));
+        expect(starts, `${sheet.name} @keyframes ${kf.name} has no starting stop`)
+          .toBe(true);
+      }
+    }
+    expect(seen, 'no keyframes were read at all').toBeGreaterThan(5);
+  });
+});

@@ -13,7 +13,9 @@
  * repeat — and reports whether that alone finishes the board.
  */
 
-import { sightLine, clueHolds, rowCells, colCells, type Board, type Clue } from './model.js';
+import {
+  sightLine, clueHolds, rowCells, colCells, MAX_DEPTH, type Board, type Clue,
+} from './model.js';
 
 const stockCache = new Map<string, number[][]>();
 
@@ -292,7 +294,15 @@ export function analyse(board: Board): Reading {
   return { byReason: stuck === 0, rounds, entry: entry === Infinity ? 0 : entry, opening, stuck };
 }
 
-/** Every clue the answer could carry — the full set, before any are taken away. */
+/**
+ * Every clue the answer could carry — the full set, before any are taken away.
+ *
+ * First and second only. A line holds exactly `shapes` shapes, so the kth from
+ * one end is the (shapes + 1 - k)th from the other: with four shapes or fewer
+ * every reading of every line is still here, sitting on whichever side of the
+ * board makes it a first or a second. Five shapes gives up the middle one,
+ * which is a third read from either end, and that is the whole cost.
+ */
 export function allClues(board: Board): Clue[] {
   const out: Clue[] = [];
   const sides: [Side: 'top' | 'bottom' | 'left' | 'right', count: number][] = [
@@ -301,7 +311,7 @@ export function allClues(board: Board): Clue[] {
   for (const [side, count] of sides) {
     for (let line = 0; line < count; line++) {
       const seen = sightLine(board, side, line).map((i) => board.answer[i]).filter((v) => v > 0);
-      for (let depth = 1; depth <= seen.length; depth++) {
+      for (let depth = 1; depth <= Math.min(MAX_DEPTH, seen.length); depth++) {
         out.push({ side, line, shape: seen[depth - 1], depth });
       }
     }

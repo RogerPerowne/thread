@@ -40,6 +40,64 @@
   display: flex;
   flex-direction: column;
   padding: 0 var(--s3);
+  /* The sweep is laid over the board, so the stage is what it is measured
+     against. Nothing else here is positioned. */
+  position: relative;
+}
+
+/* --- showing the answer ---------------------------------------------------
+ *
+ * A bar of light crosses the board and the answer is written in underneath it,
+ * at the moment it is over the middle. The board dims as the light arrives and
+ * comes back as it leaves, so the change happens where it cannot be watched —
+ * which is the difference between an answer appearing and an answer being
+ * revealed.
+ *
+ * `--sweep` is set by the frame, which also waits half of it before writing
+ * the answer. One number, used by both, so the light and the change cannot
+ * drift apart.
+ */
+.sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--accent, var(--ink-2)) 22%, transparent) 42%,
+    color-mix(in srgb, var(--accent, var(--ink-2)) 46%, transparent) 50%,
+    color-mix(in srgb, var(--accent, var(--ink-2)) 22%, transparent) 58%,
+    transparent 100%
+  );
+  background-size: 100% 46%;
+  background-repeat: no-repeat;
+  animation: sweep-down var(--sweep, 1080ms) var(--ease) both;
+}
+@keyframes sweep-down {
+  from { background-position: 0 -50%; opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  to { background-position: 0 150%; opacity: 0; }
+}
+
+/* The board underneath, out of focus while the light is over it. */
+.screen.play.revealing .gameboard {
+  animation: sweep-dip var(--sweep, 1080ms) var(--ease) both;
+}
+@keyframes sweep-dip {
+  from { opacity: 1; }
+  46% { opacity: 0.16; }
+  54% { opacity: 0.16; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The frame writes the answer straight in and never mounts the light, but
+     the rule is stated here too: nothing that carries meaning is removed —
+     the answer still appears, it simply does not travel. */
+  .sweep { display: none; }
+  .screen.play.revealing .gameboard { animation: none; }
 }
 
 /* Pausing hides the board rather than the clock: the point of a pause is that

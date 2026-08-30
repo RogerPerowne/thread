@@ -113,6 +113,13 @@ export class HexSession implements Session<HexState> {
     this.snapped = false;
   }
 
+  /** Every tile laid in the space it was cut for. */
+  reveal(): void {
+    this.mark();
+    this.placed = this.hex.answer.slice();
+    this.snapped = false;
+  }
+
   /** The tiles themselves, so a save from one board cannot load into another. */
   private fingerprint(): string {
     return this.hex.tiles.map((t) => t.join('')).join('.');
