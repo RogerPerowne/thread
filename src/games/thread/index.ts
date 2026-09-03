@@ -28,9 +28,13 @@ const ALL = raw as unknown as Shipped[];
  * The chapter names say what changes as you climb: the size of the lattice,
  * which is also — measured — what makes a board harder to reason out.
  */
+/* The ladder's own names, in its own order. Kept beside the boards rather than
+   in the build script so a chapter cannot be renamed in one place only. */
 const CHAPTER_NAMES = [
-  'Sixteen', 'Twenty', 'Five Square', 'Thirty', 'Thirty-Six', 'Forty-Two',
-  'Seven Square',
+  'Sixteen', 'Twenty', 'Three Strings', 'Five Square', 'A Third Colour',
+  'Thirty', 'Four Strings', 'Thirty-Six', 'Six Square', 'Forty-Two',
+  'Seven Across', 'Five Strings', 'Forty-Nine', 'Seven Square', 'Fifty-Six',
+  'The Long Board', 'Every Colour',
 ];
 
 /*

@@ -34,7 +34,7 @@ import { iconButton } from '../platform/ui/components.js';
 import * as store from '../platform/store.js';
 import * as haptics from '../platform/haptics.js';
 import {
-  type Pt2, project, lift, groundOf, isoCam, ISO_PITCH, TILE_H, HALF_W, HALF_H,
+  type Pt2, project, groundOf, isoCam, flatCam, ISO_PITCH, TILE_H, HALF_W, HALF_H,
 } from '../platform/ui/camera.js';
 import type { AnyGame } from '../platform/registry.js';
 import type { Puzzle } from '../platform/types.js';
@@ -72,9 +72,6 @@ const RUN = 460;
 const SHOW = 220;
 const CLIP = RUN - SHOW;
 
-/** A chapter's band, in view units. Tall enough for two lines of type. */
-const BAND_H = 132;
-
 /*
  * The tap target round a tile, in view units.
  *
@@ -88,22 +85,60 @@ const HIT_W = 200;
 const HIT_H = 130;
 
 /*
- * The ribbon and the tiles are ONE slab.
+ * The road, and the tiles standing on it.
  *
- * They used to be two. The tile straddled the ribbon — half its height above
- * the surface, half below — and the ribbon was extruded three quarters as far
- * as the tile was tall, so the path met the middle of the side face and the
- * tile stood proud of it by a quarter. Every tile therefore read as a block
- * dropped onto a strip: two objects at two heights, and on a phone the little
- * step where they met is the first thing the eye finds.
+ * Two goes at this were wrong in the same way and it is worth saying how,
+ * because the fix is a rule and not a number.
  *
- * So the two share both faces. Floor and ceiling are one plane each, and the
- * tile is simply the place where the slab is wide. That is a construction and
- * not a fit: there is one pair of heights below, both used by both, so no
- * later change can pull them apart again.
+ * The road and the tiles are one slab, floor to surface, and a tile is the
+ * place where that slab is wide. That much was already true. What was wrong
+ * was the PAINTING ORDER, and it is the whole of why the two looked like
+ * separate objects.
+ *
+ * A tile's skirt — the dark side face that hangs off it — was painted after
+ * the road, straight across the place the road ran into the tile. The one
+ * thing you had to see to believe they were joined was the one thing covered
+ * up, and matching their heights could never fix it, because the skirt was in
+ * front of the road either way.
+ *
+ * So a tile is drawn in two passes and the road goes between them: skirts,
+ * then the road, then the faces. Under the road a tile is only ever the same
+ * solid seen from the side, so the road covering it is right; over the road
+ * the tile's own face is what you should see, so it covers instead. Nothing
+ * is clipped and nothing is nudged — the order IS the occlusion.
  */
-const TOP_Z = TILE_H / 2;
 const BOT_Z = -TILE_H / 2;
+/** The tile's top face. */
+const TOP_Z = BOT_Z + TILE_H;
+/*
+ * The road's surface, and it is deliberately lower than the tile's.
+ *
+ * Level with it, the two are one flat sheet and a tile is only a wider part of
+ * the road. A little below, the tile stands proud: the road arrives, stops
+ * against the tile's edge with its vertical end face, and the tile's own side
+ * shows above it as a step. That step is the thing that says "this is a marker
+ * ON the path" rather than "this is a patch OF the path".
+ *
+ * Written as a fraction of the tile's height rather than as a number of units,
+ * so a tile and its ledge keep their proportions if the drawing is ever built
+ * at another size.
+ */
+const ROAD_RISE = 0.78;
+const ROAD_TOP = BOT_Z + TILE_H * ROAD_RISE;
+
+/*
+ * How wide the road is, in ground units, where a tile is one unit square.
+ *
+ * Thin, and it stays thin. A wide road swallows the meander — the passes are
+ * only 259 units apart and a ground unit is 144 across, so much past a
+ * ground unit the road's own turns start to touch and it reads as a folded
+ * sheet rather than a path. This is the width the drawing was measured at.
+ *
+ * A thin road only works because the order above is right. Painted over, a
+ * thin road is the one that suffers most: the tile's skirt is wider than the
+ * whole road, so it hid the join completely.
+ */
+const ROAD_W = 0.19;
 
 /** Ground-space versions of the above. Converted once, here. */
 const G_PERIOD = PERIOD / HALF_H;
@@ -134,6 +169,52 @@ function projectOn(pts: Pt2[], p: Pt2): Pt2 {
     if (d < bestD) { bestD = d; best = q; }
   }
   return best;
+}
+
+/**
+ * A polyline pushed sideways by `d`, in GROUND space.
+ *
+ * This is what makes the road a road rather than a wire. A stroked line is
+ * given its width on the SCREEN, perpendicular to how the line happens to be
+ * drawn — which for anything lying on the ground under this camera is not a
+ * constant width at all: the same road would come out fat where it runs across
+ * the view and thin where it runs into it. Offsetting the centreline on the
+ * ground and projecting the result gives a road of one real width, seen
+ * correctly foreshortened wherever it goes.
+ *
+ * Corners are mitred: each offset vertex is where the two offset segments
+ * would meet. The mitre is clamped because a hairpin sends it to infinity, and
+ * this meander has none anywhere near that tight.
+ */
+function offsetPolyline(pts: Pt2[], d: number): Pt2[] {
+  const n = pts.length;
+  const normals: Pt2[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pts[i + 1][0] - pts[i][0];
+    const dy = pts[i + 1][1] - pts[i][1];
+    const len = Math.hypot(dx, dy) || 1;
+    normals.push([-dy / len, dx / len]);
+  }
+  const out: Pt2[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = normals[Math.max(0, i - 1)];
+    const b = normals[Math.min(normals.length - 1, i)];
+    const mx = a[0] + b[0];
+    const my = a[1] + b[1];
+    const len2 = mx * mx + my * my;
+    if (len2 < 1e-9) { out.push([pts[i][0] + a[0] * d, pts[i][1] + a[1] * d]); continue; }
+    // The mitre length is 1 / cos(half the turn), which is 2 / |a + b| here.
+    const scale = Math.min(2 / len2, 3);
+    out.push([pts[i][0] + mx * d * scale, pts[i][1] + my * d * scale]);
+  }
+  return out;
+}
+
+/** The road's outline: up one side of the centreline and back down the other. */
+function roadOutline(centre: Pt2[]): Pt2[] {
+  const left = offsetPolyline(centre, ROAD_W / 2);
+  const right = offsetPolyline(centre, -ROAD_W / 2);
+  return [...left, ...right.reverse()];
 }
 
 /*
@@ -208,7 +289,15 @@ function roundPoly(v: Pt2[], r: number): string {
 const CORNER_R = 7;
 
 /** The camera the whole screen is drawn through. Nothing here moves it. */
-const FLAT = isoCam(0, 0);
+/*
+ * Seen from where. `flatCam()` renders exactly this scene with no height in it
+ * — see camera.ts — so switching the one word below is the whole of the 2D
+ * version: the same meander, the same tiles, the same places, from above. It
+ * is a construction rather than a second drawing, which is the only way two
+ * versions of a picture stay the same picture.
+ */
+const AS_2D = false;
+const FLAT = AS_2D ? flatCam(0, 0) : isoCam(0, 0);
 
 /** The tile's square, projected at height `z`. */
 function faceQuad(g: Pt2, z: number, half = 0.5): Pt2[] {
@@ -267,11 +356,25 @@ function faceTransform(g: Pt2): string {
 
 // -- the screen -------------------------------------------------------------
 
-type Row =
-  | { kind: 'band'; chapter: number; name: string }
-  | { kind: 'tile'; puzzle: Puzzle<unknown>; n: number; chapter: number; state: 'done' | 'now' | 'ahead'; going: boolean };
+/**
+ * A row of the ladder is a CHAPTER now, not a puzzle.
+ *
+ * Five hundred tiles on a meander is not a journey, it is a scroll bar with
+ * pictures on it — nobody can find level 314 on it and nobody wants to. So the
+ * path carries the seventeen chapters, which is a length you can actually walk
+ * with a thumb, and each one opens a grid of its thirty levels. The band rules
+ * that used to caption the path are gone with the same argument: a chapter
+ * that is a tile does not also need a heading announcing it.
+ */
+type Row = {
+  chapter: number;
+  name: string;
+  puzzles: readonly Puzzle<unknown>[];
+  done: number;
+  state: 'done' | 'now' | 'ahead';
+};
 
-export type PathHooks = { onBack(): void; open(puzzleId: string): void };
+export type PathHooks = { onBack(): void; openChapter(at: number): void };
 
 export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; dispose(): void } {
   const gid = game.meta.id;
@@ -285,7 +388,6 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
    * the player pressed nothing else.
    */
   const nowId = all.find((p) => !store.isDone(gid, p.id))?.id ?? null;
-  const numberOf = new Map(all.map((p, i) => [p.id, i + 1]));
 
   /*
    * The ladder, bottom first. A chapter's band comes before its puzzles, so it
@@ -293,20 +395,16 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
    * of the one below — which is where a chapter heading belongs when the path
    * is climbed rather than read down.
    */
-  const rows: Row[] = [];
-  chapters.forEach((ch, c) => {
-    rows.push({ kind: 'band', chapter: c, name: ch.name });
-    for (const p of ch.puzzles) {
-      const done = store.isDone(gid, p.id);
-      rows.push({
-        kind: 'tile',
-        puzzle: p,
-        n: numberOf.get(p.id) ?? 0,
-        chapter: c,
-        state: done ? 'done' : p.id === nowId ? 'now' : 'ahead',
-        going: !done && Boolean(store.resumeOf(gid, p.id)),
-      });
-    }
+  const rows: Row[] = chapters.map((ch, c) => {
+    const done = ch.puzzles.filter((p) => store.isDone(gid, p.id)).length;
+    const holdsNow = nowId !== null && ch.puzzles.some((p) => p.id === nowId);
+    return {
+      chapter: c,
+      name: ch.name,
+      puzzles: ch.puzzles,
+      done,
+      state: done === ch.puzzles.length ? 'done' : holdsNow ? 'now' : 'ahead',
+    };
   });
   const R = rows.length;
 
@@ -361,6 +459,17 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
 
   root.appendChild(scene);
 
+  /*
+   * Three layers, and the road is the middle one.
+   *
+   * A tile's skirt goes under the road and its face goes over it. Both halves
+   * carry the tile's state classes and are inserted in the same frame, so the
+   * one animation they share — the breathing of the tile you are up to — runs
+   * off the same document timeline on both and they cannot drift apart.
+   */
+  const skirts = svg('g', { class: 'ptiles-under', 'aria-hidden': 'true' });
+  const faces = svg('g', { class: 'ptiles-over' });
+
   // --- the ribbon ----------------------------------------------------------
   /*
    * A slab, not a line: walked behind you, pale ahead. The side is a genuine
@@ -369,79 +478,162 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
    * round joins bulge apart.
    */
   const ground = meanderGround(R);
-  const nowRow = rows.findIndex((r) => r.kind === 'tile' && r.state === 'now');
+  const nowRow = rows.findIndex((r) => r.state === 'now');
   const cutAt = groundOfRow(nowRow === -1 ? R - 1 : nowRow);
   const halves = splitPolyline(ground, cutAt);
 
-  const ribbon = svg('g', { class: 'ribbon' });
-  const pointsOf = (pts: Pt2[], z: number) => {
-    const dz = z * lift(FLAT);
-    let out = '';
-    for (const g of pts) {
-      const q = project(FLAT, g[0], g[1], 0);
-      out += `${q[0].toFixed(1)},${(q[1] - dz).toFixed(1)} `;
-    }
-    return out;
-  };
-  const run = (cls: string, z: number, pts: Pt2[]) => {
-    ribbon.appendChild(svg('polyline', { class: cls, points: pointsOf(pts, z) }));
-  };
-  const SWEEP_STEP = zOfPx(1.5);
-  const sweep = (cls: string, pts: Pt2[]) => {
-    for (let z = BOT_Z; z < TOP_Z; z += SWEEP_STEP) run(cls, z, pts);
-  };
-  /* Both faces are shared with the tiles: the underside sits on their floor
-     and the top surface is their top surface, so a tile is a wide place in
-     the ribbon rather than a block standing on it. */
-  sweep('ahead side', halves.before);
-  run('ahead', TOP_Z, halves.before);
-  sweep('walked side', halves.after);
-  run('walked', TOP_Z, halves.after);
-  scene.appendChild(ribbon);
-
-  // --- the chapter bands ---------------------------------------------------
   /*
-   * Drawn over the ribbon and in the same units as everything else, so they
-   * scale with the drawing and need no measuring after layout. The path runs
-   * behind a band rather than through it: a chapter break is a break.
+   * The road stops AT a tile rather than running under it.
+   *
+   * Drawn straight through, the road's slab and the tile's are two solids
+   * sharing the same space, and where they overlap the picture is whatever was
+   * painted last — a road that fades into a tile's edge with no end to it.
+   * Cutting it at the tile's own boundary gives the slab a square end, and a
+   * square end on an extruded slab is a vertical face: the road arrives, stops
+   * against the tile with a visible edge, and starts again on the other side.
+   *
+   * How far to cut is the tile's square, not a number. A unit square centred on
+   * the tile is crossed by a line through its middle at 0.5 / max(|ux|, |uy|)
+   * along that line, so the cut lands exactly on the edge the tile draws,
+   * whatever angle the meander happens to be running at.
+   */
+  /** Half a tile, in ground units. The tile's face is drawn from the same 0.5. */
+  const TILE_HALF = 0.5;
+
+  /**
+   * Where a segment enters and leaves a tile's square, exactly.
+   *
+   * Slab clipping: the square is the intersection of two bands, one per axis,
+   * and a segment's overlap with it is the overlap of its two intervals. There
+   * is no step size and no tolerance, so the road ends ON the tile's edge
+   * rather than within something of it — the first version sampled the line
+   * every 0.08 of a unit and dropped whatever landed inside, which stopped the
+   * road up to 0.08 short and looked exactly like what it was.
+   */
+  function crossing(a: Pt2, b: Pt2, c: Pt2): [number, number] | null {
+    let lo = 0;
+    let hi = 1;
+    for (const axis of [0, 1] as const) {
+      const run = b[axis] - a[axis];
+      const near = c[axis] - TILE_HALF - a[axis];
+      const far = c[axis] + TILE_HALF - a[axis];
+      if (Math.abs(run) < 1e-12) {
+        // Parallel to this band: either wholly inside it or wholly outside.
+        if (near > 0 || far < 0) return null;
+        continue;
+      }
+      const t0 = Math.min(near / run, far / run);
+      const t1 = Math.max(near / run, far / run);
+      lo = Math.max(lo, t0);
+      hi = Math.min(hi, t1);
+      if (lo > hi) return null;
+    }
+    return [lo, hi];
+  }
+
+  /** The road, less the parts inside a tile. */
+  function cutAtTiles(pts: Pt2[], centres: Pt2[]): Pt2[][] {
+    const out: Pt2[][] = [];
+    let run: Pt2[] = [];
+    const at = (a: Pt2, b: Pt2, t: number): Pt2 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    const push = (p: Pt2) => {
+      const last = run[run.length - 1];
+      if (!last || Math.hypot(last[0] - p[0], last[1] - p[1]) > 1e-9) run.push(p);
+    };
+    const finish = () => { if (run.length > 1) out.push(run); run = []; };
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const spans: [number, number][] = [];
+      for (const c of centres) {
+        const span = crossing(a, b, c);
+        if (span && span[1] > 0 && span[0] < 1) {
+          spans.push([Math.max(0, span[0]), Math.min(1, span[1])]);
+        }
+      }
+      spans.sort((x, y) => x[0] - y[0]);
+      /* Two tiles can overlap one segment, so the blocked parts are merged
+         before the free parts are read off between them. */
+      const blocked: [number, number][] = [];
+      for (const span of spans) {
+        const last = blocked[blocked.length - 1];
+        if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1]);
+        else blocked.push(span);
+      }
+
+      let t = 0;
+      for (const [s0, s1] of blocked) {
+        if (s0 > t) { push(at(a, b, t)); push(at(a, b, s0)); }
+        finish();
+        t = Math.max(t, s1);
+      }
+      if (t < 1) { push(at(a, b, t)); push(b); }
+    }
+    finish();
+    return out;
+  }
+
+  const ribbon = svg('g', { class: 'ribbon' });
+  /** A ground polygon, projected at height `z`, as a path. */
+  const slabAt = (poly: Pt2[], z: number): string => {
+    let d = '';
+    for (let i = 0; i < poly.length; i++) {
+      const q = project(FLAT, poly[i][0], poly[i][1], z);
+      d += `${i === 0 ? 'M' : 'L'} ${q[0].toFixed(1)} ${q[1].toFixed(1)} `;
+    }
+    return `${d}Z`;
+  };
+  /*
+   * The road's body, as the silhouette of a solid rather than an outline of
+   * one: the same polygon filled at every height from the floor to the
+   * surface. The union of those is exactly what an extruded slab looks like,
+   * corners and all, and it needs no case analysis about which side of the
+   * road happens to be facing the camera on this stretch of the meander.
+   */
+  const ROAD_STEP = zOfPx(1);
+  const laySlab = (cls: string, centre: Pt2[]) => {
+    const poly = roadOutline(centre);
+    for (let z = BOT_Z; z < ROAD_TOP; z += ROAD_STEP) {
+      ribbon.appendChild(svg('path', { class: `${cls} side`, d: slabAt(poly, z) }));
+    }
+    ribbon.appendChild(svg('path', { class: cls, d: slabAt(poly, ROAD_TOP) }));
+  };
+  scene.appendChild(skirts);
+  const centres: Pt2[] = [];
+  for (let j = 0; j < R; j++) centres.push(groundOfRow(j));
+  for (const piece of cutAtTiles(halves.before, centres)) laySlab('ahead', piece);
+  for (const piece of cutAtTiles(halves.after, centres)) laySlab('walked', piece);
+  scene.appendChild(ribbon);
+  scene.appendChild(faces);
+
+  /*
+   * Where each chapter sits, in the bed's own units.
+   *
+   * The rail's marks and the scroll are fractions of the bed, so the number is
+   * remembered here in that space while the drawing happens in the scene's.
+   * There is nothing to draw any more — the chapter IS the tile — so what used
+   * to be a ruled band across the path is now one line of arithmetic.
    */
   const bandY: number[] = [];
-  for (let j = 0; j < R; j++) {
-    const row = rows[j];
-    if (row.kind !== 'band') continue;
-    /* Drawn in the scene's space; remembered in the bed's, because that is what
-       the rail's percentages and the scroll are fractions of. */
-    const y = yOf(groundOfRow(j));
-    bandY[row.chapter] = y - y0 - CLIP;
-    const g = svg('g', { class: 'pband', 'aria-hidden': 'true' });
-    g.append(
-      svg('rect', { class: 'plate', x: -120, width: VIEW_W + 240, y: y - BAND_H / 2, height: BAND_H }),
-      svg('line', { class: 'rule', x1: -120, x2: VIEW_W + 240, y1: y - BAND_H / 2, y2: y - BAND_H / 2 }),
-      svg('line', { class: 'rule', x1: -120, x2: VIEW_W + 240, y1: y + BAND_H / 2, y2: y + BAND_H / 2 }),
-      svg('text', {
-        class: 'bnum', x: VIEW_W / 2, y: y - 14, 'text-anchor': 'middle',
-        text: `Chapter ${row.chapter + 1}`,
-      }),
-      svg('text', {
-        class: 'bname', x: VIEW_W / 2, y: y + 34, 'text-anchor': 'middle', text: row.name,
-      }),
-    );
-    scene.appendChild(g);
-  }
+  for (let j = 0; j < R; j++) bandY[rows[j].chapter] = yOf(groundOfRow(j)) - y0 - CLIP;
 
   // --- the tiles -----------------------------------------------------------
   const STATE_WORD = { done: 'solved', now: 'where you are up to', ahead: 'not started' };
   for (let j = 0; j < R; j++) {
     const row = rows[j];
-    if (row.kind !== 'tile') continue;
     const g = groundOfRow(j);
-    const cls = `ptile ${row.state}${row.going ? ' going' : ''}`;
+    const part = row.done > 0 && row.state !== 'done';
+    const state = `${row.state}${part ? ' going' : ''}`;
+    /* The half that goes under the road: the skirt, and the light around it. */
+    const under = svg('g', { class: `ptile ${state}` });
     const grp = svg('g', {
-      class: cls,
+      class: `ptile ${state}`,
       role: 'listitem',
       tabindex: 0,
-      'data-puzzle': row.puzzle.id,
-      'aria-label': `Puzzle ${row.n}, ${chapters[row.chapter].name}, ${row.going ? 'in progress' : STATE_WORD[row.state]}`,
+      'data-chapter': String(row.chapter),
+      'aria-label': `Chapter ${row.chapter + 1}, ${row.name}, `
+        + `${row.done} of ${row.puzzles.length} solved, ${STATE_WORD[row.state]}`,
     });
 
     /*
@@ -462,31 +654,68 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
     }));
 
     if (row.state === 'now') {
-      grp.appendChild(svg('path', {
+      under.appendChild(svg('path', {
         class: 'halo',
         fill: 'url(#pathhalo)',
         filter: 'url(#pathglow)',
         d: sweptPath(g, BOT_Z, TOP_Z + GLOW_H, true),
       }));
     }
+    under.appendChild(svg('path', { class: 'side', d: sweptPath(g, BOT_Z, TOP_Z, false) }));
     grp.append(
-      svg('path', { class: 'side', d: sweptPath(g, BOT_Z, TOP_Z, false) }),
       svg('path', { class: 'top', d: roundPoly(faceQuad(g, TOP_Z), CORNER_R) }),
       svg('path', { class: 'inner', d: roundPoly(faceQuad(g, TOP_Z, 0.5 * 0.675), CORNER_R * 0.86) }),
     );
     const num = svg('text', {
       class: 'pnum', 'text-anchor': 'middle', 'dominant-baseline': 'central',
-      transform: faceTransform(g), text: String(row.n),
+      transform: faceTransform(g), text: String(row.chapter + 1),
     });
     grp.appendChild(num);
 
-    const open = () => hooks.open(row.puzzle.id);
+    /*
+     * The chapter's name and how far through it you are, beside the tile.
+     *
+     * Beside, not on: the tile's face is a diamond seen at an angle and type
+     * laid on it has to lie down with it, which is fine for one numeral and
+     * unreadable for two words. So the caption is upright, in the drawing's
+     * own units, on whichever side of the tile has the room.
+     */
+    const leftish = hx < VIEW_W / 2;
+    const cap = svg('g', {
+      class: `pcap ${row.state}`,
+      'aria-hidden': 'true',
+      transform: `translate(${(hx + (leftish ? 96 : -96)).toFixed(1)} ${hy.toFixed(1)})`,
+    });
+    cap.append(
+      svg('text', {
+        class: 'cname', x: 0, y: -6, 'text-anchor': leftish ? 'start' : 'end', text: row.name,
+      }),
+      svg('text', {
+        class: 'ccount num', x: 0, y: 34, 'text-anchor': leftish ? 'start' : 'end',
+        text: `${row.done} / ${row.puzzles.length}`,
+      }),
+    );
+    grp.appendChild(cap);
+
+    const open = () => hooks.openChapter(row.chapter);
     grp.addEventListener('click', open);
     grp.addEventListener('keydown', (e) => {
       const k = (e as KeyboardEvent).key;
       if (k === 'Enter' || k === ' ') { e.preventDefault(); open(); }
     });
-    scene.appendChild(grp);
+    /* The press has to move both halves, and only the half with the hit target
+       under it can know about the press — so it is a class rather than
+       `:active`, set on the pair. */
+    const press = (on: boolean) => {
+      grp.classList.toggle('pressed', on);
+      under.classList.toggle('pressed', on);
+    };
+    grp.addEventListener('pointerdown', () => press(true));
+    for (const e of ['pointerup', 'pointercancel', 'pointerleave']) {
+      grp.addEventListener(e, () => press(false));
+    }
+    skirts.appendChild(under);
+    faces.appendChild(grp);
   }
 
   // --- the frame around it -------------------------------------------------
@@ -673,9 +902,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
    */
   let first = requestAnimationFrame(() => {
     first = 0;
-    const c = rows[nowRow]?.kind === 'tile' && nowRow >= 0
-      ? (rows[nowRow] as Extract<Row, { kind: 'tile' }>).chapter
-      : chapters.length - 1;
+    const c = nowRow >= 0 ? rows[nowRow].chapter : chapters.length - 1;
     const k = root.clientWidth / VIEW_W || 1;
     const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const to = nowRow >= 0

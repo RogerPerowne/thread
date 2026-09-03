@@ -50,6 +50,25 @@ export function isoCam(ox = 0, oy = 0): Cam {
   return { pitch: ISO_PITCH, yaw: 0, scale: HALF_W, ox, oy };
 }
 
+/**
+ * The same scene, flat.
+ *
+ * Pitch zero is straight down, and the projection above then has no `z` term
+ * at all: every height collapses onto the ground and an extrusion draws
+ * nothing. Yaw cancels the 45 degrees the (u - v, u + v) pairing already
+ * carries, so a ground square lands on the screen upright.
+ *
+ * This is the whole of the 2D version. Nothing that draws the path needs to
+ * know which camera it is being drawn through — the slabs sweep between two
+ * heights that now project to the same place, the tiles' faces land on their
+ * own bases, and what comes out is the same meander with the same tiles in the
+ * same places, seen from above. One function, rather than a second drawing to
+ * keep in step with the first.
+ */
+export function flatCam(ox = 0, oy = 0): Cam {
+  return { pitch: 0, yaw: -Math.PI / 4, scale: HALF_W, ox, oy };
+}
+
 export type Pt2 = [number, number];
 
 export function project(cam: Cam, u: number, v: number, z = 0): Pt2 {

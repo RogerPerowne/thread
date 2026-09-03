@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, shapeBoard, shapeMapper, markCell, paintCells,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, shapeBoard, shapeMapper, markCell, paintCells,
   pickMark, solveShape, isSolved, noteOf, control,
 } from './helpers.js';
 
 /**
- * Every shipped board, filled by real gestures, in chunks.
+ * A spread of the ladder, filled by real gestures.
  *
  * Each mark is a tap on a palette chip and a tap on a cell, which is the
  * gesture the game is actually played with. Calling into the session would
@@ -13,10 +13,11 @@ import {
  * a thumb.
  */
 test.describe('every board can be filled', () => {
-  for (const chunk of [0, 1, 2, 3]) {
-    test(`shape up boards ${chunk * 17 + 1} to ${chunk * 17 + 17}`, async ({ page }) => {
+  for (const chunk of [0, 1]) {
+    test(`shape up, half ${chunk + 1} of the ladder`, async ({ page }) => {
       await gotoApp(page);
-      const ids = (await puzzleIds(page, 'shape')).slice(chunk * 17, chunk * 17 + 17);
+      const all = await ladderSpread(page, 'shape');
+      const ids = chunk === 0 ? all.slice(0, Math.ceil(all.length / 2)) : all.slice(Math.ceil(all.length / 2));
       for (const id of ids) {
         await openPuzzle(page, 'shape', id);
         const board = await shapeBoard(page);

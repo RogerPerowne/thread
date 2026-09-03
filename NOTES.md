@@ -168,6 +168,30 @@ construction. They are here so the next change does not undo the fix.
   mirroring `<link rel=preload>`.
 - **Two owners of one safe-area inset.** Invisible on a laptop, thirty-four
   pixels wrong on a phone. One owner, and a unit test that reads the sheets.
+- **The path's tiles looked detached because of PAINTING ORDER, not height.**
+  Three goes at it moved heights around and none of them worked, because the
+  problem was that a tile's skirt was painted after the road and laid straight
+  across the join. Skirts, then the road, then the faces — and the order is the
+  occlusion, so the mistake is no longer expressible. The road is also a real
+  ground-space width now rather than a screen-space stroke, and it is cut at
+  each tile's square by slab clipping, exactly, so its end face lands on the
+  tile's edge rather than within a sample step of it.
+- **Five hundred levels a game, and the ladder is ordered by the measurement.**
+  Chapters are generated, their medians read off the boards, and the chapters
+  then PUT IN THAT ORDER — `.shots/reorder.mjs` did it once and the source
+  records the answer. Hand-ordering by "bigger board must be harder" was wrong
+  in every game: Hexagony's flower with five numbers is easier than its three
+  by two with three, and One to Nine's whole ladder runs backwards.
+- **Shape Up's board has to be square, and Zigzag's cannot always go corner to
+  corner.** Both were found by a generator burning its entire budget on
+  something arithmetic already ruled out. Both are refused in a line now, and
+  both are stated in the README because they are facts about the puzzles rather
+  than facts about the code.
+- **The e2e suite samples the ladder rather than solving all three thousand
+  boards.** What only a browser can tell you is whether a board can be filled
+  in with a thumb, which is a question about the view and the sizes of things
+  and does not change from one board of a chapter to the next. Every board is
+  still re-solved from the shipped bytes by the unit gate, in seconds.
 - **CI had never run.** `ci.yml` carried a step named `Board gate: every board
   has exactly one answer`, unquoted — and a plain YAML scalar cannot hold a
   colon followed by a space, so GitHub could not read the file. Every run from

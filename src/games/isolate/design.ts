@@ -231,11 +231,14 @@ function thin(board: Board, nodes: number, rng: Rng): Made | null {
  * nudged if the score ever changes.
  */
 export function bandOf(score: number): Band {
-  if (score < 64) return 'gentle';
-  if (score < 76) return 'steady';
-  if (score < 87) return 'tricky';
+  if (score < 72) return 'gentle';
+  if (score < 88) return 'steady';
+  if (score < 106) return 'tricky';
   return 'severe';
 }
+
+/** How long one chapter may spend looking, before it ships what it has. */
+const CHAPTER_MS = Number(process.env.CHAPTER_MS ?? 300_000);
 
 export type Chapter = {
   readonly name: string;
@@ -250,12 +253,23 @@ export type Chapter = {
  * circle stops settling it.
  */
 export const LADDER: readonly Chapter[] = [
-  { name: 'Small Rooms', count: 8, recipe: { w: 4, h: 4, biggest: 3 } },
-  { name: 'Twenty', count: 8, recipe: { w: 5, h: 4, biggest: 4 } },
-  { name: 'Five Square', count: 8, recipe: { w: 5, h: 5, biggest: 4 } },
-  { name: 'Longer Rooms', count: 8, recipe: { w: 6, h: 5, biggest: 5 } },
-  { name: 'Thirty-Six', count: 8, recipe: { w: 6, h: 6, biggest: 5 } },
-  { name: 'Forty-Two', count: 8, recipe: { w: 7, h: 6, biggest: 6 } },
+  { name: 'Small Rooms', count: 30, recipe: { w: 4, h: 4, biggest: 3 } },
+  { name: 'Twenty', count: 30, recipe: { w: 5, h: 4, biggest: 3 } },
+  { name: 'Longer Rooms', count: 30, recipe: { w: 5, h: 4, biggest: 4 } },
+  { name: 'Five Square', count: 30, recipe: { w: 5, h: 5, biggest: 3 } },
+  { name: 'Room for Four', count: 30, recipe: { w: 5, h: 5, biggest: 4 } },
+  { name: 'Thirty', count: 30, recipe: { w: 6, h: 5, biggest: 4 } },
+  { name: 'Five to a Room', count: 30, recipe: { w: 6, h: 5, biggest: 5 } },
+  { name: 'Wider Rooms', count: 30, recipe: { w: 6, h: 6, biggest: 5 } },
+  { name: 'Thirty-Six', count: 30, recipe: { w: 6, h: 6, biggest: 4 } },
+  { name: 'Forty-Two', count: 30, recipe: { w: 7, h: 6, biggest: 4 } },
+  { name: 'Seven Across', count: 30, recipe: { w: 7, h: 6, biggest: 5 } },
+  { name: 'Six to a Room', count: 30, recipe: { w: 7, h: 6, biggest: 6 } },
+  { name: 'Forty-Nine', count: 30, recipe: { w: 7, h: 7, biggest: 4 } },
+  { name: 'The Square Field', count: 30, recipe: { w: 7, h: 7, biggest: 5 } },
+  { name: 'Fifty-Six', count: 30, recipe: { w: 8, h: 7, biggest: 5 } },
+  { name: 'Long Rooms', count: 30, recipe: { w: 7, h: 7, biggest: 6 } },
+  { name: 'The Long Board', count: 20, recipe: { w: 8, h: 7, biggest: 6 } },
 ];
 
 export type Built = Board & {
@@ -269,13 +283,19 @@ export function buildIsolate(seed = 'isolate-1', onProgress?: (msg: string) => v
   const out: Built[] = [];
   let no = 0;
 
+  /* Seeded by the recipe rather than by position — see One to Nine's note. */
+  const seenRecipe = new Map<string, number>();
   LADDER.forEach((chapter, ci) => {
-    const rng = makeRng(`${seed}:${ci}`);
+    const r = chapter.recipe;
+    const key = `${r.w}x${r.h}b${r.biggest}`;
+    const nth = seenRecipe.get(key) ?? 0;
+    seenRecipe.set(key, nth + 1);
+    const rng = makeRng(`${seed}:${key}:${nth}`);
     const seen = new Set<string>();
-    let made = 0;
+    const batch: Omit<Built, 'id'>[] = [];
     let tries = 0;
-    const until = Date.now() + 90_000;
-    while (made < chapter.count && tries < 40_000 && Date.now() < until) {
+    const until = Date.now() + CHAPTER_MS;
+    while (batch.length < chapter.count && tries < 40_000 && Date.now() < until) {
       tries++;
       const board = makeIsolate(chapter.recipe, rng);
       if (!board) continue;
@@ -283,9 +303,7 @@ export function buildIsolate(seed = 'isolate-1', onProgress?: (msg: string) => v
       const key = board.answer.join(',');
       if (seen.has(key)) continue;
       seen.add(key);
-      no++;
-      made++;
-      out.push({
+      batch.push({
         w: board.w,
         h: board.h,
         dots: board.dots,
@@ -293,13 +311,16 @@ export function buildIsolate(seed = 'isolate-1', onProgress?: (msg: string) => v
         crosses: board.crosses,
         given: board.given,
         answer: board.answer,
-        id: `isolate-${no}`,
         band: bandOf(score),
         score: Math.round(score * 10) / 10,
         chapter: ci + 1,
       });
     }
-    onProgress?.(`${chapter.name}: ${made}/${chapter.count} in ${tries} draws`);
+    /* Sorted inside the chapter, so its levels climb rather than arriving in
+       whatever order the generator happened to find them. */
+    batch.sort((a, b) => a.score - b.score);
+    for (const b of batch) out.push({ ...b, id: `isolate-${++no}` });
+    onProgress?.(`${chapter.name}: ${batch.length}/${chapter.count} in ${tries} draws`);
   });
 
   return out;

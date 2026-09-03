@@ -62,19 +62,19 @@
   background: var(--accent, var(--ink-2));
 }
 
-/* --- the ribbon ----------------------------------------------------------- */
-/* The width is in the drawing's own units, so it scales with everything else;
-   it is what makes the ribbon a slab rather than a wire. */
-.ribbon polyline {
-  fill: none;
-  stroke-width: 11.6;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-.ribbon .ahead { stroke: var(--paper-3); }
-.ribbon .ahead.side { stroke: var(--line); }
-.ribbon .walked { stroke: var(--ink-2); }
-.ribbon .walked.side { stroke: var(--ink); }
+/* --- the road ------------------------------------------------------------- */
+/*
+ * Filled, not stroked. The road's width is a real width on the ground and the
+ * drawing works it out through the camera, so it foreshortens as it turns like
+ * everything else in the scene. A stroke would be given its width on the
+ * screen instead, and the same road would come out fat where it runs across
+ * the view and thin where it runs into it.
+ */
+.ribbon path { stroke: none; }
+.ribbon .ahead { fill: var(--paper-3); }
+.ribbon .ahead.side { fill: var(--line); }
+.ribbon .walked { fill: var(--ink-2); }
+.ribbon .walked.side { fill: var(--ink); }
 
 /* --- the tiles ------------------------------------------------------------ */
 /*
@@ -87,7 +87,7 @@
 /* Transparent rather than absent: `fill: none` is not hit by a pointer. */
 .ptile .hit { fill: transparent; }
 .ptile .top, .ptile .side, .ptile .inner { transition: opacity var(--fast) var(--ease); }
-.ptile:active { transform: translateY(9px); }
+.ptile.pressed { transform: translateY(9px); }
 .ptile:focus { outline: none; }
 .ptile:focus-visible .top { stroke: var(--ink); stroke-width: 9; }
 
@@ -124,6 +124,9 @@
 /* The column of light. Accent rather than white: on paper, white is nothing. */
 .halo-far { stop-color: var(--accent); stop-opacity: 0; }
 .halo-near { stop-color: var(--accent); stop-opacity: 0.34; }
+
+/* The pointer belongs to the face; the skirt is scenery under the road. */
+.ptiles-under { pointer-events: none; }
 
 /* The tile you are up to breathes, once every few seconds. */
 @keyframes ptile-pulse {
@@ -238,3 +241,133 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* --- one chapter's levels ------------------------------------------------- */
+/*
+ * A grid, not a path. Thirty is a number you can scan; five hundred is not,
+ * which is what the path outside is for.
+ */
+.levelwrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--s4) var(--s3) calc(var(--s5) + var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+/*
+ * Five across, and the tiles size themselves from that rather than from a
+ * width anybody typed. At 320px that is 52px a tile with the gaps taken off —
+ * over the 44px a thumb needs, on the narrowest phone still in use, without a
+ * media query anywhere.
+ */
+.levelgrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--s2);
+}
+@media (min-width: 520px) {
+  .levelgrid { grid-template-columns: repeat(6, 1fr); }
+}
+
+.level {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 44px;
+  border: var(--edge);
+  border-radius: var(--r2);
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: transform var(--fast) var(--ease);
+}
+.level:active { transform: scale(0.94); }
+.level .n {
+  font-family: var(--num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: var(--t-md);
+}
+
+/*
+ * The band, as the ramp.
+ *
+ * One custom property per rung and one rule for each state, rather than eight
+ * rules that each name a colour: a level you have not solved shows its band
+ * mixed back towards the paper, and a level you have solved shows it at full
+ * strength. So the grid says two things at once without either needing a
+ * second ink — how hard, and how far — and a chapter visibly fills in as you
+ * work down it.
+ */
+.level.b1 { --band: var(--band-1); }
+.level.b2 { --band: var(--band-2); }
+.level.b3 { --band: var(--band-3); }
+.level.b4 { --band: var(--band-4); }
+.level { background: color-mix(in srgb, var(--band, var(--paper-2)) 46%, var(--paper)); }
+.level.done { background: var(--band); border-color: transparent; }
+/* The two dark rungs need light type on them; the two pale ones need ink. */
+.level.done.b3 .n, .level.done.b4 .n,
+.level.done.b3 .tick, .level.done.b4 .tick { color: var(--paper); }
+
+.level .tick {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: block;
+  color: var(--ink-2);
+}
+.level .tick svg { width: 13px; height: 13px; display: block; }
+
+/* Where you are up to. The one lit thing on the screen, as on the path. */
+.level.now {
+  border-color: var(--accent, var(--ink));
+  box-shadow: 0 0 0 2px var(--accent, var(--ink));
+}
+/* Half-done, which is a different thing from not started. */
+.level.going { border-color: var(--accent, var(--ink)); border-style: dashed; }
+.level:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.levelkey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  font-size: var(--t-xs);
+  color: var(--mute);
+}
+.levelkey .swatch { display: inline-flex; align-items: center; gap: var(--s1); }
+.levelkey .swatch i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: block;
+}
+.levelkey .b1 i { background: var(--band-1); }
+.levelkey .b2 i { background: var(--band-2); }
+.levelkey .b3 i { background: var(--band-3); }
+.levelkey .b4 i { background: var(--band-4); }
+
+/* --- a chapter's caption on the path -------------------------------------- */
+/*
+ * Upright, beside the tile. The tile's own face is a diamond seen at an angle
+ * and type laid on it has to lie down with it — fine for one numeral, and
+ * unreadable for two words.
+ */
+.pcap { pointer-events: none; }
+.pcap .cname {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 40px;
+  fill: var(--ink);
+}
+.pcap .ccount {
+  font-family: var(--num);
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--mute);
+}
+.pcap.ahead .cname { fill: var(--ink-2); }
+.pcap.done .ccount { fill: var(--accent, var(--mute)); }

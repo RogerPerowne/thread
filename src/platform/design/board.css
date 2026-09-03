@@ -69,6 +69,23 @@
   --wash: color-mix(in srgb, var(--accent) 12%, var(--paper));
   --wash-2: color-mix(in srgb, var(--accent) 22%, var(--paper));
   --wash-3: color-mix(in srgb, var(--accent) 34%, var(--paper));
+
+  /*
+   * The four bands, as one ramp of the game's own colour.
+   *
+   * A band is an ORDERED thing — gentle, steady, tricky, severe — so it gets a
+   * ramp and not four unrelated hues. Four hues would say "four kinds"; a ramp
+   * says "more of the same thing", which is what a difficulty band is. And
+   * mixing from the accent rather than from a fixed palette means the level
+   * grid still looks like the game it belongs to.
+   *
+   * Never the only carrier: every level tile has its number on it, a tick when
+   * it is solved, and its band in the name a screen reader reads.
+   */
+  --band-1: color-mix(in srgb, var(--accent) 16%, var(--paper));
+  --band-2: color-mix(in srgb, var(--accent) 40%, var(--paper));
+  --band-3: color-mix(in srgb, var(--accent) 68%, var(--paper));
+  --band-4: color-mix(in srgb, var(--accent) 92%, var(--ink));
 }
 
 /*

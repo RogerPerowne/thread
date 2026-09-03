@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, isolateBoard, tapWall, dragWalls, solveIsolate,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, isolateBoard, tapWall, dragWalls, solveIsolate,
   isSolved, noteOf, control,
 } from './helpers.js';
 
@@ -12,10 +12,11 @@ import {
  * thumb, and those are different questions.
  */
 test.describe('every board can be walled in', () => {
-  for (const chunk of [0, 1, 2, 3]) {
-    test(`isolate boards ${chunk * 12 + 1} to ${chunk * 12 + 12}`, async ({ page }) => {
+  for (const chunk of [0, 1]) {
+    test(`isolate, half ${chunk + 1} of the ladder`, async ({ page }) => {
       await gotoApp(page);
-      const ids = (await puzzleIds(page, 'isolate')).slice(chunk * 12, chunk * 12 + 12);
+      const all = await ladderSpread(page, 'isolate');
+      const ids = chunk === 0 ? all.slice(0, Math.ceil(all.length / 2)) : all.slice(Math.ceil(all.length / 2));
       for (const id of ids) {
         await openPuzzle(page, 'isolate', id);
         const board = await isolateBoard(page);

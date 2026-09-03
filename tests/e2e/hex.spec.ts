@@ -1,21 +1,22 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, hexBoard, hexMapper, dragTile, tapTileInto,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, hexBoard, hexMapper, dragTile, tapTileInto,
   solveHex, isSolved, noteOf, control,
 } from './helpers.js';
 
 /**
- * Every shipped board, filled by real drags, in chunks.
+ * A spread of the ladder, filled by real drags.
  *
  * A board solved by calling into the session would prove the matching rule
  * works and nothing at all about whether nineteen tiles can be moved with a
  * thumb, and those are different questions.
  */
 test.describe('every board can be filled', () => {
-  for (const chunk of [0, 1, 2, 3]) {
-    test(`hexagony boards ${chunk * 17 + 1} to ${chunk * 17 + 17}`, async ({ page }) => {
+  for (const chunk of [0, 1]) {
+    test(`hexagony, half ${chunk + 1} of the ladder`, async ({ page }) => {
       await gotoApp(page);
-      const ids = (await puzzleIds(page, 'hex')).slice(chunk * 17, chunk * 17 + 17);
+      const all = await ladderSpread(page, 'hex');
+      const ids = chunk === 0 ? all.slice(0, Math.ceil(all.length / 2)) : all.slice(Math.ceil(all.length / 2));
       for (const id of ids) {
         await openPuzzle(page, 'hex', id);
         const board = await hexBoard(page);

@@ -14,6 +14,7 @@ import { h } from './dom.js';
 import { gameById, allGames } from './registry.js';
 import { libraryScreen, labelOf } from '../library/library.js';
 import { pathScreen } from '../library/path.js';
+import { levelScreen } from '../library/levels.js';
 import { gameFrame } from './ui/frame.js';
 import { closeSheets } from './ui/components.js';
 import type { Puzzle } from './types.js';
@@ -64,16 +65,39 @@ export class App {
       const game = gameById(parts[1]);
       if (!game) { this.go('#/'); return; }
 
+      /*
+       * A chapter's levels: #/g/<game>/c/<n>. Four parts where a puzzle is
+       * three, and no puzzle id is ever "c", so the two cannot be confused.
+       */
+      if (parts[2] === 'c' && parts[3]) {
+        const chapters = game.chapters();
+        const at = Number(parts[3]) - 1;
+        if (!Number.isInteger(at) || at < 0 || at >= chapters.length) {
+          this.go(`#/g/${game.meta.id}`);
+          return;
+        }
+        this.show(() => levelScreen(game, at, {
+          onBack: () => this.go(`#/g/${game.meta.id}`),
+          open: (id) => this.go(`#/g/${game.meta.id}/${id}`),
+        }));
+        return;
+      }
+
       if (parts[2]) {
         const puzzles = game.puzzles();
         const at = puzzles.findIndex((p) => p.id === parts[2]);
         if (at < 0) { this.go(`#/g/${game.meta.id}`); return; }
         const puzzle: Puzzle<unknown> = puzzles[at];
         const next = puzzles[at + 1] ?? null;
+        /* Back goes to the chapter the puzzle is in, which is the screen the
+           player came from and the one that answers "what next". */
+        const inChapter = game.chapters().findIndex((c) => c.puzzles.some((p) => p.id === puzzle.id));
         this.show(() => gameFrame(game, puzzle, {
           label: labelOf(game, puzzle),
           next,
-          onBack: () => this.go(`#/g/${game.meta.id}`),
+          onBack: () => this.go(inChapter >= 0
+            ? `#/g/${game.meta.id}/c/${inChapter + 1}`
+            : `#/g/${game.meta.id}`),
           onNext: () => { if (next) this.go(`#/g/${game.meta.id}/${next.id}`); },
         }));
         return;
@@ -81,7 +105,7 @@ export class App {
 
       this.show(() => pathScreen(game, {
         onBack: () => this.go('#/'),
-        open: (id) => this.go(`#/g/${game.meta.id}/${id}`),
+        openChapter: (at) => this.go(`#/g/${game.meta.id}/c/${at + 1}`),
       }));
       return;
     }
@@ -106,6 +130,8 @@ export function testHandle(): unknown {
     games: () => allGames().map((g) => g.meta.id),
     puzzles: (id: string) => gameById(id)?.puzzles().map((p) => p.id) ?? [],
     puzzle: (id: string, pid: string) => gameById(id)?.puzzles().find((p) => p.id === pid) ?? null,
+    /** Each chapter's puzzle ids, in ladder order, so a harness can sample. */
+    chapters: (id: string) => gameById(id)?.chapters().map((c) => c.puzzles.map((p) => p.id)) ?? [],
     /**
      * Whatever the game on screen wants to tell a test about its own board.
      *

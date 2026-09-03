@@ -14,6 +14,7 @@ import type { Page } from '@playwright/test';
 type Handle = {
   games(): string[];
   puzzles(game: string): string[];
+  chapters(game: string): string[][];
   puzzle(game: string, id: string): { id: string; band: string; data: unknown } | null;
   board(): unknown;
 };
@@ -41,6 +42,35 @@ export async function openPuzzle(page: Page, game: string, id: string): Promise<
 
 export async function puzzleIds(page: Page, game: string): Promise<string[]> {
   return page.evaluate((g) => window.__puzzles.puzzles(g), game);
+}
+
+/**
+ * A spread of a game's ladder: `per` boards out of every chapter of thirty.
+ *
+ * Five hundred boards a game, solved through real pointer events, is hours of
+ * wall clock for a thing that has already been proven in Node — the unit gate
+ * re-solves every one of the three thousand from the shipped bytes, and does
+ * it in seconds. What only a browser can tell you is whether a board can be
+ * FILLED IN with a thumb, and that is a question about the view and the sizes
+ * of things, which does not change from one board of a chapter to the next.
+ *
+ * So the sample is one per chapter plus the ends: every recipe the game ships,
+ * the easiest board and the hardest of each, and nothing in between. Chosen by
+ * position rather than at random, so a failure is the same failure tomorrow.
+ */
+export async function ladderSpread(page: Page, game: string, per = 2): Promise<string[]> {
+  return page.evaluate(([g, n]) => {
+    const chapters = window.__puzzles.chapters(g as string);
+    const out: string[] = [];
+    for (const ids of chapters) {
+      if (ids.length === 0) continue;
+      for (let k = 0; k < (n as number); k++) {
+        const at = (n as number) === 1 ? 0 : Math.round((k * (ids.length - 1)) / ((n as number) - 1));
+        if (!out.includes(ids[at])) out.push(ids[at]);
+      }
+    }
+    return out;
+  }, [game, per] as [string, number]);
 }
 
 export async function isSolved(page: Page): Promise<boolean> {

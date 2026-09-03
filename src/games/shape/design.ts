@@ -35,6 +35,17 @@ export type Recipe = {
 export function fill(recipe: Recipe, rng: Rng): number[] | null {
   const { w, h, shapes } = recipe;
   if (shapes > w || shapes > h) return null;
+  /*
+   * The board has to be square, and it is arithmetic rather than taste.
+   *
+   * Every row holds one of each shape, so a board with h rows carries
+   * shapes * h marks. Every column holds one of each too, so it carries
+   * shapes * w. Both count the same marks, so w must equal h — a five by four
+   * would need fifteen marks and twelve at the same time. Refused here rather
+   * than searched for: left to the backtracker a rectangle is forty thousand
+   * draws that were never going to work.
+   */
+  if (w !== h) return null;
   const stock = arrangements(w, shapes);
   const grid = new Array<number>(w * h).fill(0);
   const inCol: Uint8Array[] = [];
@@ -92,18 +103,22 @@ export function scoreOf(r: Reading): number {
 }
 
 /*
- * Cut from the measured spread rather than from taste. Over a sample of every
- * size shipped, four by four lands at 68-76, five by five at 90-121, six by
- * six at 119-152 and seven by seven at about 151; the thresholds sit between
- * those groups. scripts/build-shape.ts prints the spread on every run, so if
- * the score ever changes these are re-measured rather than nudged.
+ * Cut at the quartiles of the shipped spread, so each of the four names covers
+ * about a quarter of the ladder and every one of them means something. Read
+ * off the 500 boards this ladder actually makes — min 70, q1 96, median 123,
+ * q3 146, max 172 — rather than from taste. scripts/build-shape.ts prints the
+ * spread on every run, so if the score ever changes these are re-measured
+ * rather than nudged.
  */
 export function bandOf(score: number): Band {
-  if (score < 80) return 'gentle';
-  if (score < 115) return 'steady';
-  if (score < 145) return 'tricky';
+  if (score < 98) return 'gentle';
+  if (score < 125) return 'steady';
+  if (score < 139) return 'tricky';
   return 'severe';
 }
+
+/** How long one chapter may spend looking, before it ships what it has. */
+const CHAPTER_MS = Number(process.env.CHAPTER_MS ?? 300_000);
 
 export type Made = Board & { readonly reading: Reading; readonly nodes: number };
 
@@ -171,28 +186,41 @@ export type Chapter = {
   readonly name: string;
   readonly count: number;
   readonly recipe: Recipe;
-  readonly from: number;
-  readonly to: number;
 };
 
 /**
- * The ladder.
+ * The ladder: seventeen chapters over eleven recipes.
  *
  * Two levers, and they pull in different directions. More shapes in a line
  * means fewer blanks and a tighter puzzle; a bigger board with the same
- * shapes means more blanks and more room for them to hide in. The chapters
- * walk both, and the score window inside each keeps the order honest.
+ * shapes means more blanks and more room for them to hide in.
+ *
+ * Eleven recipes and not seventeen, because the board has to be square (see
+ * `fill`) and five shapes is all the glyph set holds — four sizes by three
+ * shape counts, less the one that does not fit, is every recipe there is. So
+ * six of them are used twice, and the two chapters that share a recipe SPLIT
+ * ITS POOL BY MEASURED SCORE: the first takes the easier half, the second the
+ * harder. That keeps the ladder climbing where the recipes have run out,
+ * without anybody inventing a difficulty window by eye.
  */
 export const LADDER: readonly Chapter[] = [
-  { name: 'Three Shapes', count: 8, recipe: { w: 4, h: 4, shapes: 3 }, from: 0, to: 999 },
-  { name: 'Room to Hide', count: 8, recipe: { w: 5, h: 5, shapes: 3 }, from: 0, to: 105 },
-  { name: 'Deeper In', count: 8, recipe: { w: 5, h: 5, shapes: 3 }, from: 105, to: 999 },
-  { name: 'Four Shapes', count: 8, recipe: { w: 5, h: 5, shapes: 4 }, from: 0, to: 105 },
-  { name: 'One Blank', count: 8, recipe: { w: 5, h: 5, shapes: 4 }, from: 105, to: 999 },
-  { name: 'Six by Six', count: 8, recipe: { w: 6, h: 6, shapes: 4 }, from: 0, to: 138 },
-  { name: 'Two Blanks', count: 8, recipe: { w: 6, h: 6, shapes: 4 }, from: 138, to: 999 },
-  { name: 'Five Shapes', count: 6, recipe: { w: 6, h: 6, shapes: 5 }, from: 0, to: 999 },
-  { name: 'Seven Across', count: 4, recipe: { w: 7, h: 7, shapes: 5 }, from: 0, to: 999 },
+  { name: 'Four in Four', count: 30, recipe: { w: 4, h: 4, shapes: 4 } },
+  { name: 'Three Shapes', count: 30, recipe: { w: 4, h: 4, shapes: 3 } },
+  { name: 'Five in Five', count: 30, recipe: { w: 5, h: 5, shapes: 5 } },
+  { name: 'Four Shapes', count: 30, recipe: { w: 5, h: 5, shapes: 4 } },
+  { name: 'Room to Hide', count: 30, recipe: { w: 5, h: 5, shapes: 3 } },
+  { name: 'Deeper In', count: 30, recipe: { w: 5, h: 5, shapes: 3 } },
+  { name: 'Five Shapes', count: 30, recipe: { w: 6, h: 6, shapes: 5 } },
+  { name: 'One Blank', count: 30, recipe: { w: 5, h: 5, shapes: 4 } },
+  { name: 'Six by Six', count: 30, recipe: { w: 6, h: 6, shapes: 3 } },
+  { name: 'Three in Six', count: 30, recipe: { w: 6, h: 6, shapes: 3 } },
+  { name: 'Two Blanks', count: 30, recipe: { w: 6, h: 6, shapes: 4 } },
+  { name: 'Seven Across', count: 30, recipe: { w: 7, h: 7, shapes: 3 } },
+  { name: 'Four in Six', count: 30, recipe: { w: 6, h: 6, shapes: 4 } },
+  { name: 'Five in Six', count: 30, recipe: { w: 6, h: 6, shapes: 5 } },
+  { name: 'Forty-Nine', count: 30, recipe: { w: 7, h: 7, shapes: 4 } },
+  { name: 'Seven Square', count: 30, recipe: { w: 7, h: 7, shapes: 5 } },
+  { name: 'The Last Shapes', count: 20, recipe: { w: 7, h: 7, shapes: 5 } },
 ];
 
 export type Built = Board & {
@@ -206,40 +234,62 @@ export function buildShape(seed = 'shape-1', onProgress?: (msg: string) => void)
   const out: Built[] = [];
   let no = 0;
 
-  LADDER.forEach((chapter, ci) => {
-    const rng = makeRng(`${seed}:${ci}`);
+  /*
+   * One pool per RECIPE, cut into chapters afterwards.
+   *
+   * Chapters that share a recipe have to divide its difficulty between them,
+   * and the only honest way to do that is to make all of their boards first,
+   * sort the lot by measured score, and hand the easy end to the earlier
+   * chapter. Filling each chapter separately against a score window would need
+   * somebody to have picked the window, and a window picked before the boards
+   * exist is a guess wearing a number.
+   */
+  const key = (r: Recipe) => `${r.w}x${r.h}x${r.shapes}`;
+  const wanted = new Map<string, { recipe: Recipe; count: number }>();
+  for (const chapter of LADDER) {
+    const k = key(chapter.recipe);
+    const had = wanted.get(k);
+    if (had) wanted.set(k, { recipe: had.recipe, count: had.count + chapter.count });
+    else wanted.set(k, { recipe: chapter.recipe, count: chapter.count });
+  }
+
+  const pools = new Map<string, Omit<Built, 'id' | 'chapter'>[]>();
+  for (const [k, { recipe, count }] of wanted) {
+    const rng = makeRng(`${seed}:${k}`);
     const seen = new Set<string>();
-    let made = 0;
+    const pool: Omit<Built, 'id' | 'chapter'>[] = [];
     let tries = 0;
-    while (made < chapter.count && tries < 4000) {
+    const until = Date.now() + CHAPTER_MS;
+    while (pool.length < count && tries < 40_000 && Date.now() < until) {
       tries++;
-      const board = makeShape(chapter.recipe, rng);
+      const board = makeShape(recipe, rng);
       if (!board) continue;
       const score = scoreOf(board.reading);
-      if (score < chapter.from || score >= chapter.to) continue;
-
-      const key = board.clues
+      const print = board.clues
         .map((c) => `${c.side}${c.line}${c.shape}${c.depth}`)
         .sort()
         .join('|');
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      no++;
-      made++;
-      out.push({
+      if (seen.has(print)) continue;
+      seen.add(print);
+      pool.push({
         w: board.w,
         h: board.h,
         shapes: board.shapes,
         clues: board.clues,
         answer: board.answer,
-        id: `shape-${no}`,
         band: bandOf(score),
         score: Math.round(score * 10) / 10,
-        chapter: ci + 1,
       });
     }
-    onProgress?.(`${chapter.name}: ${made}/${chapter.count} in ${tries} draws`);
+    pool.sort((a, b) => a.score - b.score);
+    pools.set(k, pool);
+    onProgress?.(`${k}: ${pool.length}/${count} in ${tries} draws`);
+  }
+
+  LADDER.forEach((chapter, ci) => {
+    const pool = pools.get(key(chapter.recipe)) ?? [];
+    const taken = pool.splice(0, chapter.count);
+    for (const b of taken) out.push({ ...b, chapter: ci + 1, id: `shape-${++no}` });
   });
 
   return out;

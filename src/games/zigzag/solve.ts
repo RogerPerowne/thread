@@ -34,7 +34,7 @@ const DEFAULT_NODES = 400_000;
 
 export function solve(zig: Zig, cap = 2, maxNodes = DEFAULT_NODES): Found {
   const n = zig.w * zig.h;
-  const nbr = adjacency(zig.w, zig.h);
+  const nbr = adjacency(zig.w, zig.h, zig.diagonal !== false);
   const seen = new Uint8Array(n);
   const path: number[] = [];
   const paths: number[][] = [];

@@ -22,7 +22,7 @@ import type { Band } from '../src/platform/types.js';
 
 const SEED = process.env.SEED ?? 'thread-3';
 /** How long any one chapter may spend looking. */
-const CHAPTER_SECONDS = Number(process.env.CHAPTER_SECONDS ?? 180);
+const CHAPTER_SECONDS = Number(process.env.CHAPTER_SECONDS ?? 240);
 
 type Chapter = { readonly name: string; readonly count: number } & Recipe;
 
@@ -37,13 +37,23 @@ type Chapter = { readonly name: string; readonly count: number } & Recipe;
  * is why there is only one ladder now instead of three.
  */
 const LADDER: Chapter[] = [
-  { name: 'Sixteen', count: 8, cols: 4, rows: 4, strands: 2 },
-  { name: 'Twenty', count: 8, cols: 5, rows: 4, strands: 2 },
-  { name: 'Five Square', count: 8, cols: 5, rows: 5, strands: 3 },
-  { name: 'Thirty', count: 8, cols: 6, rows: 5, strands: 3 },
-  { name: 'Thirty-Six', count: 8, cols: 6, rows: 6, strands: 4 },
-  { name: 'Forty-Two', count: 8, cols: 7, rows: 6, strands: 4 },
-  { name: 'Seven Square', count: 8, cols: 7, rows: 7, strands: 5 },
+  { name: 'Sixteen', count: 30, cols: 4, rows: 4, strands: 2 },
+  { name: 'Twenty', count: 30, cols: 5, rows: 4, strands: 2 },
+  { name: 'Three Strings', count: 30, cols: 5, rows: 4, strands: 3 },
+  { name: 'Five Square', count: 30, cols: 5, rows: 5, strands: 2 },
+  { name: 'A Third Colour', count: 30, cols: 5, rows: 5, strands: 3 },
+  { name: 'Thirty', count: 30, cols: 6, rows: 5, strands: 3 },
+  { name: 'Four Strings', count: 30, cols: 6, rows: 5, strands: 4 },
+  { name: 'Thirty-Six', count: 30, cols: 6, rows: 6, strands: 3 },
+  { name: 'Six Square', count: 30, cols: 6, rows: 6, strands: 4 },
+  { name: 'Forty-Two', count: 30, cols: 7, rows: 6, strands: 3 },
+  { name: 'Seven Across', count: 30, cols: 7, rows: 6, strands: 4 },
+  { name: 'Five Strings', count: 30, cols: 7, rows: 6, strands: 5 },
+  { name: 'Forty-Nine', count: 30, cols: 7, rows: 7, strands: 4 },
+  { name: 'Seven Square', count: 30, cols: 7, rows: 7, strands: 5 },
+  { name: 'Fifty-Six', count: 30, cols: 8, rows: 7, strands: 4 },
+  { name: 'The Long Board', count: 30, cols: 8, rows: 7, strands: 5 },
+  { name: 'Every Colour', count: 20, cols: 8, rows: 7, strands: 6 },
 ];
 
 /**
@@ -65,9 +75,9 @@ function fingerprint(b: Board): string {
  * changes these are re-measured rather than nudged.
  */
 export function bandOf(score: number): Band {
-  if (score < 46) return 'gentle';
-  if (score < 50) return 'steady';
-  if (score < 54) return 'tricky';
+  if (score < 48.5) return 'gentle';
+  if (score < 53) return 'steady';
+  if (score < 58) return 'tricky';
   return 'severe';
 }
 

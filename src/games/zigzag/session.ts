@@ -7,7 +7,7 @@
  */
 
 import {
-  judge, firstFault, whatIsLeft, neighbours, wants, type Zig,
+  judge, firstFault, whatIsLeft, stepsFrom, wants, type Zig,
 } from './model.js';
 import { Effort } from '../../platform/signature.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
@@ -45,7 +45,7 @@ export class ZigSession implements Session<ZigState> {
     if (at === undefined) return cell === this.zig.start;
     if (this.path.includes(cell)) return false;
     if (at === this.zig.finish) return false;
-    if (!neighbours(this.zig.w, this.zig.h, at).includes(cell)) return false;
+    if (!stepsFrom(this.zig, at).includes(cell)) return false;
     return this.zig.cells[cell] === wants(this.zig, this.path.length);
   }
 
@@ -108,7 +108,7 @@ export class ZigSession implements Session<ZigState> {
     // the save. Refusing is better than restoring something illegal.
     for (let i = 0; i < path.length; i++) {
       if (this.zig.cells[path[i]] !== wants(this.zig, i)) return false;
-      if (i > 0 && !neighbours(this.zig.w, this.zig.h, path[i - 1]).includes(path[i])) return false;
+      if (i > 0 && !stepsFrom(this.zig, path[i - 1]).includes(path[i])) return false;
     }
     this.path = path;
     this.effort.thaw((effort ?? '').split(',').map(Number));
@@ -139,7 +139,7 @@ export class ZigSession implements Session<ZigState> {
         reason: 'Every line starts here, on the first number of the run.',
       };
     }
-    const moves = neighbours(this.zig.w, this.zig.h, at).filter((c) => this.canGo(c));
+    const moves = stepsFrom(this.zig, at).filter((c) => this.canGo(c));
 
     if (moves.length === 0) {
       return {
@@ -169,7 +169,7 @@ export class ZigSession implements Session<ZigState> {
     let tightest = moves[0];
     let fewest = Infinity;
     for (const m of moves) {
-      const ways = neighbours(this.zig.w, this.zig.h, m).filter((c) => !used.has(c)).length;
+      const ways = stepsFrom(this.zig, m).filter((c) => !used.has(c)).length;
       if (ways < fewest) { fewest = ways; tightest = m; }
     }
     return {

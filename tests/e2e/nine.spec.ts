@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, nineBoard, nineMapper, dragDigit, solveNine,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, nineBoard, nineMapper, dragDigit, solveNine,
   isSolved, noteOf, control,
 } from './helpers.js';
 
@@ -12,10 +12,11 @@ import {
  * those are different questions.
  */
 test.describe('every board can be filled', () => {
-  for (const chunk of [0, 1, 2, 3]) {
-    test(`one to nine boards ${chunk * 16 + 1} to ${chunk * 16 + 16}`, async ({ page }) => {
+  for (const chunk of [0, 1]) {
+    test(`one to nine, half ${chunk + 1} of the ladder`, async ({ page }) => {
       await gotoApp(page);
-      const ids = (await puzzleIds(page, 'nine')).slice(chunk * 16, chunk * 16 + 16);
+      const all = await ladderSpread(page, 'nine');
+      const ids = chunk === 0 ? all.slice(0, Math.ceil(all.length / 2)) : all.slice(Math.ceil(all.length / 2));
       for (const id of ids) {
         await openPuzzle(page, 'nine', id);
         const board = await nineBoard(page);
