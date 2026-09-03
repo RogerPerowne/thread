@@ -165,6 +165,18 @@ export function gameFrame(
    * new board looks fine and simply does not respond.
    */
   let resultTimer = 0;
+  /*
+   * The hint and the board's own sentence, for the same reason as above: a
+   * game's first paint calls `changed`, which reads all four of these, and a
+   * `let` below the mount is in its temporal dead zone at exactly that moment.
+   * Thread and Zigzag paint at mount; Shape Up does not, which is how the
+   * dead zone shipped once and passed one game's tests.
+   */
+  let rung = 0;
+  let lastHint: Hint | null = null;
+  let lastState = '';
+  /** Something the board asked to have read, standing until the next change. */
+  let spoken = false;
 
   // --- the game's own board ------------------------------------------------
   const host: ViewHost = {
@@ -183,10 +195,6 @@ export function gameFrame(
    * moved, and a hint that vanished because the player rested a thumb on the
    * board would be a hint nobody could read to the end.
    */
-  let lastState = '';
-  /** Something the board asked to have read, standing until the next change. */
-  let spoken = false;
-
   function say(text: string): void {
     if (lastHint) dropHint();
     spoken = true;
@@ -302,9 +310,6 @@ export function gameFrame(
    * is dropped with its spotlight, so the next press starts again from where
    * to look on the board that is actually there.
    */
-  let rung = 0;
-  let lastHint: Hint | null = null;
-
   function dropHint(): void {
     lastHint = null;
     rung = 0;
