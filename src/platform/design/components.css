@@ -37,6 +37,16 @@
   text-overflow: ellipsis;
 }
 
+/*
+ * One line, always, whatever is in it.
+ *
+ * "No. 500" has a space in it, so squeezed it breaks after "No." and the bar
+ * grows a second line — and since the clock is beside it, that happened and
+ * unhappened as the seconds ticked, moving the whole board three pixels under
+ * the player's thumb once a second. It only showed once the ladders reached
+ * three digits, on the narrowest phone, which is why the height is now fixed
+ * by construction rather than by the labels happening to be short enough.
+ */
 .gamebar .sub {
   font-size: var(--t-xs);
   color: var(--mute);
@@ -45,7 +55,11 @@
   gap: var(--s2);
   justify-content: center;
   align-items: center;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
 }
+.gamebar .sub > span { overflow: hidden; text-overflow: ellipsis; }
 
 .gamebar .right { display: flex; gap: var(--s1); justify-content: flex-end; }
 

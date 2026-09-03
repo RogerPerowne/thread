@@ -228,8 +228,27 @@ test('a clue only goes red once the line can say so', async ({ page }) => {
    * reddens on the first mark is a board whose red means nothing.
    */
   await gotoApp(page);
-  const ids = await puzzleIds(page, 'shape');
-  await openPuzzle(page, 'shape', ids[2]);
+  /*
+   * A board where the top-left cell is not what a FIRST-shape clue is looking
+   * at, chosen rather than assumed. A clue about the first shape along can be
+   * broken by the first mark, and correctly so — it is the clues about the
+   * second that have to wait, and a board where the corner answers a first
+   * would be testing the opposite of what this is about.
+   */
+  const id = await page.evaluate(() => {
+    for (const pid of window.__puzzles.puzzles('shape')) {
+      const d = window.__puzzles.puzzle('shape', pid)!.data as {
+        clues: { side: string; line: number; depth: number }[];
+      };
+      const watched = d.clues.some(
+        (c) => c.depth === 1 && c.line === 0 && (c.side === 'left' || c.side === 'top'),
+      );
+      if (!watched) return pid;
+    }
+    return null;
+  });
+  expect(id, 'no board leaves its corner unwatched by a first-shape clue').not.toBeNull();
+  await openPuzzle(page, 'shape', id!);
   const board = await shapeBoard(page);
 
   await markCell(page, 0, board.answer[0] === 1 ? 2 : 1);

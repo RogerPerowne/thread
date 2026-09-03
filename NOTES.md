@@ -192,6 +192,23 @@ construction. They are here so the next change does not undo the fix.
   in with a thumb, which is a question about the view and the sizes of things
   and does not change from one board of a chapter to the next. Every board is
   still re-solved from the shipped bytes by the unit gate, in seconds.
+- **The fit audit's routes were a hand-written list claiming to be built from
+  the register.** It named `shape-66` as Shape Up's last board long after that
+  had stopped being true, so the audit was checking a middling board and
+  calling it the biggest. Asked of the running app now — 37 routes instead of
+  20 — and it immediately found a real fault the stale list had been hiding.
+- **"No. 500" wraps, and the whole board jumped once a second.** The bar's
+  subtitle is a flex row, but the text inside a span still breaks: squeezed to
+  320 pixels "No. 500" broke after "No." and the bar grew a second line, then
+  lost it again as the clock ticked to a slightly narrower reading. Three
+  pixels, once a second, under the player's thumb. It could only appear once
+  the ladders reached three digits. `white-space: nowrap` fixes the height by
+  construction rather than by the labels happening to stay short.
+- **A pulsing tile must not move its own tap target.** The tile you are up to
+  breathes sixteen units every few seconds, and the animation was on the group
+  holding the hit rectangle — so the target drifted while a thumb was reaching
+  for it. It is on the ink now. Found because Playwright will not click a
+  moving element, which is the same complaint a person would have.
 - **CI had never run.** `ci.yml` carried a step named `Board gate: every board
   has exactly one answer`, unquoted — and a plain YAML scalar cannot hold a
   colon followed by a space, so GitHub could not read the file. Every run from

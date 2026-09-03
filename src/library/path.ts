@@ -83,6 +83,8 @@ const CLIP = RUN - SHOW;
  */
 const HIT_W = 200;
 const HIT_H = 130;
+/** How far the caption beside a tile reaches, and so how far its target does. */
+const CAP_W = 470;
 
 /*
  * The road, and the tiles standing on it.
@@ -627,6 +629,17 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
     const state = `${row.state}${part ? ' going' : ''}`;
     /* The half that goes under the road: the skirt, and the light around it. */
     const under = svg('g', { class: `ptile ${state}` });
+    /*
+     * The breathing goes on the INK, never on the group holding the tap
+     * target. A tile that is up to something moves sixteen units every three
+     * seconds, and a target that drifts while a thumb is reaching for it is a
+     * target that gets missed — the same argument as the row of controls that
+     * never changes shape. It also means a test can press the tile without
+     * waiting for it to hold still, which is how this was found.
+     */
+    const breathe = svg('g', { class: 'pbreathe' });
+    const breatheUnder = svg('g', { class: 'pbreathe' });
+    under.appendChild(breatheUnder);
     const grp = svg('g', {
       class: `ptile ${state}`,
       role: 'listitem',
@@ -648,29 +661,38 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
      * than something padded on afterwards.
      */
     const [hx, hy] = project(FLAT, g[0], g[1], 0);
+    /*
+     * The target covers the tile AND its caption, because they are one thing:
+     * the chapter's name and how far through it you are is the row you press,
+     * not a label beside a button. Rows are 259 units apart down the meander
+     * and this is 130 tall, so widening it cannot make two of them overlap.
+     */
+    const leftish = hx < VIEW_W / 2;
+    const hitL = leftish ? hx - HIT_W / 2 : hx - HIT_W / 2 - CAP_W;
     grp.appendChild(svg('rect', {
       class: 'hit',
-      x: hx - HIT_W / 2, y: hy - HIT_H / 2, width: HIT_W, height: HIT_H,
+      x: hitL, y: hy - HIT_H / 2, width: HIT_W + CAP_W, height: HIT_H,
     }));
 
     if (row.state === 'now') {
-      under.appendChild(svg('path', {
+      breatheUnder.appendChild(svg('path', {
         class: 'halo',
         fill: 'url(#pathhalo)',
         filter: 'url(#pathglow)',
         d: sweptPath(g, BOT_Z, TOP_Z + GLOW_H, true),
       }));
     }
-    under.appendChild(svg('path', { class: 'side', d: sweptPath(g, BOT_Z, TOP_Z, false) }));
-    grp.append(
+    breatheUnder.appendChild(svg('path', { class: 'side', d: sweptPath(g, BOT_Z, TOP_Z, false) }));
+    breathe.append(
       svg('path', { class: 'top', d: roundPoly(faceQuad(g, TOP_Z), CORNER_R) }),
       svg('path', { class: 'inner', d: roundPoly(faceQuad(g, TOP_Z, 0.5 * 0.675), CORNER_R * 0.86) }),
     );
+    grp.appendChild(breathe);
     const num = svg('text', {
       class: 'pnum', 'text-anchor': 'middle', 'dominant-baseline': 'central',
       transform: faceTransform(g), text: String(row.chapter + 1),
     });
-    grp.appendChild(num);
+    breathe.appendChild(num);
 
     /*
      * The chapter's name and how far through it you are, beside the tile.
@@ -680,7 +702,6 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
      * unreadable for two words. So the caption is upright, in the drawing's
      * own units, on whichever side of the tile has the room.
      */
-    const leftish = hx < VIEW_W / 2;
     const cap = svg('g', {
       class: `pcap ${row.state}`,
       'aria-hidden': 'true',
@@ -782,17 +803,17 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   };
 
   /*
-   * Two lines, and they are different on purpose.
+   * Where a chapter's tile is put when you jump to it: low, so the tile and
+   * its caption sit above the thumb rather than under it.
    *
-   * FOOT is where a chapter's band is put when you jump to it — low, so the
-   * chapter's own tiles fill the screen above it. EYE is where the screen is
-   * READ from, and it has to be higher than that: at either end of the scroll
-   * the view is clamped and the band cannot sit at FOOT any more, so a reading
-   * line down at FOOT ends up below the band and names the chapter you have
-   * just left.
+   * One line now, not two. There used to be a second, higher one to READ the
+   * screen from, because at either end of the scroll the view clamps and a
+   * chapter cannot sit at FOOT any more — so a reading line at FOOT named the
+   * chapter you had just left. The two ends are said outright in
+   * `chapterInView` instead, which is the fact rather than a line placed to
+   * approximate it.
    */
   const FOOT = 0.78;
-  const EYE = 0.5;
 
   /** Where the scroller has to be for chapter `c` to be at the foot of the view. */
   const targetOf = (c: number): number => {
@@ -809,17 +830,29 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   /**
    * Which chapter the view is showing.
    *
-   * The path climbs, so the drawing runs the other way from the list: chapter
-   * one's band has the LARGEST y and the last chapter's the smallest. You are
-   * in the highest-numbered chapter whose band is still below the line you are
-   * reading from — which is the last index satisfying it, because the bands
-   * descend.
+   * In the middle of the scroll it is the chapter the rail would have jumped
+   * to to get here — reading as the inverse of jumping, so the two agree.
+   *
+   * The ends are stated separately, and they have to be. Both limits are
+   * clamped, so at the top every chapter near the end of the ladder wants the
+   * same scroll position and at the foot every chapter near the start does;
+   * measured against the tiles or against the clamped targets, the answer at a
+   * limit is whichever of that tie the loop happened to see first. Scrolled to
+   * the top you are looking at the END of the ladder and scrolled to the foot
+   * at the start of it, so those two are said outright rather than inferred.
    */
   const chapterInView = (): number => {
+    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    if (scroller.scrollTop <= 0) return chapters.length - 1;
+    if (scroller.scrollTop >= max - 1) return 0;
     const k = root.clientWidth / VIEW_W || 1;
-    const line = scroller.scrollTop + scroller.clientHeight * EYE;
+    const line = scroller.scrollTop + scroller.clientHeight * FOOT;
     let c = 0;
-    for (let i = 0; i < chapters.length; i++) if ((bandY[i] ?? 0) * k >= line) c = i;
+    let best = Infinity;
+    for (let i = 0; i < chapters.length; i++) {
+      const away = Math.abs((bandY[i] ?? 0) * k - line);
+      if (away < best) { best = away; c = i; }
+    }
     return c;
   };
 

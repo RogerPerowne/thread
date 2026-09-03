@@ -87,7 +87,7 @@
 /* Transparent rather than absent: `fill: none` is not hit by a pointer. */
 .ptile .hit { fill: transparent; }
 .ptile .top, .ptile .side, .ptile .inner { transition: opacity var(--fast) var(--ease); }
-.ptile.pressed { transform: translateY(9px); }
+.ptile.pressed .pbreathe { transform: translateY(9px); }
 .ptile:focus { outline: none; }
 .ptile:focus-visible .top { stroke: var(--ink); stroke-width: 9; }
 
@@ -133,7 +133,8 @@
   0%, 74%, 100% { transform: translateY(0); }
   84% { transform: translateY(-16px); }
 }
-.ptile.now { animation: ptile-pulse 3.4s var(--ease) infinite; }
+/* On the ink, not on the group with the tap target in it. */
+.ptile.now .pbreathe { animation: ptile-pulse 3.4s var(--ease) infinite; }
 
 /* --- the chapter bands ---------------------------------------------------- */
 /* A ruled divider the path runs behind. A chapter break is a break. */
