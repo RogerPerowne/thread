@@ -18,11 +18,12 @@
  */
 
 import {
-  judge, firstFault, whatIsLeft, sightLine, clueHolds, clueText, type Board,
+  judge, firstFault, whatIsLeft, sightLine, clueHolds, clueText, rowCells, colCells, type Board,
 } from './model.js';
 import { arrangements } from './solve.js';
 import { glyphName } from './glyphs.js';
 import { Effort } from '../../platform/signature.js';
+import { astray } from '../../platform/hint.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
 
 export type ShapeState = { cells: number[] };
@@ -130,48 +131,33 @@ export class ShapeSession implements Session<ShapeState> {
   /**
    * The next useful deduction.
    *
-   * The real one: find the line whose remaining arrangements are fewest given
-   * what is already down. One arrangement left means the line can simply be
-   * written in. None means the mistake is behind you, which is far more use
-   * than being told the board is wrong.
+   * In the order the platform's Hint type lays down. First, anything on the
+   * board that the answer does not have — a shape in the wrong cell, or a cell
+   * marked empty that holds a shape — because a board with one of those on it
+   * has no next step, only a step back. Then a line whose remaining
+   * arrangements are down to one, which can simply be written in. Then the
+   * tightest line, with a clue that actually reads it, and at the third rung
+   * one cell the answer fills.
+   *
+   * Every claim made here is checked against the answer by the hint gate, so
+   * a "forced" that was not would fail the build rather than the player.
    */
   hint(): Hint | null {
     const { board } = this;
-    const { w, h, shapes } = board;
+    const { w, h, shapes, answer } = board;
+    const cells = this.cells;
 
-    /*
-     * A clue the board has already broken comes first, and it comes first
-     * because it is the most useful thing there is to say. Everything below
-     * looks for the next deduction; if a clue is broken there is no next
-     * deduction, only a wrong cell somewhere behind you.
-     */
-    const settled = judge(board, this.cells);
-    if (settled.badClues.length > 0) {
-      const clue = board.clues[settled.badClues[0]];
-      return {
-        focus: sightLine(board, clue.side, clue.line).map((i) => `cell:${i}`),
-        reason: `${clueText(clue, NAMES)} — and it does not, as this line stands.`,
-        move: 'Take something back along the highlighted line.',
-      };
-    }
-    if (settled.badRows.length > 0 || settled.badCols.length > 0) {
-      const isRow = settled.badRows.length > 0;
-      const line = isRow ? settled.badRows[0] : settled.badCols[0];
-      const cells: number[] = [];
-      if (isRow) for (let c = 0; c < w; c++) cells.push(line * w + c);
-      else for (let r = 0; r < h; r++) cells.push(r * w + line);
-      return {
-        focus: cells.map((i) => `cell:${i}`),
-        reason: `That ${isRow ? 'row' : 'column'} has the same shape in it twice.`,
-        move: 'Every line holds one of each, and no more.',
-      };
-    }
+    const wrong = this.astray();
+    if (wrong) return wrong;
+
+    const settled = judge(board, cells);
+    if (settled.solved) return null;
 
     type Cand = { cells: number[]; ways: number[][]; label: string };
     const cands: Cand[] = [];
 
-    const consider = (cells: number[], stock: number[][], label: string): void => {
-      const now = cells.map((i) => this.cells[i]);
+    const consider = (line: number[], stock: number[][], label: string): void => {
+      const now = line.map((i) => cells[i]);
       /* A line with all its shapes down is finished, whether or not its gaps
          are dotted. There is nothing left to deduce there, so pointing at it
          and saying "only one arrangement fits" would be telling the player to
@@ -180,63 +166,83 @@ export class ShapeSession implements Session<ShapeState> {
       const ways = stock.filter((way) => {
         for (let k = 0; k < now.length; k++) if (now[k] !== -1 && now[k] !== way[k]) return false;
         for (const clue of board.clues) {
-          const line = sightLine(board, clue.side, clue.line);
-          if (line.length !== cells.length) continue;
-          if (!line.every((i) => cells.includes(i))) continue;
-          const order = line.map((i) => way[cells.indexOf(i)]);
+          const sight = sightLine(board, clue.side, clue.line);
+          if (sight.length !== line.length) continue;
+          if (!sight.every((i) => line.includes(i))) continue;
+          const order = sight.map((i) => way[line.indexOf(i)]);
           if (clueHolds(order, clue.depth, clue.shape) !== true) return false;
         }
         return true;
       });
-      cands.push({ cells, ways, label });
+      cands.push({ cells: line, ways, label });
     };
 
     const rowStock = arrangements(w, shapes);
     const colStock = arrangements(h, shapes);
-    for (let r = 0; r < h; r++) {
-      const cells: number[] = [];
-      for (let c = 0; c < w; c++) cells.push(r * w + c);
-      consider(cells, rowStock, `row ${r + 1}`);
-    }
-    for (let c = 0; c < w; c++) {
-      const cells: number[] = [];
-      for (let r = 0; r < h; r++) cells.push(r * w + c);
-      consider(cells, colStock, `column ${c + 1}`);
-    }
+    for (let r = 0; r < h; r++) consider(rowCells(board, r), rowStock, `row ${r + 1}`);
+    for (let c = 0; c < w; c++) consider(colCells(board, c), colStock, `column ${c + 1}`);
     if (cands.length === 0) return null;
-
-    const dead = cands.find((c) => c.ways.length === 0);
-    if (dead) {
-      return {
-        focus: dead.cells.map((i) => `cell:${i}`),
-        reason: `Nothing fits ${dead.label} any more, so something already on the board is wrong.`,
-        move: 'Take a mark back and try it elsewhere.',
-      };
-    }
 
     cands.sort((a, b) => a.ways.length - b.ways.length);
     const best = cands[0];
+    /* A line down to one arrangement: the shapes it puts down. Only the
+       shapes are named — its blanks are the player's own notation. */
     if (best.ways.length === 1) {
+      const way = best.ways[0];
+      const marks = best.cells
+        .map((i, k) => (way[k] > 0 && cells[i] !== way[k] ? { i, v: way[k] } : null))
+        .filter((m): m is { i: number; v: number } => m !== null);
       return {
+        kind: 'step',
         focus: best.cells.map((i) => `cell:${i}`),
-        reason: `Only one arrangement still fits ${best.label}.`,
-        move: `It reads ${best.ways[0].map((v) => (v === 0 ? 'blank' : NAMES[v - 1])).join(', ')}.`,
+        reason: `Only one arrangement still fits ${best.label}, given its clues and what is already down.`,
+        move: `Reading along it: ${way.map((v) => (v === 0 ? 'blank' : NAMES[v - 1])).join(', ')}.`,
+        claim: marks.map((m) => `cell:${m.i}=${m.v}`),
       };
     }
 
     /*
-     * Nothing forced. Name the tightest line, and quote a clue that actually
-     * READS that line — an arbitrary clue from the other side of the board is
-     * true and no use, which is what this used to give.
+     * Nothing forced. Name the tightest line and quote a clue that actually
+     * READS that line; at the third rung, one cell of it from the answer —
+     * the first empty one the answer fills, which is a move and not the line.
      */
     const looks = board.clues.find((clue) => {
-      const line = sightLine(board, clue.side, clue.line);
-      return line.length === best.cells.length && line.every((i) => best.cells.includes(i));
+      const sight = sightLine(board, clue.side, clue.line);
+      return sight.length === best.cells.length && sight.every((i) => best.cells.includes(i));
     });
+    const next = best.cells.find((i) => cells[i] <= 0 && answer[i] > 0);
+    const rowOf = (i: number) => ((i / w) | 0) + 1;
+    const colOf = (i: number) => (i % w) + 1;
+    const capital = best.label.charAt(0).toUpperCase() + best.label.slice(1);
     return {
+      kind: 'look',
       focus: best.cells.map((i) => `cell:${i}`),
-      reason: `${best.label.charAt(0).toUpperCase()}${best.label.slice(1)} is the tightest line left — ${best.ways.length} ways to fill it.`,
-      move: looks ? clueText(looks, NAMES) : undefined,
+      reason: looks
+        ? `${capital} is the tightest line left — ${best.ways.length} ways to fill it. ${clueText(looks, NAMES)}.`
+        : `${capital} is the tightest line left — ${best.ways.length} ways to fill it.`,
+      move: next === undefined ? undefined
+        : `The ${NAMES[answer[next] - 1]} goes in row ${rowOf(next)}, column ${colOf(next)}.`,
+      claim: next === undefined ? [] : [`cell:${next}=${answer[next]}`],
     };
+  }
+
+  /**
+   * The first thing on the board that the answer does not have, or null.
+   *
+   * A shape where the answer has a different shape or nothing; or a cell
+   * marked empty where the answer has a shape. An undecided cell is never
+   * wrong, and neither is an empty mark where the answer is empty. Row-major,
+   * so the same wrong board always points at the same cell.
+   */
+  private astray(): Hint | null {
+    const { w, answer } = this.board;
+    for (let i = 0; i < this.cells.length; i++) {
+      const v = this.cells[i];
+      if (v === -1 || v === answer[i]) continue;
+      const where = `row ${((i / w) | 0) + 1}, column ${(i % w) + 1}`;
+      const what = v === 0 ? `The empty mark in ${where}` : `The ${NAMES[v - 1]} in ${where}`;
+      return astray(what, [`cell:${i}`], [`cell:${i}!=${v}`]);
+    }
+    return null;
   }
 }

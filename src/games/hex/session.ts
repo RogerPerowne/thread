@@ -10,6 +10,7 @@
 import { judge, firstFault, whatIsLeft, neighboursOf, agree, type Hex } from './model.js';
 import { analyse } from './solve.js';
 import { Effort } from '../../platform/signature.js';
+import { astray } from '../../platform/hint.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
 
 export type HexState = { placed: number[] };
@@ -169,49 +170,45 @@ export class HexSession implements Session<HexState> {
   /**
    * The next useful deduction.
    *
-   * Three rungs, in the order a person climbs them. A space that nothing fits
-   * means something already down is wrong, and that is worth saying before
-   * anything else. A space that exactly one tile fits is a move you can make
-   * without thinking. Otherwise the best advice is where to look: the emptiest
-   * space with the fewest candidates, named but not answered.
+   * A tile lying where the answer does not put it comes first, whether or
+   * not its numbers happen to agree with its neighbours: every "only tile
+   * that fits" worked out beside it would be worked out against the wrong
+   * tile. Then a space that exactly one tile fits, which is a move you can
+   * make without thinking. Otherwise the best advice is where to look: the
+   * space with the fewest candidates, named but not answered — and at the
+   * third rung, the tile that goes there, described by its faces.
    */
   hint(): Hint | null {
-    const j = judge(this.hex, this.placed);
-    if (j.clashes.length > 0) {
-      const c = j.clashes[0];
-      return {
-        focus: [`cell:${c.a}`, `cell:${c.b}`],
-        reason: 'These two tiles are touching on numbers that do not match.',
-        move: 'Pick one of them up and try it somewhere else.',
-      };
+    const { hex } = this;
+    for (let at = 0; at < this.placed.length; at++) {
+      const t = this.placed[at];
+      if (t >= 0 && t !== hex.answer[at]) {
+        return astray('The tile in the space lit up', [`cell:${at}`], [`cell:${at}!=tile:${t}`]);
+      }
     }
 
     const fits = this.fits();
-    const empty = this.hex.cells.map((_, at) => at).filter((at) => this.placed[at] < 0);
+    const empty = hex.cells.map((_, at) => at).filter((at) => this.placed[at] < 0);
     if (empty.length === 0) return null;
-
-    const dead = empty.find((at) => fits[at].length === 0);
-    if (dead !== undefined) {
-      return {
-        focus: [`cell:${dead}`],
-        reason: 'No tile left will fit this space, so one already down is in the wrong place.',
-        move: 'Take a tile back and try it elsewhere.',
-      };
-    }
 
     empty.sort((a, b) => fits[a].length - fits[b].length);
     const best = empty[0];
     if (fits[best].length === 1) {
       return {
+        kind: 'step',
         focus: [`cell:${best}`, `tile:${fits[best][0]}`],
-        reason: 'Only one tile left agrees with everything around this space.',
+        reason: 'Only one tile left agrees with everything around the space lit up.',
         move: 'It is the tile lit up in the tray.',
+        claim: [`cell:${best}=tile:${fits[best][0]}`],
       };
     }
+    const tile = hex.answer[best];
     return {
+      kind: 'look',
       focus: [`cell:${best}`],
-      reason: `This is the tightest space left — only ${fits[best].length} tiles still fit it.`,
-      move: 'Work out from there, where the most neighbours are already down.',
+      reason: `This is the tightest space left — only ${fits[best].length} tiles still fit it. Work out from where the most neighbours are already down.`,
+      move: `The tile whose faces read ${hex.tiles[tile].join(' ')}, clockwise from the right, goes in the space lit up.`,
+      claim: [`cell:${best}=tile:${tile}`],
     };
   }
 

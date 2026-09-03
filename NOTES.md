@@ -238,3 +238,37 @@ construction. They are here so the next change does not undo the fix.
   onto the tile you pressed and turn its face into the board. `camera.ts` still
   carries everything that needs — `lerpCam`, the pitch and yaw — but the flight
   and the card it hands over to are not wired up.
+
+## Hints, and the way they went wrong
+
+**Every hint reasoned forward from the board as it stood.** That is correct
+on a board that is right and confidently wrong on one that is not, and a board
+is wrong long before it breaks a rule: a shape in a cell the answer gives to
+another, a string along a legal run the answer never uses. Zigzag's "only one
+cell carries a 3 next to the end of the line, so that step is forced" was true
+of the line as drawn and false of the puzzle. The fix is not cleverer
+reasoning; it is checking against the answer first, which every session
+already held. See "Hints that cannot lie" in the README and the gate in
+`tests/unit/hints.test.ts`.
+
+**A hint with no third rung reads as a hint that does not work.** Several
+games gave a reason and no move where nothing was forced, so the third press
+repeated the second. Now every hint names a move — from the answer, at the
+third rung, which is what the rung is for.
+
+## Gestures that had to be taken back
+
+**Shape Up painted.** A drag across the grid wrote the chosen mark into every
+cell it crossed. Efficient on paper; in the hand, a board that fills itself in
+whenever a thumb rests on it to look. One mark per gesture now, where it ends.
+
+**A Thread string could never change ends.** Once it had left one pin, the
+other pin refused every press, and the only way to lay it the other way round
+was Restart, which cleared every other string too. A press on a string's
+unused pin now winds it off and starts it there — one undo step.
+
+**Zigzag never said what the run was.** "1, 2, 3, 4, then 1 again" lived in
+the rules sheet, so a refused step was refused for a reason you had to
+remember. The run strip under the grid says it once and lights the number
+wanted next; the cells the line can legally enter are marked, which is the
+rule applied and not the answer.

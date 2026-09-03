@@ -185,3 +185,19 @@ export function whatIsLeft(zig: Zig, j: Judgement, path: readonly number[]): str
   if (path.length === 0) return 'Start on the marked cell and draw';
   return left === 1 ? 'One cell to go' : `${left} cells to go`;
 }
+
+/**
+ * Does a hint's claim hold in the answer?
+ *
+ * A claim is one cell and one step — "cell:17@4" says the line's fifth cell
+ * is cell 17, and "cell:17!@4" that it is not. Read straight off the shipped
+ * route, apart from the reasoning the hint did to arrive at it.
+ */
+export function claimHolds(zig: Zig, claim: string): boolean {
+  const m = /^cell:(\d+)(!?@)(\d+)$/.exec(claim);
+  if (!m) return false;
+  const cell = Number(m[1]);
+  const step = Number(m[3]);
+  if (step < 0 || step >= zig.answer.length) return false;
+  return m[2] === '@' ? zig.answer[step] === cell : zig.answer[step] !== cell;
+}

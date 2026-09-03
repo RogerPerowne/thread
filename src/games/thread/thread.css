@@ -90,6 +90,24 @@
 }
 .pin { fill: none; stroke-width: 0; }
 /*
+ * The loose end of the string being worked on. Its ring breathes in the
+ * string's own colour: the one post on the board that says "from here". It
+ * is the pinned end's ring at a lighter weight, so on a string that has only
+ * just been started the two are one ring rather than two.
+ */
+.pin.live {
+  stroke: var(--ink, currentColor);
+  stroke-width: 1.2;
+  animation: live var(--look) ease-in-out infinite;
+}
+@keyframes live {
+  0%, 100% { stroke-opacity: 0.35; }
+  50% { stroke-opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin.live { animation: none; stroke-opacity: 0.8; }
+}
+/*
  * A pinned end wears its string's colour, solid. On a Coloured or Grid board
  * that is the only instruction there is — two dots of one colour say "join
  * these" without a word of text — so it has to be readable at the size a post

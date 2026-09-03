@@ -165,24 +165,62 @@ export function gameFrame(
    * new board looks fine and simply does not respond.
    */
   let resultTimer = 0;
+  /*
+   * The hint and the board's own sentence, for the same reason as above: a
+   * game's first paint calls `changed`, which reads all four of these, and a
+   * `let` below the mount is in its temporal dead zone at exactly that moment.
+   * Thread and Zigzag paint at mount; Shape Up does not, which is how the
+   * dead zone shipped once and passed one game's tests.
+   */
+  let rung = 0;
+  let lastHint: Hint | null = null;
+  let lastState = '';
+  /** Something the board asked to have read, standing until the next change. */
+  let spoken = false;
 
   // --- the game's own board ------------------------------------------------
   const host: ViewHost = {
     changed,
     solved: () => { /* the frame notices from the verdict; games need not tell it twice */ },
     buzz: (kind) => haptics[kind](),
+    say,
     stillness: still(),
   };
   const view: View = game.mount(stage, session, host);
 
   // --- keeping up ----------------------------------------------------------
+  /*
+   * What the board looked like at the last change, so a repaint can be told
+   * from a change. A game paints on every pointer-up whether or not anything
+   * moved, and a hint that vanished because the player rested a thumb on the
+   * board would be a hint nobody could read to the end.
+   */
+  function say(text: string): void {
+    if (lastHint) dropHint();
+    spoken = true;
+    note.replaceChildren(text);
+    note.classList.add('said');
+    note.classList.remove('bad', 'good');
+  }
+
   function changed(): void {
     const v = session.verdict();
+    const now = JSON.stringify(session.state);
+    if (now !== lastState) {
+      lastState = now;
+      /* The board moved on. A spotlight left standing would light up a place
+         the hint was about on a board that no longer exists, and a sentence
+         the board asked to have read was about that board too. */
+      if (lastHint) dropHint();
+      if (spoken) { spoken = false; note.classList.remove('said'); }
+    }
     /* "The answer" only while the board still IS the answer. Take the reveal
        back and the note goes back to saying what is left, because it is. */
-    note.textContent = gaveUp && v.solved ? 'The answer'
-      : v.solved ? 'Solved' : (v.fault || v.left);
-    note.classList.toggle('bad', !v.solved && v.fault !== '');
+    if (!lastHint && !spoken) {
+      note.replaceChildren(gaveUp && v.solved ? 'The answer'
+        : v.solved ? 'Solved' : (v.fault || v.left));
+    }
+    note.classList.toggle('bad', !lastHint && !spoken && !v.solved && v.fault !== '');
     note.classList.toggle('good', v.solved && !gaveUp);
     bar2.set(v.progress);
 
@@ -262,36 +300,50 @@ export function gameFrame(
   }
 
   // --- hints ---------------------------------------------------------------
-  let rung = 0;
-  let lastHint: Hint | null = null;
+  /*
+   * Three rungs, climbed by pressing again: where to look, then why, then the
+   * move. The rung is written on the note — "1 of 3" — because a hint that
+   * says "Look here" and nothing about there being more to ask for is one
+   * most people press once and give up on.
+   *
+   * The rung belongs to the board as it stands. Change anything and the hint
+   * is dropped with its spotlight, so the next press starts again from where
+   * to look on the board that is actually there.
+   */
+  function dropHint(): void {
+    lastHint = null;
+    rung = 0;
+    note.classList.remove('hint');
+    view.spotlight([]);
+  }
+  /* Pressing Hint while the board is still saying something: the hint wins,
+     and the sentence goes with the next change like it always would. */
 
   function showHint(): void {
+    if (spoken) { spoken = false; note.classList.remove('said'); }
     const hint = session.hint();
     if (!hint) {
       /* The shell does not know what this game is made of, so it cannot say
          what to put down next. It used to try, in Thread's words, on all six
          boards. */
-      note.textContent = 'Nothing to point at from here';
+      dropHint();
+      note.replaceChildren('Nothing to point at from here');
       return;
     }
-    if (lastHint && hint.reason === lastHint.reason) rung = Math.min(rung + 1, 2);
-    else rung = 0;
+    rung = lastHint ? Math.min(rung + 1, 2) : 0;
     lastHint = hint;
 
     view.spotlight(hint.focus);
-    if (rung === 0) {
-      note.textContent = 'Look here';
-    } else if (rung === 1 || !hint.move) {
-      note.textContent = hint.reason;
-    } else {
-      note.textContent = hint.move;
-    }
-    /*
-     * Escalating rather than answering: press once and the board shows you
-     * where to look, press again and it says why, press a third time and only
-     * then does it name the move. A hint that reveals the answer on the first
-     * press is not a hint, it is a quit button.
-     */
+    const text = rung === 0 ? 'Look here'
+      : rung === 1 || !hint.move ? hint.reason
+      : hint.move;
+    note.replaceChildren(
+      h('b', { class: 'rung', text: `${Math.min(rung, hint.move ? 2 : 1) + 1} of ${hint.move ? 3 : 2}` }),
+      text,
+    );
+    note.classList.add('hint');
+    note.classList.toggle('bad', hint.kind === 'fix' && rung > 0);
+    note.classList.remove('good');
   }
 
   // --- giving up ------------------------------------------------------------

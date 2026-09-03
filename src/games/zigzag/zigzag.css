@@ -14,6 +14,36 @@
   transition: fill var(--fast) var(--ease);
 }
 .zig-cell.on { fill: var(--wash); }
+/*
+ * A cell the line can step into next: touching the end of the line, carrying
+ * the number the run wants, not yet used. The rule applied, not the answer.
+ * An inset ring in the game's colour, faint, so the field of numbers stays
+ * the design and the options read as an underline rather than a shout.
+ */
+.zig-cell.can {
+  stroke: var(--accent);
+  stroke-width: 0.55;
+  stroke-opacity: 0.55;
+  transition: stroke-opacity var(--fast) var(--ease);
+}
+
+/* --- the run strip -------------------------------------------------------- */
+.zig-runbox {
+  fill: var(--paper-2);
+  transition: fill var(--fast) var(--ease);
+}
+.zig-runnum {
+  font-family: var(--num);
+  font-size: 3.6px;
+  font-weight: 700;
+  fill: var(--mute);
+  pointer-events: none;
+  transition: fill var(--fast) var(--ease);
+}
+/* The number wanted next. Filled in the game's colour with the numeral in
+   paper: the one thing on the strip that is an instruction. */
+.zig-runbox.next { fill: var(--accent); }
+.zig-runbox.next + .zig-runnum { fill: var(--paper); }
 
 /* A refused step. The cell flinches rather than the board shouting. */
 .zig-cell.no { animation: zig-no var(--pulse) var(--ease); }

@@ -12,6 +12,7 @@ import {
 } from './model.js';
 import { analyse, nextStep } from './solve.js';
 import { Effort } from '../../platform/signature.js';
+import { astray } from '../../platform/hint.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
 
 export type IsolateState = { walls: number[] };
@@ -128,58 +129,63 @@ export class IsolateSession implements Session<IsolateState> {
   /**
    * The next useful deduction.
    *
-   * A room that already holds what it wants is finished, so everything round
-   * it has to be a wall — that is the deduction this game is made of, and it
-   * is the one worth pointing at. Failing that: a piece of the grid that
-   * cannot be finished as it stands has one way left to grow, and that line
-   * cannot be a wall.
-   *
-   * Nothing here reveals the answer. Both are read off what is drawn.
+   * A wall the answer leaves open comes first. The rooms either side of it
+   * may look fine, but the crossing-out below reasons from the walls as
+   * premises, and a wrong premise makes every conclusion after it worthless.
+   * Then the next line the crossing-out can settle that the player has not,
+   * with the reason it was settled, in the words a person would use —
+   * because "this line is a wall" without the why is an answer rather than a
+   * hint. And when nothing is forced: the cross that still wants its two
+   * walls, with one of them named at the third rung.
    */
   hint(): Hint | null {
     const { board } = this;
     const { w, h } = board;
-    const j = judge(board, this.walls);
-    /* A finished board has nothing left to point at, and saying "this line
-       stays open" about a board that is already right is noise. */
-    if (j.solved) return null;
-    if (j.wrong.length > 0) {
-      return {
-        focus: j.wrong[0].map((c) => `cell:${c}`),
-        reason: `${firstFault(j)}.`,
-        move: 'Change a wall round that room and the rest can be worked on again.',
-      };
+    const answer = new Set(board.answer);
+    for (const edge of [...this.walls].sort((a, b) => a - b)) {
+      if (answer.has(edge)) continue;
+      const [a, b] = cellsOf(w, h, edge);
+      return astray('The wall between the two cells lit up', [`cell:${a}`, `cell:${b}`], [`edge:${edge}=open`]);
     }
 
-    /*
-     * The next line the crossing-out can settle that the player has not. It
-     * comes with the reason it was settled, in the words a person would use,
-     * because "this line is a wall" without the why is an answer rather than
-     * a hint.
-     */
+    const j = judge(board, this.walls);
+    if (j.solved) return null;
+
     const step = nextStep(board, [...this.walls]);
     if (step) {
       const [a, b] = cellsOf(w, h, step.edge);
       return {
+        kind: 'step',
         focus: [`cell:${a}`, `cell:${b}`],
         reason: step.reason,
         move: step.wall
           ? 'Draw a wall on the line between the two cells lit up.'
           : 'Leave the line between the two cells lit up open.',
+        claim: [`edge:${step.edge}=${step.wall ? 'wall' : 'open'}`],
       };
     }
 
-    /* Nothing is forced. Point at the corner that still wants its two walls,
-       because that is a fact about a place rather than about the whole board. */
-    if (j.waiting.length > 0) {
-      const corner = j.waiting[0];
-      const [a] = cellsOf(w, h, edgesAtCorner(w, h, corner)[0]);
-      return {
-        focus: [`corner:${corner}`, `cell:${a}`],
-        reason: 'At least two walls have to meet at this cross, and fewer than two do.',
-      };
-    }
-    return null;
+    /*
+     * Nothing is forced. Point at a cross that still wants its two walls,
+     * because that is a fact about a place rather than about the whole board,
+     * and name one of the answer's walls at it — or, if the answer has none
+     * left to draw there, the first it has left to draw anywhere.
+     */
+    const corner = j.waiting[0];
+    const wanted = board.answer.find((e) => !this.walls.has(e)
+      && (corner === undefined || edgesAtCorner(w, h, corner).includes(e)))
+      ?? board.answer.find((e) => !this.walls.has(e));
+    if (wanted === undefined) return null;
+    const [a, b] = cellsOf(w, h, wanted);
+    return {
+      kind: 'look',
+      focus: [...(corner === undefined ? [] : [`corner:${corner}`]), `cell:${a}`, `cell:${b}`],
+      reason: corner === undefined
+        ? 'Nothing is forced just now. Every room has to hold exactly one circle, so look for a cell that only one circle can still reach.'
+        : 'At least two walls have to meet at this cross, and fewer than two do — one of them runs between the two cells lit up.',
+      move: 'Draw a wall on the line between the two cells lit up.',
+      claim: [`edge:${wanted}=wall`],
+    };
   }
 
   /** For the gate and the tests: does deduction alone finish this board? */

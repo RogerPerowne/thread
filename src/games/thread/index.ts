@@ -111,6 +111,7 @@ export const thread: GamePackage<Board, ThreadState> = {
       'Each string joins its own two ends. Two dots of one colour say which.',
       'String runs from a post to the one next to it, and never through a wall.',
       'Point at a post to lay string to it; point at one the string already passes through to end it there.',
+      'The string you are working on wears a ring on its loose end. Press a string\'s other end to start it again from there.',
     ],
   },
   puzzles: () => puzzles,

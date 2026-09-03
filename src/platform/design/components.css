@@ -207,6 +207,29 @@
 }
 .note.bad { color: var(--bad); font-weight: 600; }
 .note.good { color: var(--good); font-weight: 700; }
+/*
+ * A hint on the note. It reads in ink rather than in the mute, because it is
+ * something the player asked for rather than a status, and it carries its rung
+ * — "2 of 3" — so pressing again is plainly an option. The rung is a small
+ * badge in the game's colour, and it is the only place the accent appears in
+ * the note.
+ */
+.note.hint { color: var(--ink); gap: var(--s2); }
+/* Something the board asked to have read: a clue in words, a rule at the
+   place it applies. In ink, like a hint, because it was asked for. */
+.note.said { color: var(--ink); }
+.note .rung {
+  flex: 0 0 auto;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: var(--accent, var(--ink));
+  background: color-mix(in srgb, var(--accent, var(--ink)) 14%, transparent);
+}
+.note.hint.bad .rung { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
 
 .meter {
   flex: 1;

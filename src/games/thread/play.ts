@@ -48,6 +48,12 @@ export function mountThread(
   let active = -1;
   /** Is a press in progress? */
   let holding = false;
+  /**
+   * Is the post being reached the one the finger came DOWN on? A press means
+   * more than a sweep: a sweep across a string's far pin is a thumb passing
+   * by, a press on it is "start this string from here".
+   */
+  let pressed = false;
   /** Where the thumb was at the last sample, so the gap can be walked. */
   let lastAt: { x: number; y: number } | null = null;
   /*
@@ -99,7 +105,14 @@ export function mountThread(
    */
   function paint(): void {
     paths = session.paths;
-    view.update(paths, session.raw());
+    const v = session.raw();
+    view.update(paths, v);
+    /* The string being worked on wears a ring on its loose end, so a refused
+       press on a bare post has a visible reason: THIS is the string that
+       could not reach it. Nothing while a string is finished, and nothing on
+       a solved board. */
+    const head = active >= 0 && !isDone(active) && !v.solved ? headOf(active) : -1;
+    view.setActive(head, active >= 0 ? board.strands[active].color : '');
     host.changed();
   }
 
@@ -137,6 +150,9 @@ export function mountThread(
   /** Begin a strand's string at one of its pinned ends. */
   function startAt(strand: number, post: number): void {
     session.mark();
+    /* Whatever was laid from the other end comes off first, wound back
+       towards where it started, so a string does not simply jump ends. */
+    if (paths[strand].length > 1) view.retract(strand, paths[strand]);
     paths[strand] = [post];
     refused = -1;
     view.flashPost(post);
@@ -191,10 +207,17 @@ export function mountThread(
      * A pinned end belongs to its own string and to no other. Pointing at one
      * means "this string now" — never "run the string I am holding into
      * somebody else's end".
+     *
+     * And PRESSING a pin its string has not reached means "from here". A
+     * string that has left one end used to be stuck with that end for good:
+     * the other pin answered every press with a refusal, and the only way to
+     * lay the string the other way round was Restart, which took every other
+     * string with it. Now a press on the unused pin winds the string off and
+     * starts it there — one undo step, like any other move.
      */
     if (pin >= 0 && pin !== active) {
       active = pin;
-      if (paths[pin].length === 0) startAt(pin, post);
+      if (paths[pin].length === 0 || (pressed && !paths[pin].includes(post))) startAt(pin, post);
       else paint();
       return;
     }
@@ -204,6 +227,7 @@ export function mountThread(
     // Our own far pin, arrived at from an impossible angle, or a bare post
     // with nothing that can reach it.
     if (pin >= 0 && paths[pin].length === 0) { active = pin; startAt(pin, post); return; }
+    if (pin >= 0 && pin === active && pressed && !paths[pin].includes(post)) { startAt(pin, post); return; }
     refuse(post);
   }
 
@@ -271,8 +295,11 @@ export function mountThread(
     session.openGesture();
     refused = -1;
 
-    if (post >= 0) reach(post);
-    else {
+    if (post >= 0) {
+      pressed = true;
+      reach(post);
+      pressed = false;
+    } else {
       /*
        * Not on a post: the string itself may still have been grabbed, between
        * two of them. That ends it at the nearer post, which is the same rule
@@ -375,7 +402,9 @@ export function mountThread(
     if (e.key === 'Enter' || e.key === ' ') {
       // The same verb the thumb uses, so the keyboard is not a second game.
       session.openGesture();
+      pressed = true;
       reach(cursor);
+      pressed = false;
       e.preventDefault();
       return;
     }
@@ -418,8 +447,11 @@ export function mountThread(
 
     /** Something outside changed the state: undo, redo, restart, a resume. */
     refresh() {
-      paths = session.paths;
-      view.update(paths, session.raw());
+      /* Undo, restart, reveal: the string that was being worked on may no
+         longer exist in the same shape, so the marker is redrawn from what
+         is there rather than from what was being done. */
+      if (active >= 0 && session.paths[active].length === 0) active = -1;
+      paint();
     },
 
     /**

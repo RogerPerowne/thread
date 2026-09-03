@@ -215,3 +215,13 @@ export function whatIsLeft(nine: Nine, j: Judgement): string {
   if (done > 0) return `${done} of ${nine.n * 2} lines out, ${left} to place`;
   return left === 1 ? 'One digit to place' : `${left} digits to place`;
 }
+
+/** Does a hint's claim hold in the answer? "cell:4=7", or "cell:4!=7". */
+export function claimHolds(nine: Nine, claim: string): boolean {
+  const m = /^cell:(\d+)(!?=)(\d+)$/.exec(claim);
+  if (!m) return false;
+  const cell = Number(m[1]);
+  const digit = Number(m[3]);
+  if (cell < 0 || cell >= nine.answer.length) return false;
+  return m[2] === '=' ? nine.answer[cell] === digit : nine.answer[cell] !== digit;
+}

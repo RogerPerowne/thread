@@ -25,29 +25,75 @@
 .shape-glyph { fill: var(--ink); }
 
 /*
- * A cell the player has decided is empty. A small dot, not nothing: "I have
- * settled this and it holds no shape" and "I have not looked at this yet" are
- * different states and the board has to show both, or half the deduction
- * cannot be written down.
+ * A cell the player has decided is empty. A small cross, not nothing and not
+ * a dot: "I have settled this and it holds no shape" and "I have not looked
+ * at this yet" are different states and the board has to show both, or half
+ * the deduction cannot be written down — and a cross is the one mark that
+ * everybody already reads as "no". A dot read as a mark, and as the same
+ * thing the clues used to count with.
  */
-.shape-blank { fill: var(--line-2); }
+.shape-blank {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+/* The cell a carried mark is over: where it will land if let go. */
+.shape-hole.under { fill: var(--wash); }
+
+/*
+ * A clue being read out. Its cells light one after another in the order the
+ * clue looks along them, so "looking in from the left" is something you watch
+ * happen rather than something you are told.
+ */
+.shape-hole.read {
+  animation: shape-read var(--slow) var(--ease) 2 alternate;
+  animation-delay: calc(var(--i, 0) * var(--stagger) * 3);
+}
+@keyframes shape-read {
+  from { fill: var(--paper-2); }
+  to { fill: var(--wash-3); }
+}
 
 /* --- the clues ------------------------------------------------------------ */
+.shape-clue { cursor: pointer; }
+.shape-cluebed { fill: transparent; }
 .shape-clue .shape-glyph {
   fill: var(--ink-2);
   transition: fill var(--fast) var(--ease);
 }
-.shape-pip { fill: var(--mute); transition: fill var(--fast) var(--ease); }
+/* The count: which shape along the line the clue means. A numeral, because a
+   count should look like one. */
+.shape-count {
+  font-family: var(--num);
+  font-size: 5.6px;
+  font-weight: 700;
+  fill: var(--ink-2);
+  pointer-events: none;
+  transition: fill var(--fast) var(--ease);
+}
+/* The chevron, pointing into the grid: which way the clue is looking. */
+.shape-chev {
+  fill: none;
+  stroke: var(--mute);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke var(--fast) var(--ease);
+}
 
 /* A clue that the board has satisfied fades back: it has done its work and
    there is no reason for it to keep asking to be read. */
 .shape-clue.out .shape-glyph { fill: var(--line-2); }
-.shape-clue.out .shape-pip { fill: var(--line-2); }
+.shape-clue.out .shape-count { fill: var(--line-2); }
+.shape-clue.out .shape-chev { stroke: var(--line-2); }
 
 /* One the board has definitely broken. The only red here, and it can only
    appear once the cells it reads are settled far enough in to tell. */
 .shape-clue.off .shape-glyph { fill: var(--bad); }
-.shape-clue.off .shape-pip { fill: var(--bad); }
+.shape-clue.off .shape-count { fill: var(--bad); }
+.shape-clue.off .shape-chev { stroke: var(--bad); }
 
 /* --- the palette ---------------------------------------------------------- */
 /*
@@ -69,7 +115,7 @@
    outline is a chip with a slightly thicker edge and a fill is the answer. */
 .shape-chip.on .shape-chipbg { fill: var(--accent); stroke: var(--accent); }
 .shape-chip.on .shape-glyph { fill: var(--paper); }
-.shape-chip.on .shape-blank { fill: var(--paper); }
+.shape-chip.on .shape-blank { stroke: var(--paper); }
 
 /*
  * A chip whose shape is all on the board. There are `h` of each and no more,
@@ -90,7 +136,7 @@
  */
 .shape-carry { pointer-events: none; }
 .shape-carry .shape-glyph { fill: var(--ink); opacity: 0.72; }
-.shape-carry .shape-blank { fill: var(--ink-2); opacity: 0.72; }
+.shape-carry .shape-blank { stroke: var(--ink-2); opacity: 0.72; }
 
 /* --- a line that is finished ----------------------------------------------- */
 /*

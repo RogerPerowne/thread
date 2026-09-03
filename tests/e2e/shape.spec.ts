@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, ladderSpread, shapeBoard, shapeMapper, markCell, paintCells,
-  pickMark, solveShape, isSolved, noteOf, control,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, shapeBoard, shapeMapper, markCell, dragCell,
+  tapClue, pickMark, solveShape, isSolved, noteOf, control,
 } from './helpers.js';
 
 /**
@@ -68,23 +68,66 @@ test('a chip is chosen once and then put down as often as you like', async ({ pa
   await expect(page.locator('.shape-marks .shape-blank')).toHaveCount(1);
 });
 
-test('a drag paints a run of cells with one mark', async ({ page }) => {
+test('a drag never writes on the cells it crosses', async ({ page }) => {
+  /*
+   * A finger moving over a puzzle is nearly always a finger thinking. This
+   * used to paint every cell the drag crossed, so a board could not tell
+   * looking from writing; now a gesture puts down exactly one mark, where it
+   * ends. Here a mark is dragged from its cell across two others, and the
+   * two it crossed are exactly as they were.
+   */
   await gotoApp(page);
   const ids = await puzzleIds(page, 'shape');
   await openPuzzle(page, 'shape', ids[0]);
   const board = await shapeBoard(page);
+  expect(board.w).toBeGreaterThanOrEqual(4);
   const cells = () => page.evaluate(
     () => (window.__puzzles.board() as { cells(): number[] }).cells(),
   );
 
-  const row = [0, 1, 2].slice(0, board.w);
-  await paintCells(page, row, 0);
-  for (const i of row) expect((await cells())[i]).toBe(0);
+  await markCell(page, 0, 2);
+  await dragCell(page, 0, 3, [1, 2]);
+  const after = await cells();
+  expect(after[0], 'the moved mark is still where it came from').toBe(-1);
+  expect(after[1], 'the drag wrote on a cell it crossed').toBe(-1);
+  expect(after[2], 'the drag wrote on a cell it crossed').toBe(-1);
+  expect(after[3], 'the mark did not land where it was dropped').toBe(2);
 
-  /* And a drag that starts on a cell already holding the mark rubs the whole
-     run out, rather than changing its mind halfway along. */
-  await paintCells(page, row, 0);
-  for (const i of row) expect((await cells())[i]).toBe(-1);
+  /* And dragged off the grid, it is simply taken away. */
+  const at = await shapeMapper(page);
+  const box = await page.evaluate(
+    () => (window.__puzzles.board() as { cellBox(c: number): { x: number; y: number; size: number } }).cellBox(3),
+  );
+  const from = at(box.x + box.size / 2, box.y + box.size / 2);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  const off = at(-6, box.y + box.size / 2);
+  await page.mouse.move(off.x, off.y, { steps: 4 });
+  await page.mouse.up();
+  expect((await cells())[3]).toBe(-1);
+});
+
+test('a clue reads itself out when pressed', async ({ page }) => {
+  /*
+   * "2 ▲ ›" is a triangle with a count and an arrow. What it MEANS is a
+   * sentence, and the board says the sentence when asked — with the cells
+   * of the line lighting in the order the clue looks along them.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'shape');
+  await openPuzzle(page, 'shape', ids[0]);
+  const board = await shapeBoard(page);
+  const k = board.clues.findIndex((c) => c.depth === 2);
+  expect(k).toBeGreaterThanOrEqual(0);
+  await tapClue(page, k);
+  await expect(noteOf(page)).toContainText('second shape');
+  const line = await page.evaluate(
+    (c) => (window.__puzzles.board() as { sight(side: string, line: number): number[] }).sight(c.side, c.line),
+    board.clues[k],
+  );
+  await expect(page.locator('.shape-hole.read')).toHaveCount(line.length);
+  /* Reading a clue changes nothing on the board, so nothing to undo. */
+  await expect(control(page, 'Undo')).toBeDisabled();
 });
 
 test('the palette is where it was last time, and its chips fit a thumb', async ({ page }) => {
@@ -155,8 +198,8 @@ test('a shape can be dragged straight from the palette onto a cell', async ({ pa
   await page.mouse.up();
 
   const back = await cells();
-  expect(back[4], 'the drag did not paint the cells it crossed').toBe(2);
-  expect(back[5]).toBe(2);
+  expect(back[4], 'the drag wrote on a cell it only crossed').toBe(-1);
+  expect(back[5], 'the mark did not land where it was let go').toBe(2);
   /* And it is put down, not still being carried. */
   await expect(page.locator('.shape-carry .shape-glyph')).toHaveCount(0);
 });

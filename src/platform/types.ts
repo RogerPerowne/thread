@@ -87,14 +87,36 @@ export type Verdict = {
  * requests and answering the second when asked the first spoils the puzzle.
  * A hint never reveals the answer at rung one or two; rung three reveals one
  * move, not the solution.
+ *
+ * And a hint is TRUE, which is a stronger thing than it sounds. Every game
+ * here is built answer-first, so the session holding the board also holds the
+ * one answer it was cut from — and a hint that can be checked against that
+ * answer is one that never lies, where a hint that only follows its own
+ * reasoning lies the moment the reasoning starts from a wrong move. Three
+ * kinds, in the order they are looked for:
+ *
+ *   fix   Something already down is not in the answer. Said first, because a
+ *         board with a wrong move on it has no next step, only a step back —
+ *         and every deduction made past that point would be confidently wrong.
+ *   step  A move that is forced by what is on the board, with the reason.
+ *   look  Nothing is forced. Where the board is tightest, which is a true
+ *         thing to say; and at the third rung, one move the answer makes.
+ *
+ * `claim` is the hint's advice in the board's own vocabulary — "cell:5=3",
+ * "post:4-9", "edge:12=wall" — so a test can hold every hint a game can give
+ * to the shipped answer rather than believing the prose. What a claim looks
+ * like is each game's own business; that it holds is the platform's.
  */
 export type Hint = {
+  readonly kind: 'fix' | 'step' | 'look';
   /** Rung 1: where to look. The renderer highlights these. */
   readonly focus: readonly string[];
   /** Rung 2: the deduction, in plain words. */
   readonly reason: string;
   /** Rung 3: the move itself, if the player insists. */
   readonly move?: string;
+  /** What the move asserts about the answer, checkable. Empty means "nothing". */
+  readonly claim: readonly string[];
 };
 
 /** A step in a game's tutorial: one idea, performed rather than read. */
@@ -157,6 +179,16 @@ export type ViewHost = {
   solved(): void;
   /** Ask for a beat of haptic feedback, if the device does that. */
   buzz(kind: 'tick' | 'notch' | 'tie' | 'bump' | 'win'): void;
+  /**
+   * A sentence the board wants read, put on the note until the next change.
+   *
+   * The note is the platform's, and the one place words go on a playing
+   * screen; a board that drew its own caption would be a second voice. So a
+   * board that has something to say — a clue tapped and read out, a rule
+   * explained at the place it applies — says it here, and the shell shows it
+   * the way it shows a hint: standing until the board moves on.
+   */
+  say(text: string): void;
   /** True when the player has asked for less movement. */
   readonly stillness: boolean;
 };

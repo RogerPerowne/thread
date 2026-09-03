@@ -1,29 +1,39 @@
 /**
  * Shape Up's board.
  *
- * Pick up a shape, then put it wherever it goes — the same two-part move as
- * One to Nine and Hexagony, and for the same reason: on a board of thirty-six
+ * Pick up a shape, then put it where it goes — the same two-part move as One
+ * to Nine and Hexagony, and for the same reason: on a board of thirty-six
  * cells you are rarely placing one mark, you are placing six of the same kind
- * and then six of the next.
+ * and then six of the next. A palette costs one press to choose and then one
+ * tap per cell, the choice stays where it was put, and tapping a cell that
+ * already holds the chosen mark takes it off again, so rubbing out is the same
+ * gesture as writing and there is no eraser to find.
  *
- * This used to open a ring of options around whatever cell you pressed. A ring
- * is a fine menu and it was the wrong idea here. Every mark cost a press, a
- * pause and an aimed second press at a target the size of a thumbnail that had
- * just appeared under the thumb already covering it; the ring had to dodge the
- * edges of the board, so where an option was depended on where you pressed;
- * and filling a row of empties — the commonest thing anybody does — was that
- * whole dance, six times over.
+ * ONE MARK PER GESTURE. This used to paint: a drag across the grid wrote the
+ * chosen mark into every cell it crossed, which sounds efficient and plays as
+ * a board that fills itself in whenever a thumb rests on it to look. A finger
+ * moving over a puzzle is nearly always a finger THINKING, and a board that
+ * cannot tell thinking from writing is one you hold your hand away from. So a
+ * gesture puts down exactly one mark, where it ends:
  *
- * A palette costs one press to choose and then one tap per cell, the choice
- * stays where it was put, and a drag paints a whole run of cells. Tapping a
- * cell that already holds the chosen mark takes it off again, so rubbing out
- * is the same gesture as writing and there is no eraser to find.
+ *   - tap a chip, then tap a cell: the mark goes in that cell;
+ *   - press a chip and drag onto the grid: the mark is carried under the
+ *     finger and goes in the cell it is let go over, and nowhere on the way;
+ *   - press a mark already on the grid and drag: it is picked up and moved
+ *     to wherever it is dropped, or off the grid to take it away.
  *
- * There are three gestures now and they are one gesture. Tap a chip to choose;
- * tap cells to place; or press a chip and DRAG it onto the board, which is the
- * same press and the same release, with the mark carried under the finger the
- * whole way. Nothing is modal: the drag begins on a chip and simply carries on
- * into the paint that a drag on the grid already was.
+ * Nobody is asked which of those they are doing. A press that moves is a
+ * drag, a press that does not is a tap, and that is the entire rule — the one
+ * Nine and Hexagony already play by.
+ *
+ * THE CLUES SAY WHAT THEY MEAN. A clue is "looking in along this line, the
+ * first shape you meet is a square" or "the second one is a triangle", and it
+ * used to be drawn as the shape with one or two pips under it, which nobody
+ * reads as a count. Now it is drawn along its own line of sight: the count as
+ * a numeral, then the shape, then a chevron pointing into the grid — "2 ▲ ›"
+ * — and tapping any clue lights its line up in the order it reads and puts
+ * the clue into words on the note. A rule that can be asked is a rule that
+ * gets learnt.
  *
  * And the board answers. A line that takes its last shape lights up and stays
  * lit, the clues it satisfies tick off, and when the last of the mark in your
@@ -32,8 +42,8 @@
  */
 
 import { svg } from '../../platform/dom.js';
-import { judge, sightLine, rowCells, colCells } from './model.js';
-import { GLYPHS, glyphPath } from './glyphs.js';
+import { judge, sightLine, rowCells, colCells, clueText } from './model.js';
+import { GLYPHS, glyphPath, glyphName } from './glyphs.js';
 import type { ShapeSession } from './session.js';
 import type { View, ViewHost } from '../../platform/types.js';
 
@@ -44,35 +54,36 @@ import type { View, ViewHost } from '../../platform/types.js';
  * A mark fills a bit over half its cell — big enough to tell a triangle from a
  * diamond at the size a seven-wide board gets on a phone, small enough that a
  * row of them does not read as a solid bar. A clue is smaller again, because
- * it is a caption and not a move. And the ring's options are spaced so that
- * two of them cannot touch: five of them round a circle of radius RING sit
- * 2 * RING * sin(pi/5) apart, which has to clear their own width.
+ * it is a caption and not a move.
  */
 const CELL = 20;
-/** The clue gutter round the grid. */
-const EDGE = 17;
+/** The clue gutter round the grid: room for a numeral, a shape and a chevron. */
+const EDGE = 19;
 /** A mark inside a cell. */
 const MARK_R = CELL * 0.29;
 /** A shape drawn as a clue, in the gutter. */
-const CLUE_R = EDGE * 0.30;
+const CLUE_R = 4.4;
 /**
  * A palette chip, and the gap between two of them.
  *
  * Twenty-six board units rather than a number chosen by eye. The narrowest
  * phone still in use gives a board 296 css pixels; the widest board is seven
- * cells and 174 units across, so a unit is 1.70 pixels there and a chip comes
- * to forty-four — the smallest target a thumb can be asked for.
+ * cells and 178 units across, so a unit is 1.66 pixels there and a chip comes
+ * to forty-three — the smallest target a thumb can be asked for.
  *
  * And the palette is never allowed to be narrower than that: when six chips
  * want more room than the grid does, THEY set the width of the drawing and the
  * grid is centred inside it (see W below). So the ratio of chip to drawing is
- * at worst 26 in 174 and the forty-four holds on every board, which is
- * precisely what the ring this replaced could not manage.
+ * at worst 26 in 178 and the forty-three holds on every board.
  */
 const CHIP = 26;
 const CHIP_GAP = 3;
 /** Between the grid and the palette, with the rule halfway. */
 const SPLIT = 14;
+/** How far a press has to travel, in board units, before it is a drag. */
+const DRAG = CELL * 0.45;
+
+const NAMES = [1, 2, 3, 4, 5].map((n) => glyphName(n));
 
 export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewHost): View {
   const board = session.board;
@@ -131,47 +142,121 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     markEl.push(mark);
   }
 
+  /** The empty mark: a small cross, "nothing goes here", never a dot. */
+  const blankPath = (r: number): string =>
+    `M ${-r} ${-r} L ${r} ${r} M ${r} ${-r} L ${-r} ${r}`;
+  const blank = (cx: number, cy: number, r: number): SVGElement => svg('path', {
+    class: 'shape-blank', d: blankPath(r),
+    transform: `translate(${cx.toFixed(2)} ${cy.toFixed(2)})`,
+  });
+
   // --- the clues -----------------------------------------------------------
   /*
-   * A clue sits in the gutter, pointing in. Its depth is drawn as one pip for
-   * the first shape you meet and two for the second, rather than as a colour:
-   * "the second shape in" is a count and a count should look like one.
+   * A clue sits in the gutter and is laid out ALONG its own line of sight:
+   * the count furthest out, the shape in the middle, a chevron nearest the
+   * grid pointing in. Read towards the grid it says "second, triangle, this
+   * way" — which is the clue. The count is a numeral because it is a count,
+   * and a count should look like one.
    *
    * Two groups per clue and not one. The outer one carries the translation
-   * into the gutter and never moves again; the inner one holds the ink and is
-   * the only thing that ever gets a scale. Animating the outer group instead
-   * would compose a scale with that translation and throw the clue across the
-   * board, and no transform-origin can undo it, because the origin it needs is
-   * inside a box the translation has already moved.
+   * and rotation into the gutter and never moves again; the inner one holds
+   * the ink and is the only thing that ever gets a scale. Animating the outer
+   * group instead would compose a scale with that translation and throw the
+   * clue across the board, and no transform-origin can undo it, because the
+   * origin it needs is inside a box the translation has already moved.
+   *
+   * The whole clue is a target. A press on it lights its line up in reading
+   * order and says the clue in words, because a clue you can ask is a clue
+   * you can learn to read.
    */
   const clueEl: SVGGElement[] = [];
-  board.clues.forEach((clue) => {
-    const g = svg('g', { class: 'shape-clue' });
+  board.clues.forEach((clue, k) => {
+    const g = svg('g', {
+      class: 'shape-clue', role: 'button', tabindex: -1,
+      'aria-label': clueText(clue, NAMES),
+      'data-clue': k,
+    });
     const ink = svg('g', { class: 'shape-clueink' });
     let cx = 0;
     let cy = 0;
-    if (clue.side === 'top') { cx = x0 + clue.line * CELL + CELL / 2; cy = EDGE / 2; }
-    else if (clue.side === 'bottom') { cx = x0 + clue.line * CELL + CELL / 2; cy = GRID_H - EDGE / 2; }
+    /* The gutter axis points INTO the grid. Everything in the inner group is
+       drawn for a clue on the left, reading left to right, and turned. */
+    let turn = 0;
+    if (clue.side === 'top') { cx = x0 + clue.line * CELL + CELL / 2; cy = EDGE / 2; turn = 90; }
+    else if (clue.side === 'bottom') { cx = x0 + clue.line * CELL + CELL / 2; cy = GRID_H - EDGE / 2; turn = -90; }
     else if (clue.side === 'left') { cx = x0 - EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; }
-    else { cx = x0 + w * CELL + EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; }
+    else { cx = x0 + w * CELL + EDGE / 2; cy = y0 + clue.line * CELL + CELL / 2; turn = 180; }
 
-    g.setAttribute('transform', `translate(${cx.toFixed(2)} ${cy.toFixed(2)})`);
+    g.setAttribute('transform', `translate(${cx.toFixed(2)} ${cy.toFixed(2)}) rotate(${turn})`);
+    /* A bed under the whole clue, so the press target is the gutter cell
+       rather than the ink, which is thin. */
+    ink.appendChild(svg('rect', {
+      class: 'shape-cluebed', x: -EDGE / 2, y: -CELL / 2, width: EDGE, height: CELL, rx: 2,
+    }));
+    /* The count, outermost. Upright whatever way the clue is turned: a "2"
+       lying on its side is a thing you have to think about. */
+    ink.appendChild(svg('text', {
+      class: 'shape-count', x: -EDGE / 2 + 3.1, y: 0,
+      'text-anchor': 'middle', 'dominant-baseline': 'central',
+      transform: `rotate(${-turn} ${(-EDGE / 2 + 3.1).toFixed(2)} 0)`,
+      text: String(clue.depth),
+    }));
+    /* The shape, turned back upright for the same reason as the count: a
+       triangle on its side is not the triangle in the palette. */
     ink.appendChild(svg('path', {
       class: `shape-glyph s${clue.shape}`, d: glyphPath(clue.shape, CLUE_R),
-      transform: `translate(0 ${(-CLUE_R * 0.3).toFixed(2)})`,
+      transform: `translate(1.1 0) rotate(${-turn})`,
     }));
-    /* The pips: one per shape deep, in a short row under the glyph. */
-    for (let k = 0; k < clue.depth; k++) {
-      const gap = 2.2;
-      const spread = (clue.depth - 1) * gap;
-      ink.appendChild(svg('circle', {
-        class: 'shape-pip', cx: k * gap - spread / 2, cy: CLUE_R + 1.6, r: 0.75,
-      }));
-    }
+    /* The chevron, pointing into the grid. */
+    ink.appendChild(svg('path', {
+      class: 'shape-chev',
+      d: `M ${EDGE / 2 - 3.4} -2.1 L ${EDGE / 2 - 1.6} 0 L ${EDGE / 2 - 3.4} 2.1`,
+    }));
     g.appendChild(ink);
     gClues.appendChild(g);
     clueEl.push(g);
   });
+
+  /** Which clue a board point is on, or -1. */
+  const clueAt = (p: { x: number; y: number }): number => {
+    for (let k = 0; k < board.clues.length; k++) {
+      const clue = board.clues[k];
+      let x = 0;
+      let y = 0;
+      let bw = EDGE;
+      let bh = CELL;
+      if (clue.side === 'top') { x = x0 + clue.line * CELL; y = 0; bw = CELL; bh = EDGE; }
+      else if (clue.side === 'bottom') { x = x0 + clue.line * CELL; y = GRID_H - EDGE; bw = CELL; bh = EDGE; }
+      else if (clue.side === 'left') { x = x0 - EDGE; y = y0 + clue.line * CELL; }
+      else { x = x0 + w * CELL; y = y0 + clue.line * CELL; }
+      if (p.x >= x && p.x <= x + bw && p.y >= y && p.y <= y + bh) return k;
+    }
+    return -1;
+  };
+
+  /**
+   * Read a clue out: its line lights up cell by cell in the order the clue
+   * looks along it, and the words go on the note.
+   */
+  function readClue(k: number): void {
+    const clue = board.clues[k];
+    const line = sightLine(board, clue.side, clue.line);
+    for (let i = 0; i < total; i++) {
+      holeEl[i].classList.remove('read');
+      holeEl[i].style.removeProperty('--i');
+    }
+    line.forEach((i, n) => {
+      holeEl[i].style.setProperty('--i', String(n));
+      /* Reading a layout property restarts the animation rather than letting
+         the removal and the addition collapse into one frame with no change. */
+      void holeEl[i].getBoundingClientRect();
+      holeEl[i].classList.add('read');
+    });
+    const ink = clueEl[k].firstElementChild;
+    if (ink) flash(ink, 'ding', 420);
+    host.buzz('tick');
+    host.say(`${clueText(clue, NAMES)}.`);
+  }
 
   // --- the palette ---------------------------------------------------------
   /*
@@ -202,13 +287,13 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     const y = PAL_TOP + CHIP / 2;
     const g = svg('g', {
       class: 'shape-chip', 'data-pick': pick, role: 'button', tabindex: -1,
-      'aria-label': pick === 0 ? 'Mark a cell empty' : `Shape ${pick}`,
+      'aria-label': pick === 0 ? 'Mark a cell empty' : `Shape ${pick}, the ${NAMES[pick - 1]}`,
     });
     g.appendChild(svg('rect', {
       class: 'shape-chipbg', x: chipX(k), y: PAL_TOP, width: CHIP, height: CHIP, rx: 3,
     }));
     if (pick === 0) {
-      g.appendChild(svg('circle', { class: 'shape-blank', cx: x, cy: y, r: 1.9 }));
+      g.appendChild(blank(x, y, CHIP * 0.17));
     } else {
       g.appendChild(svg('path', {
         class: `shape-glyph s${pick}`, d: glyphPath(pick, CHIP * 0.28),
@@ -293,9 +378,7 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
           transform: `translate(${cellX(i) + CELL / 2} ${cellY(i) + CELL / 2})`,
         }));
       } else if (v === 0) {
-        markEl[i].appendChild(svg('circle', {
-          class: 'shape-blank', cx: cellX(i) + CELL / 2, cy: cellY(i) + CELL / 2, r: 1.5,
-        }));
+        markEl[i].appendChild(blank(cellX(i) + CELL / 2, cellY(i) + CELL / 2, CELL * 0.11));
       }
       holeEl[i].classList.toggle('cursor', i === cursor && el === document.activeElement);
       /*
@@ -360,10 +443,10 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
    * Hand over the next mark once the one in your hand is all placed.
    *
    * Only between gestures, never during one: a drag that changed what it was
-   * painting halfway along would be a gesture whose result depended on how far
-   * it happened to get. And only forwards onto a shape that is not finished —
-   * it never lands on the blank, which is a note rather than part of the
-   * answer and is therefore never "done".
+   * carrying halfway along would be a gesture whose result depended on how
+   * far it happened to get. And only forwards onto a shape that is not
+   * finished — it never lands on the blank, which is a note rather than part
+   * of the answer and is therefore never "done".
    */
   function handOver(): void {
     if (picked <= 0 || countOf(picked) < h) return;
@@ -398,32 +481,36 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
 
   let cursor = 0;
   let pointerId = -1;
+
   /*
-   * What a drag is doing, decided by the cell it starts on and then held for
-   * the whole sweep. A drag that changed its mind halfway — writing over an
-   * empty cell and rubbing out the next one that already had the mark — would
-   * be a gesture whose result depended on what it happened to pass over.
+   * What the gesture in progress is, decided by where it started and by
+   * whether it has moved yet.
+   *
+   *   carrying   a mark is under the finger, from a chip or lifted off a cell,
+   *              and goes down where the finger is let go;
+   *   pending    a press on a cell that already holds a mark, which is a tap
+   *              (toggle) if the finger lifts here and a lift-and-carry if it
+   *              moves away first;
+   *   neither    a tap that already happened at the press, or a press on
+   *              nothing.
    */
-  let painting = 0;
-  let lastCell = -1;
+  let carrying = -1;
+  /** The cell a carried mark was lifted from, or -1 if it came from a chip. */
+  let liftedFrom = -1;
+  let pending = -1;
+  let pressAt: { x: number; y: number } | null = null;
+  /** The cell the carried mark is over, lit so the drop has a visible target. */
+  let under = -1;
 
   const put = (cell: number, value: number): void => {
     if (session.cells[cell] === value) return;
-    session.openGesture();
     session.set(cell, value);
     host.buzz(value < 0 ? 'tick' : 'notch');
     settle();
   };
 
-  /** Write the chosen mark here, or take it off if it is already here. */
-  const stroke = (cell: number): void => {
-    if (cell === lastCell) return;
-    lastCell = cell;
-    put(cell, painting === 1 ? picked : -1);
-  };
-
   /**
-   * The mark being carried from the palette, drawn under the finger.
+   * The mark being carried, drawn under the finger.
    *
    * Bigger than the mark in a cell and softened, so what is under the thumb is
    * plainly the thing being carried rather than a mark that has already been
@@ -431,10 +518,16 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
    */
   const carry = (p: { x: number; y: number } | null): void => {
     gCarry.replaceChildren();
-    if (!p || picked < 0) return;
+    const was = under;
+    under = p ? cellAt(p) : -1;
+    if (was !== under) {
+      if (was >= 0) holeEl[was].classList.remove('under');
+      if (under >= 0) holeEl[under].classList.add('under');
+    }
+    if (!p || carrying < 0) return;
     const g = svg('g', { transform: `translate(${p.x.toFixed(2)} ${p.y.toFixed(2)})` });
-    if (picked === 0) g.appendChild(svg('circle', { class: 'shape-blank', r: 2.4 }));
-    else g.appendChild(svg('path', { class: `shape-glyph s${picked}`, d: glyphPath(picked, MARK_R * 1.25) }));
+    if (carrying === 0) g.appendChild(blank(0, 0, CELL * 0.14));
+    else g.appendChild(svg('path', { class: `shape-glyph s${carrying}`, d: glyphPath(carrying, MARK_R * 1.25) }));
     gCarry.appendChild(g);
   };
 
@@ -442,11 +535,18 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     if (pointerId !== -1) return;
     const p = point(e);
 
+    const k = clueAt(p);
+    if (k >= 0) {
+      readClue(k);
+      e.preventDefault();
+      return;
+    }
+
     /*
      * A press on a chip chooses it, and then keeps the pointer, so the same
      * press can carry the mark onto the board without letting go. Let go over
      * the palette and it was a tap that chose a mark, which is what it always
-     * was; carry on onto the grid and it is a drag that paints. One gesture,
+     * was; carry on onto the grid and it is a drag that drops. One gesture,
      * and nothing had to decide which it was at the start.
      */
     const chip = chipAt(p);
@@ -454,10 +554,9 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
       picked = chip;
       pointerId = e.pointerId;
       el.setPointerCapture(e.pointerId);
-      /* Carried marks are always written. You picked a shape up to put it
-         down, so there is no rubbing out at the far end of this drag. */
-      painting = 1;
-      lastCell = -1;
+      carrying = chip;
+      liftedFrom = -1;
+      pressAt = p;
       host.buzz('tick');
       paint();
       carry(p);
@@ -469,31 +568,68 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     if (cell < 0) return;
     pointerId = e.pointerId;
     el.setPointerCapture(e.pointerId);
+    session.openGesture();
     cursor = cell;
-    /* Rubbing out is the same gesture as writing: the cell that starts the
-       drag says which of the two the whole drag is. */
-    painting = session.cells[cell] === picked ? 0 : 1;
-    lastCell = -1;
-    stroke(cell);
+    pressAt = p;
+    if (session.cells[cell] >= 0) {
+      /* A mark is here already. Whether this is a tap on it or the start of
+         moving it is not known yet, so nothing changes until it is. */
+      pending = cell;
+    } else {
+      put(cell, picked);
+    }
     e.preventDefault();
   };
 
   const onMove = (e: PointerEvent): void => {
     if (e.pointerId !== pointerId) return;
     const p = point(e);
-    const cell = cellAt(p);
-    if (cell >= 0) { cursor = cell; stroke(cell); }
-    /* The carried mark only exists while a drag that began on a chip is still
-       going. `gCarry` is empty otherwise, so this is a no-op for a drag that
-       started on the grid. */
-    if (gCarry.firstChild) carry(p);
+    const moved = pressAt ? Math.hypot(p.x - pressAt.x, p.y - pressAt.y) : 0;
+
+    if (pending >= 0 && (moved > DRAG || cellAt(p) !== pending)) {
+      /* The finger has left with the mark: it is being moved, not tapped. The
+         cell it came from is left undecided — a mark in the air is not on the
+         board — and it lands wherever the finger stops. */
+      carrying = session.cells[pending];
+      liftedFrom = pending;
+      session.set(pending, -1);
+      pending = -1;
+      paint();
+      host.changed();
+    }
+    if (carrying >= 0) carry(p);
     e.preventDefault();
   };
 
   const onUp = (e: PointerEvent): void => {
     if (e.pointerId !== pointerId) return;
     pointerId = -1;
-    lastCell = -1;
+    const p = point(e);
+
+    if (pending >= 0) {
+      /* Never left the cell: a tap. The chosen mark goes down, or comes off
+         if it is what was there already. */
+      const cell = pending;
+      pending = -1;
+      put(cell, session.cells[cell] === picked ? -1 : picked);
+    } else if (carrying >= 0) {
+      const cell = cellAt(p);
+      const mark = carrying;
+      carrying = -1;
+      carry(null);
+      if (cell >= 0) {
+        put(cell, mark);
+        /* Dropped back where it was lifted from: nothing happened, and the
+           board is exactly as it was, but the paint above already drew it. */
+      } else if (liftedFrom >= 0) {
+        /* Lifted off the grid and let go off the grid: taken away. That is
+           already what the board shows, so only the beat is missing. */
+        host.buzz('tick');
+        settle();
+      }
+      liftedFrom = -1;
+    }
+    pressAt = null;
     carry(null);
     /* Between gestures is the only safe place to change what is in the hand. */
     handOver();
@@ -519,19 +655,31 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
        per cell like the palette is one tap. */
     if (/^[1-9]$/.test(e.key) && Number(e.key) <= shapes) {
       picked = Number(e.key);
+      session.openGesture();
       put(cursor, picked);
       handOver();
       e.preventDefault();
       return;
     }
-    if (e.key === '0') { picked = 0; put(cursor, 0); e.preventDefault(); return; }
+    if (e.key === '0' || e.key === 'x') {
+      picked = 0;
+      session.openGesture();
+      put(cursor, 0);
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Enter' || e.key === ' ') {
-      put(cursor, picked);
+      session.openGesture();
+      put(cursor, session.cells[cursor] === picked ? -1 : picked);
       handOver();
       e.preventDefault();
       return;
     }
-    if (e.key === 'Backspace' || e.key === 'Delete') { put(cursor, -1); e.preventDefault(); }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      session.openGesture();
+      put(cursor, -1);
+      e.preventDefault();
+    }
   };
   el.addEventListener('keydown', onKey);
   el.addEventListener('focus', paint);
@@ -548,6 +696,14 @@ export function mountShape(root: HTMLElement, session: ShapeSession, host: ViewH
     chipBox: (pick: number) => {
       const k = pick === 0 ? shapes : pick - 1;
       return { x: chipX(k), y: PAL_TOP, size: CHIP };
+    },
+    /* Where a clue's press target sits, the same way. */
+    clueBox: (k: number) => {
+      const clue = board.clues[k];
+      if (clue.side === 'top') return { x: x0 + clue.line * CELL, y: 0, w: CELL, h: EDGE };
+      if (clue.side === 'bottom') return { x: x0 + clue.line * CELL, y: GRID_H - EDGE, w: CELL, h: EDGE };
+      if (clue.side === 'left') return { x: x0 - EDGE, y: y0 + clue.line * CELL, w: EDGE, h: CELL };
+      return { x: x0 + w * CELL, y: y0 + clue.line * CELL, w: EDGE, h: CELL };
     },
     picked: () => picked,
     /** The rows and columns that already hold one of each shape. */
