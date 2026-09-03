@@ -47,6 +47,8 @@ export type BoardView = {
   refuse(path: readonly number[]): void;
   /** Draw attention to some posts, for a hint. Empty clears it. */
   spotlight(posts: readonly number[]): void;
+  /** The loose end of the string being worked on, or -1 for none. */
+  setActive(post: number, color: string): void;
   /**
    * The loose end, following the finger. `post` is where the string currently
    * ends; x and y are where the thumb is, in board space. `reach` says whether
@@ -407,6 +409,26 @@ export function mountBoard(c: Compiled): BoardView {
     lead.setAttribute('opacity', '0');
   }
 
+  /*
+   * The loose end of the string being worked on: its ring, in the string's
+   * own colour, breathing. One post on the board says "carry on from here",
+   * which is the answer to the commonest question a board of forty posts
+   * raises — which string am I holding?
+   */
+  let activeAt = -1;
+  function setActive(post: number, color: string): void {
+    if (activeAt === post) return;
+    if (activeAt >= 0) {
+      ringEl[activeAt].classList.remove('live');
+      /* A pinned end keeps its own colour; any other post gives it back. */
+      if (!pinned[activeAt]) ringEl[activeAt].style.removeProperty('--ink');
+    }
+    activeAt = post;
+    if (post < 0) return;
+    if (!pinned[post]) ringEl[post].style.setProperty('--ink', color);
+    ringEl[post].classList.add('live');
+  }
+
   /**
    * Board space from a client point, through the SVG's own window.
    *
@@ -442,6 +464,6 @@ export function mountBoard(c: Compiled): BoardView {
   return {
     el, update, at, nearestPost, flashPost, markCursor, celebrate,
     ratio: view.w / view.h,
-    retract, refuse, spotlight, setLead, clearLead, dispose,
+    retract, refuse, spotlight, setActive, setLead, clearLead, dispose,
   };
 }

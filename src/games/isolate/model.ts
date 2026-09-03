@@ -263,3 +263,12 @@ export function whatIsLeft(board: Board, j: Judgement): string {
   if (left <= 0) return '';
   return left === 1 ? 'One room to go' : `${left} rooms to go`;
 }
+
+/** Does a hint's claim hold in the answer? "edge:12=wall" or "edge:12=open". */
+export function claimHolds(board: Board, claim: string): boolean {
+  const m = /^edge:(\d+)=(wall|open)$/.exec(claim);
+  if (!m) return false;
+  const edge = Number(m[1]);
+  if (edge < 0 || edge >= edgeCount(board.w, board.h)) return false;
+  return board.answer.includes(edge) === (m[2] === 'wall');
+}

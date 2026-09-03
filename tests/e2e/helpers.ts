@@ -166,20 +166,27 @@ export async function zigBoard(page: Page): Promise<ZigBoard> {
   return page.evaluate(() => (window.__puzzles.board() as { zig: ZigBoard }).zig as never);
 }
 
+/**
+ * Cell to viewport pixels, through the board's own window and its own idea of
+ * where a cell's middle is. Read off the handle rather than copied from the
+ * source: this used to know that a cell was ten units and the margin one,
+ * which was true until the run strip arrived under the grid.
+ */
 export async function zigMapper(page: Page): Promise<(cell: number) => { x: number; y: number }> {
   const svg = page.locator('.zig-svg');
   const box = await svg.boundingBox();
   if (!box) throw new Error('the board is not on screen');
-  const zig = await zigBoard(page);
-  const W = zig.w * 10 + 2;
-  const H = zig.h * 10 + 2;
-  const side = Math.min(box.width / W, box.height / H);
-  const ox = box.x + (box.width - side * W) / 2 + side;
-  const oy = box.y + (box.height - side * H) / 2 + side;
-  return (cell) => ({
-    x: ox + ((cell % zig.w) * 10 + 5) * side,
-    y: oy + (Math.floor(cell / zig.w) * 10 + 5) * side,
+  const { view, mids } = await page.evaluate(() => {
+    const b = window.__puzzles.board() as {
+      view: { x: number; y: number; W: number; H: number };
+      mids(): { x: number; y: number }[];
+    };
+    return { view: b.view, mids: b.mids() };
   });
+  const side = Math.min(box.width / view.W, box.height / view.H);
+  const ox = box.x + (box.width - side * view.W) / 2 - view.x * side;
+  const oy = box.y + (box.height - side * view.H) / 2 - view.y * side;
+  return (cell) => ({ x: ox + mids[cell].x * side, y: oy + mids[cell].y * side });
 }
 
 /** Draw a line the way a finger would. */
@@ -324,13 +331,16 @@ export async function markCell(page: Page, cell: number, pick: number): Promise<
   await tap(page, at(box.x + box.size / 2, box.y + box.size / 2));
 }
 
-/** The other way in: choose a mark and drag a run of cells with it. */
-export async function paintCells(page: Page, cells: number[], pick: number): Promise<void> {
-  await pickMark(page, pick);
+/**
+ * Drag from one cell to another, the way a mark is moved. The pointer crosses
+ * every cell in `via` on the way, so a test can prove nothing was written on
+ * them.
+ */
+export async function dragCell(page: Page, from: number, to: number, via: number[] = []): Promise<void> {
   const at = await shapeMapper(page);
   const boxes = await page.evaluate(
     (list) => list.map((c) => (window.__puzzles.board() as ShapeHandle).cellBox(c)),
-    cells,
+    [from, ...via, to],
   );
   const first = at(boxes[0].x + boxes[0].size / 2, boxes[0].y + boxes[0].size / 2);
   await page.mouse.move(first.x, first.y);
@@ -340,6 +350,16 @@ export async function paintCells(page: Page, cells: number[], pick: number): Pro
     await page.mouse.move(q.x, q.y, { steps: 3 });
   }
   await page.mouse.up();
+}
+
+/** Press a clue, which reads it out. */
+export async function tapClue(page: Page, k: number): Promise<void> {
+  const at = await shapeMapper(page);
+  const box = await page.evaluate(
+    (n) => (window.__puzzles.board() as ShapeHandle & { clueBox(k: number): { x: number; y: number; w: number; h: number } }).clueBox(n),
+    k,
+  );
+  await tap(page, at(box.x + box.w / 2, box.y + box.h / 2));
 }
 
 /**

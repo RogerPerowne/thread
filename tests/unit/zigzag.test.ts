@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  judge, neighbours, wants, adjacency, type Zig,
+  judge, neighbours, wants, adjacency, stepsFrom, type Zig,
 } from '../../src/games/zigzag/model.js';
 import { solve } from '../../src/games/zigzag/solve.js';
 import { makeZig, hamiltonian, orthogonalPossible } from '../../src/games/zigzag/design.js';
@@ -282,11 +282,25 @@ describe('the hint', () => {
     expect(hint?.reason.length).toBeGreaterThan(0);
   });
 
-  it('says the line is stuck rather than saying "wrong"', () => {
+  it('has nothing to say once the line is drawn', () => {
     const s = new ZigSession(made.zig);
-    // Walk the answer to the end, then look: nothing follows the finish.
     s.path.push(...made.zig.answer);
-    const hint = s.hint();
-    expect(hint?.reason).toMatch(/nothing legal follows/i);
+    expect(s.verdict().solved).toBe(true);
+    expect(s.hint()).toBeNull();
+  });
+
+  it('points at the step that left the route, not at the dead end it led to', () => {
+    /* Two legal steps, the first of them off the route. The old hint would
+       have reasoned on from the head; this one names the first wrong step,
+       because everything after it is built on it. */
+    const s = new ZigSession(made.zig);
+    const { answer } = made.zig;
+    s.path.push(answer[0]);
+    const off = stepsFrom(made.zig, answer[0]).find((c) => c !== answer[1] && s.canGo(c));
+    if (off === undefined) return;
+    s.path.push(off);
+    const hint = s.hint()!;
+    expect(hint.kind).toBe('fix');
+    expect(hint.focus).toEqual([`cell:${off}`]);
   });
 });

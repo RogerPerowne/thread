@@ -12,6 +12,7 @@ import {
 } from './model.js';
 import { analyse } from './solve.js';
 import { Effort } from '../../platform/signature.js';
+import { astray } from '../../platform/hint.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
 
 export type NineState = { cells: number[] };
@@ -148,17 +149,28 @@ export class NineSession implements Session<NineState> {
   /**
    * The next useful deduction.
    *
-   * The one a person actually makes: find the line with the fewest ways of
-   * being filled, given what is already down. A line with one way left is a
-   * line you can just write in; a line with three is where to spend your next
-   * minute. Nothing here reveals the answer at the first rung — it names the
-   * line and how tight it is, and only the third rung says a digit.
+   * A digit that is not where the answer has it comes first: the lines it
+   * sits on may still add up, but everything deduced across it would be
+   * deduced from a wrong premise. Then the one a person actually makes: find
+   * the line with the fewest ways of being filled, given what is already
+   * down. A line with one way left is a line you can just write in; a line
+   * with three is where to spend your next minute, and the third rung names
+   * one digit of it from the answer.
    */
   hint(): Hint | null {
     const { nine } = this;
-    const { n } = nine;
+    const { n, answer } = nine;
     const total = n * n;
+    const place = (i: number) => `row ${((i / n) | 0) + 1}, column ${(i % n) + 1}`;
+
+    for (let i = 0; i < total; i++) {
+      const d = this.cells[i];
+      if (d !== 0 && d !== answer[i]) {
+        return astray(`The ${d} in ${place(i)}`, [`cell:${i}`], [`cell:${i}!=${d}`]);
+      }
+    }
     const spare = new Set(this.spare());
+    if (spare.size === 0) return null;
 
     type Cand = { key: string; label: string; cells: number[]; ways: number[][] };
     const cands: Cand[] = [];
@@ -205,42 +217,37 @@ export class NineSession implements Session<NineState> {
       consider(cells, colOf(nine, this.cells, c), colOpsOf(nine, c), nine.colTargets[c],
         `col:${c}`, `the ${['first', 'second', 'third', 'fourth'][c] ?? c + 1} column`);
     }
-
     if (cands.length === 0) return null;
-
-    const dead = cands.find((c) => c.ways.length === 0);
-    if (dead) {
-      return {
-        focus: dead.cells.map((i) => `cell:${i}`),
-        reason: `Nothing left fits ${dead.label} any more, so something already down is in the wrong place.`,
-        move: 'Take a digit back and try it elsewhere.',
-      };
-    }
 
     cands.sort((a, b) => a.ways.length - b.ways.length);
     const best = cands[0];
+    const capital = best.label.charAt(0).toUpperCase() + best.label.slice(1);
     if (best.ways.length === 1) {
+      const which = Number(best.key.slice(4));
       const line = best.key.startsWith('row')
-        ? lineText(rowOf(nine, this.cells, Number(best.key.slice(4))),
-          rowOpsOf(nine, Number(best.key.slice(4))), nine.rowTargets[Number(best.key.slice(4))])
-        : lineText(colOf(nine, this.cells, Number(best.key.slice(4))),
-          colOpsOf(nine, Number(best.key.slice(4))), nine.colTargets[Number(best.key.slice(4))]);
+        ? lineText(rowOf(nine, this.cells, which), rowOpsOf(nine, which), nine.rowTargets[which])
+        : lineText(colOf(nine, this.cells, which), colOpsOf(nine, which), nine.colTargets[which]);
       return {
+        kind: 'step',
         focus: best.cells.map((i) => `cell:${i}`),
         reason: `Only one set of digits still fits ${best.label}: ${line}.`,
         move: `Put ${best.ways[0].join(', ')} in the highlighted cells, in that order.`,
+        claim: best.cells.map((i, k) => `cell:${i}=${best.ways[0][k]}`),
       };
     }
     /*
-     * Nothing is settled, so the third rung cannot name a move — and naming
-     * one of the four ways as though it were the way would be a hint that is
-     * true and misleading at once. What it can say is what to do with the
-     * line: it is the lines crossing this one that cut four down to one.
+     * Nothing is settled. Naming one of the four ways as though it were the
+     * way would be a hint that is true and misleading at once, so the reason
+     * says what to do with the line — it is the lines crossing this one that
+     * cut four down to one — and the third rung names a single digit of it.
      */
+    const next = best.cells[0];
     return {
+      kind: 'look',
       focus: best.cells.map((i) => `cell:${i}`),
-      reason: `${best.label.charAt(0).toUpperCase()}${best.label.slice(1)} is the tightest line left — only ${best.ways.length} ways to fill it.`,
-      move: `Take each of the ${best.ways.length} against the lines that cross it; only one of them will survive.`,
+      reason: `${capital} is the tightest line left — only ${best.ways.length} ways to fill it. Take each against the lines that cross it; one survives.`,
+      move: `The ${answer[next]} goes in ${place(next)}.`,
+      claim: [`cell:${next}=${answer[next]}`],
     };
   }
 

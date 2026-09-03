@@ -248,3 +248,22 @@ export function clueText(clue: Clue, names: readonly string[]): string {
   const nth = ['', 'first', 'second', 'third', 'fourth', 'fifth'][clue.depth] ?? `${clue.depth}th`;
   return `Looking down ${which} from ${from}, the ${nth} shape is a ${names[clue.shape - 1] ?? clue.shape}`;
 }
+
+/**
+ * Does a hint's claim hold in the answer?
+ *
+ * A claim is one cell and one value — "cell:5=3", or "cell:5!=3" for the
+ * negation a `fix` makes — and the answer is a filled grid, so this is a
+ * lookup. It lives beside the answer rather than in the session because the
+ * session is what is being checked: a hint reasons from what is drawn, this
+ * reads what is true, and the two have to be written apart to catch each
+ * other out.
+ */
+export function claimHolds(board: Board, claim: string): boolean {
+  const m = /^cell:(\d+)(!?=)(\d+)$/.exec(claim);
+  if (!m) return false;
+  const cell = Number(m[1]);
+  const value = Number(m[3]);
+  if (cell < 0 || cell >= board.answer.length) return false;
+  return m[2] === '=' ? board.answer[cell] === value : board.answer[cell] !== value;
+}

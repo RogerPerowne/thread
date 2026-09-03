@@ -339,7 +339,7 @@ Shape Up is the one with a move loop rather than a single gesture, so it is
 where this is worked out. Three things, and none of them is decoration: each is
 a fact the model already knew, drawn.
 
-**A blank is the player's notation, not part of the answer.** A dot means "I
+**A blank is the player's notation, not part of the answer.** A cross means "I
 have settled this and nothing goes here", and people write one where the
 deduction needed it and nowhere else. The board used to wait for every cell to
 be decided before it would say "solved", which is tidying up after winning. A
@@ -358,13 +358,58 @@ from them would make all four unreadable.
 **The palette hands over.** There are exactly as many of each shape as there
 are rows, so when the last one goes down the chip in your hand has nothing left
 to give and the next unfinished shape is chosen for you. Only between gestures,
-never during one — a drag that changed what it was painting halfway along would
+never during one — a drag that changed what it was carrying halfway along would
 be a gesture whose result depended on how far it happened to get.
 
-And the palette is draggable now: press a chip and carry the mark onto the
-board in the same press, or let go over the palette and it was the tap that
-chose a mark, which is what it always was. Nothing had to decide which of the
-two it was at the start.
+**One mark per gesture.** The board used to paint: a drag across the grid
+wrote the chosen mark into every cell it crossed, and a finger resting on the
+board to look at it filled the board in. A finger moving over a puzzle is
+nearly always a finger thinking. So a gesture now puts down exactly one mark,
+where it ends — tap a cell; or press a chip and let go over a cell; or press a
+mark already on the grid and carry it somewhere else, or off the grid to take
+it away. A press that moves is a drag and a press that does not is a tap,
+which is the rule One to Nine and Hexagony already play by, and nobody is
+asked which they are doing.
+
+**The clues say what they mean.** A clue is laid out along its own line of
+sight — the count as a numeral, the shape, a chevron pointing into the grid —
+and pressing one lights its line up in the order it reads and puts the clue
+into words on the note. The pips it replaced were a count nobody read as one.
+
+## Hints that cannot lie
+
+A hint is the one part of a puzzle that can be wrong without anybody noticing:
+nothing checks it, a wrong one looks exactly like a right one, and the player
+who follows it and gets stuck blames themselves. And the way a hint goes wrong
+is systematic. Every game reasons forward from what is on the board, so one
+move that breaks no rule yet — a shape in a cell where a different shape goes,
+a string laid along a legal run the answer never uses — made every hint after
+it confidently, helpfully wrong.
+
+Every game here is built answer-first, so the session holding the board also
+holds the one answer it was cut from, and a hint is now held to it. Three
+kinds, looked for in this order, and the order is the point:
+
+- **fix** — something already down is not in the answer. Said first, and
+  pointed at exactly, because a board with a wrong move on it has no next
+  step, only a step back.
+- **step** — a move that is forced by what is on the board, with the reason.
+- **look** — nothing is forced. A true thing about where the board is
+  tightest, and, at the third rung, one move the answer makes.
+
+Each hint carries a **claim** in the board's own vocabulary — `cell:5=3`,
+`run:4-9`, `edge:12=wall` — and `tests/unit/hints.test.ts` holds every claim
+to the shipped answer: forty boards a game, five points along each solve, and
+the same again with one legal-but-wrong move laid, where the hint has to be a
+fix that points at that move. What a claim looks like is each game's own
+business; that it holds is the platform's, and the check reads the answer from
+the board rather than trusting the hint's reasoning, so one cannot cover for
+the other.
+
+The shell's half: the three rungs are written on the note — "2 of 3" — so
+pressing again is plainly an option, the spotlight is dropped the moment the
+board changes, and every third rung names a move, because a hint that repeats
+itself when pressed again is a hint that stopped.
 
 ## Showing the answer
 
@@ -393,9 +438,9 @@ that laid a path backwards would be caught.
 
 Every end-to-end test drives the app through **real pointer events**. Solving a
 board by calling into it would prove the rules work and nothing at all about
-whether the game is playable, and those are different questions. All 56 Thread
-boards, all 44 Zigzag boards, all 64 One to Nine boards and all 66 Shape Up
-boards are solved by dragging.
+whether the game is playable, and those are different questions. A spread of
+every ladder — two boards from each chapter of all six games — is solved by
+dragging.
 
 The read-only handle the harness reads is exactly that — read-only, and in the
 game's own terms. Thread answers questions about runs, Zigzag about cells. A

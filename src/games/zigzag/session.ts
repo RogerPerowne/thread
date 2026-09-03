@@ -10,6 +10,7 @@ import {
   judge, firstFault, whatIsLeft, stepsFrom, wants, type Zig,
 } from './model.js';
 import { Effort } from '../../platform/signature.js';
+import { astray } from '../../platform/hint.js';
 import type { Hint, Session, Verdict } from '../../platform/types.js';
 
 export type ZigState = { path: number[] };
@@ -122,60 +123,65 @@ export class ZigSession implements Session<ZigState> {
   /**
    * The next useful deduction.
    *
-   * The real one a player makes: from where the line stands, count the legal
-   * continuations. Exactly one means the move is forced and there is nothing
-   * to think about; none means the line is already stuck and the mistake is
-   * behind you, which is a far more useful thing to be told than "wrong".
-   *
-   * With a choice to make, it points at the cell that will be hardest to reach
-   * later — the one with fewest unvisited neighbours — because that is the
-   * corner a line paints itself out of.
+   * First, a line that has left the route: the answer is one path, so the
+   * first cell where the drawn line and the route part company is a wrong
+   * step, whatever the numbers say about it — and every step after it is a
+   * step built on that one. Then the move a person makes without noticing:
+   * count the legal continuations, and one means the step is forced. With a
+   * choice to make, nothing is forced and the hint says so, pointing at the
+   * ways on rather than at one of them as though it were the way; the third
+   * rung names the route's next cell.
    */
   hint(): Hint | null {
-    const at = this.path[this.path.length - 1];
+    const { zig, path } = this;
+    const { answer } = zig;
+
+    const k = path.findIndex((c, i) => c !== answer[i]);
+    if (k >= 0) {
+      const what = k === 0 ? 'Starting the line on the cell lit up' : 'The step onto the cell lit up';
+      return astray(what, [`cell:${path[k]}`], [`cell:${path[k]}!@${k}`]);
+    }
+    if (path.length >= answer.length) return null;
+
+    const next = answer[path.length];
+    const at = path[path.length - 1];
+    const place = (c: number) => `row ${((c / zig.w) | 0) + 1}, column ${(c % zig.w) + 1}`;
     if (at === undefined) {
       return {
-        focus: [`cell:${this.zig.start}`],
+        kind: 'step',
+        focus: [`cell:${zig.start}`],
         reason: 'Every line starts here, on the first number of the run.',
+        move: 'Put a finger on the cell lit up and draw from there.',
+        claim: [`cell:${zig.start}@0`],
       };
     }
-    const moves = stepsFrom(this.zig, at).filter((c) => this.canGo(c));
-
-    if (moves.length === 0) {
-      return {
-        focus: [`cell:${at}`],
-        reason: 'Nothing legal follows from here, so the line went wrong further back.',
-        move: 'Undo until the line has somewhere to go.',
-      };
-    }
+    const moves = stepsFrom(zig, at).filter((c) => this.canGo(c));
     if (moves.length === 1) {
       return {
+        kind: 'step',
         focus: [`cell:${at}`, `cell:${moves[0]}`],
-        reason: `Only one cell carries a ${wants(this.zig, this.path.length)} next to the end of the line, so that step is forced.`,
-        move: 'Draw into the highlighted cell.',
+        reason: `Only one cell carrying a ${wants(zig, path.length)} touches the end of the line, so that step is forced.`,
+        move: 'Draw into the other cell lit up.',
+        claim: [`cell:${moves[0]}@${path.length}`],
       };
     }
 
     /*
-     * More than one way on, so nothing is forced. What IS worth saying is
-     * which of them the board is likeliest to punish you for leaving: the cell
-     * with the fewest ways out of its own is the one that gets stranded, and
-     * that is the deduction a player makes without noticing.
-     *
-     * One cell is named, not all of them — a hint that lights up every option
-     * and then says "the highlighted cell" is a hint about nothing.
+     * More than one way on, so nothing is forced, and the hint lights up the
+     * choice rather than pretending one of them is the answer. The useful
+     * thing to say is what decides it: a cell with only one way out has to be
+     * entered last or not at all, and that is the fact a line gets stranded
+     * on. The third rung names the route's next cell outright.
      */
-    const used = new Set(this.path);
-    let tightest = moves[0];
-    let fewest = Infinity;
-    for (const m of moves) {
-      const ways = stepsFrom(this.zig, m).filter((c) => !used.has(c)).length;
-      if (ways < fewest) { fewest = ways; tightest = m; }
-    }
+    const used = new Set(path);
+    const exits = (m: number) => stepsFrom(zig, m).filter((c) => !used.has(c)).length;
+    const fewest = Math.min(...moves.map(exits));
     return {
-      focus: [`cell:${at}`, `cell:${tightest}`],
-      reason: `${moves.length} ways on from here. The one lit up has only ${fewest} left of its own, so it is the one that gets stranded if you go the other way.`,
-      move: 'Draw into the cell lit up, and see whether the rest still works.',
+      kind: 'look',
+      focus: [`cell:${at}`, ...moves.map((c) => `cell:${c}`)],
+      reason: `${moves.length} ways on from here, none of them forced. The one to watch has only ${fewest} ${fewest === 1 ? 'way' : 'ways'} out of its own: the line has to reach it before that closes.`,
+      move: `The line goes on to ${place(next)}.`,
+      claim: [`cell:${next}@${path.length}`],
     };
   }
 }

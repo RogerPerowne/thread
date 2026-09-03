@@ -434,3 +434,22 @@ export function runBetween(c: Compiled, a: number, b: number): number {
   if (a < 0 || b < 0 || a >= c.n || b >= c.n) return -1;
   return c.runId[a * c.n + b];
 }
+
+/**
+ * Does a hint's claim hold in the answer? "run:4-9" says the answer lays
+ * string between posts 4 and 9, in either direction; "norun:4-9" that it does
+ * not. Read off the shipped solution, apart from the reasoning that made it.
+ */
+export function claimHolds(board: Board, claim: string): boolean {
+  const m = /^(no)?run:(\d+)-(\d+)$/.exec(claim);
+  if (!m) return false;
+  const a = Number(m[2]);
+  const b = Number(m[3]);
+  let laid = false;
+  for (const path of board.solution) {
+    for (let i = 0; i + 1 < path.length && !laid; i++) {
+      laid = (path[i] === a && path[i + 1] === b) || (path[i] === b && path[i + 1] === a);
+    }
+  }
+  return m[1] ? !laid : laid;
+}

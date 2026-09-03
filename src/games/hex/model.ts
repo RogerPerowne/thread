@@ -196,3 +196,13 @@ export function labelSpot(dir: number, r: number): { x: number; y: number } {
   const d = r * 0.62;
   return { x: Math.cos(a) * d, y: Math.sin(a) * d };
 }
+
+/** Does a hint's claim hold in the answer? "cell:3=tile:5", or "cell:3!=tile:5". */
+export function claimHolds(hex: Hex, claim: string): boolean {
+  const m = /^cell:(\d+)(!?=)tile:(\d+)$/.exec(claim);
+  if (!m) return false;
+  const at = Number(m[1]);
+  const tile = Number(m[3]);
+  if (at < 0 || at >= hex.answer.length) return false;
+  return m[2] === '=' ? hex.answer[at] === tile : hex.answer[at] !== tile;
+}

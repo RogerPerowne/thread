@@ -388,7 +388,7 @@ describe('playing', () => {
     expect(s.verdict().solved).toBe(false);
   });
 
-  it('names the broken clue before it looks for the next deduction', () => {
+  it('names the wrong cell behind a broken clue before it looks for the next deduction', () => {
     /*
      * A row of nothing but blanks breaks every clue that reads along it. There
      * is no next deduction from there, only a wrong cell behind you, and the
@@ -406,14 +406,17 @@ describe('playing', () => {
     const broken = judge(withRowClue, s.cells).badClues;
     expect(broken.length, 'a row of blanks should break a clue').toBeGreaterThan(0);
 
+    /* The clue is broken because a cell the answer fills was marked empty,
+       and that cell — the first of them — is what the hint points at. A
+       whole row lit up says "somewhere in here"; one cell says "this". */
     const hint = s.hint()!;
-    const clue = withRowClue.clues[broken[0]];
-    const line = sightLine(withRowClue, clue.side, clue.line).map((i) => `cell:${i}`);
-    expect(hint.focus, 'the hint points somewhere else entirely').toEqual(line);
+    const first = withRowClue.answer.findIndex((v, i) => i < withRowClue.w && v > 0);
+    expect(hint.kind).toBe('fix');
+    expect(hint.focus, 'the hint points somewhere else entirely').toEqual([`cell:${first}`]);
     expect(hint.move).toMatch(/take/i);
   });
 
-  it('says a shape used twice is a shape used twice', () => {
+  it('names the wrong one of a shape used twice', () => {
     /*
      * Two of one shape side by side is a broken ROW. It is only the first
      * thing the hint says if no clue is broken as well, and on a board whose
@@ -429,8 +432,14 @@ describe('playing', () => {
     const s = new ShapeSession(clean);
     s.set(0, 1);
     s.set(1, 1);
+    /* One of the two is not where the answer has a circle — both, unless the
+       corner happens to hold one — and the hint names the first wrong one
+       rather than the row, because a row is a place to search and a cell is
+       a thing to take back. */
     const hint = s.hint()!;
-    expect(hint.reason).toMatch(/twice/i);
+    const wrong = clean.answer[0] === 1 ? 1 : 0;
+    expect(hint.kind).toBe('fix');
+    expect(hint.focus).toEqual([`cell:${wrong}`]);
   });
 });
 

@@ -15,7 +15,7 @@
  */
 
 import { svg } from '../../platform/dom.js';
-import { neighbours } from './model.js';
+import { neighbours, stepsFrom } from './model.js';
 import type { ZigSession } from './session.js';
 import type { View, ViewHost } from '../../platform/types.js';
 
@@ -23,6 +23,14 @@ import type { View, ViewHost } from '../../platform/types.js';
 const U = 10;
 /** How far into a cell the finger has to be, as a share of half a cell. */
 const INSIDE = 0.62;
+/**
+ * The run strip under the grid: the sequence the numbers have to follow, with
+ * the next one wanted lit. Its height, the size of one number in it, and the
+ * gap between two.
+ */
+const STRIP = 9.5;
+const RUN = 6;
+const RUN_GAP = 1.5;
 
 export function mountZigzag(
   root: HTMLElement, session: ZigSession, host: ViewHost,
@@ -30,10 +38,12 @@ export function mountZigzag(
   const zig = session.zig;
   const W = zig.w * U;
   const H = zig.h * U;
+  /* The window: a unit of margin round the grid, and the run strip below. */
+  const view = { x: -1, y: -1, W: W + 2, H: H + 2 + STRIP };
 
   const el = svg('svg', {
     class: 'zig-svg',
-    viewBox: `-1 -1 ${W + 2} ${H + 2}`,
+    viewBox: `${view.x} ${view.y} ${view.W} ${view.H}`,
     preserveAspectRatio: 'xMidYMid meet',
     role: 'application',
     'aria-label': `Zigzag board, ${zig.w} by ${zig.h}`,
@@ -71,6 +81,33 @@ export function mountZigzag(
       x: x + 0.35, y: y + 0.35, width: U - 0.7, height: U - 0.7, rx: 1.1,
       class: `zig-end ${kind}`,
     }));
+  }
+
+  /*
+   * The run. "1, 2, 3, 4, then 1 again" is the whole rule, and it used to
+   * live only in the rules sheet — so a refused step was a step refused for
+   * a reason you had to remember. The strip says the run once, under the
+   * board, and lights the number the line wants next; it advances as the
+   * line is drawn, which is also the only progress a Zigzag board has to
+   * show that is not the line itself.
+   */
+  const gRun = svg('g', { class: 'zig-run' });
+  const runEl: SVGRectElement[] = [];
+  {
+    const n = zig.sequence.length;
+    const width = n * RUN + (n - 1) * RUN_GAP;
+    const left = (W - width) / 2;
+    const top = H + 1 + (STRIP - RUN) / 2;
+    zig.sequence.forEach((v, i) => {
+      const x = left + i * (RUN + RUN_GAP);
+      const box = svg('rect', { x, y: top, width: RUN, height: RUN, rx: 1.2, class: 'zig-runbox' });
+      const label = svg('text', {
+        x: x + RUN / 2, y: top + RUN / 2, class: 'zig-runnum',
+        'text-anchor': 'middle', 'dominant-baseline': 'central', text: String(v),
+      });
+      gRun.append(box, label);
+      runEl.push(box);
+    });
   }
 
   const line = svg('path', {
@@ -134,12 +171,12 @@ export function mountZigzag(
 
   gLine.append(line, lead);
 
-  el.append(gCells, gMarks, gLine);
+  el.append(gCells, gMarks, gLine, gRun);
   const box = document.createElement('div');
   box.className = 'gameboard zig-board';
   // The stylesheet sizes the square from the container; a non-square board
   // needs its own ratio or it is letterboxed and drawn smaller than it needs.
-  box.style.setProperty('--board-ratio', String((W + 2) / (H + 2)));
+  box.style.setProperty('--board-ratio', String(view.W / view.H));
   box.appendChild(el);
   root.appendChild(box);
 
@@ -161,15 +198,32 @@ export function mountZigzag(
     }
     const head = path[path.length - 1];
     for (let i = 0; i < cellEl.length; i++) cellEl[i].classList.toggle('head', i === head);
+
+    /*
+     * Where the line can go next, marked. Not the answer — the answer is which
+     * of them — but the rule, applied: a touching cell carrying the number the
+     * run wants. A refused step is then a step onto a cell that was plainly
+     * not marked, rather than a flinch to be puzzled over.
+     */
+    const can = new Set(head === undefined
+      ? (path.length === 0 ? [zig.start] : [])
+      : stepsFrom(zig, head).filter((c) => session.canGo(c)));
+    for (let i = 0; i < cellEl.length; i++) cellEl[i].classList.toggle('can', can.has(i));
+
+    /* The run strip: the number wanted next, lit. Nothing lit once the line
+       is complete — there is no next. */
+    const done = path.length >= zig.w * zig.h;
+    const want = path.length % zig.sequence.length;
+    runEl.forEach((r, i) => r.classList.toggle('next', !done && i === want));
     host.changed();
   }
 
   /** Board point from a client point. */
   function at(clientX: number, clientY: number): { x: number; y: number } {
     const r = el.getBoundingClientRect();
-    const side = Math.min(r.width / (W + 2), r.height / (H + 2));
-    const ox = r.left + (r.width - side * (W + 2)) / 2 + side;
-    const oy = r.top + (r.height - side * (H + 2)) / 2 + side;
+    const side = Math.min(r.width / view.W, r.height / view.H);
+    const ox = r.left + (r.width - side * view.W) / 2 - view.x * side;
+    const oy = r.top + (r.height - side * view.H) / 2 - view.y * side;
     return { x: (clientX - ox) / side, y: (clientY - oy) / side };
   }
 
@@ -373,6 +427,12 @@ export function mountZigzag(
     game: 'zigzag',
     zig,
     path: () => [...session.path],
+    /* The window and where each cell's middle is, read rather than
+       recomputed, so a harness cannot drift from what a thumb hits. */
+    view,
+    mids: () => zig.cells.map((_, c) => midOf(c)),
+    /** The cells the board is marking as legal next steps. */
+    can: () => cellEl.map((c, i) => (c.classList.contains('can') ? i : -1)).filter((i) => i >= 0),
   };
 
   paint();

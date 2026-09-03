@@ -255,14 +255,18 @@ describe('a session', () => {
 });
 
 describe('the hint', () => {
-  it('points at the clash before anything else', () => {
+  it('points at the tile that is not where the answer has it, before anything else', () => {
+    /* Two tiles swapped: they clash, but the clash is a symptom. The hint
+       names the wrong tile itself, checked against the answer, because that
+       is the thing to take back. */
     const hex = pair();
     const s = new HexSession(hex);
     s.place(0, 1);
     s.place(1, 0);
     const hint = s.hint()!;
-    expect(hint.reason).toContain('do not match');
-    expect(hint.focus).toEqual(['cell:0', 'cell:1']);
+    expect(hint.kind).toBe('fix');
+    expect(hint.focus).toEqual(['cell:0']);
+    expect(hint.claim).toEqual(['cell:0!=tile:1']);
   });
 
   it('names a space that only one tile fits, and which tile', () => {
@@ -293,17 +297,17 @@ describe('the hint', () => {
     expect(s.hint()).toBeNull();
   });
 
-  it('says something has gone wrong when nothing fits a space', () => {
-    /* Not a clash — every tile down agrees with its neighbours — but a space
-       nothing left will fit, which is the other way a board dies. */
+  it('says something has gone wrong the moment a tile is laid wrong', () => {
+    /* Not a clash — every tile down agrees with its neighbours — but a tile
+       the answer puts elsewhere, which is the way a board actually dies. */
     const board = shipped[0];
     const s = new HexSession(board);
     const wrong = board.tiles.map((_, i) => i).find((t) => t !== board.answer[0])!;
     s.place(0, wrong);
-    const fits = s.fits();
-    const dead = fits.findIndex((f, at) => s.placed[at] < 0 && f.length === 0);
-    if (dead >= 0) {
-      expect(s.hint()!.reason).toContain('wrong place');
-    }
+    /* Whether or not a space has died yet: the tile is wrong, and the hint
+       says so from the answer rather than waiting for the board to notice. */
+    const hint = s.hint()!;
+    expect(hint.kind).toBe('fix');
+    expect(hint.focus).toEqual(['cell:0']);
   });
 });

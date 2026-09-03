@@ -128,15 +128,17 @@ for (const game of games) {
     const zig = handle.zig;
     const svg = page.locator('.zig-svg');
     const box = await svg.boundingBox();
-    const W = zig.w * 10 + 2;
-    const H = zig.h * 10 + 2;
-    const side = Math.min(box.width / W, box.height / H);
-    const ox = box.x + (box.width - side * W) / 2 + side;
-    const oy = box.y + (box.height - side * H) / 2 + side;
-    const at = (c) => ({
-      x: ox + ((c % zig.w) * 10 + 5) * side,
-      y: oy + (Math.floor(c / zig.w) * 10 + 5) * side,
+    /* The window and the cell middles off the handle, same as the e2e
+       helper: a copy of the grid arithmetic here would be right until the
+       board grew something under the grid, and then silently wrong. */
+    const { view, mids } = await page.evaluate(() => {
+      const b = window.__puzzles.board();
+      return { view: b.view, mids: b.mids() };
     });
+    const side = Math.min(box.width / view.W, box.height / view.H);
+    const ox = box.x + (box.width - side * view.W) / 2 - view.x * side;
+    const oy = box.y + (box.height - side * view.H) / 2 - view.y * side;
+    const at = (c) => ({ x: ox + mids[c].x * side, y: oy + mids[c].y * side });
     const f = at(zig.answer[0]);
     await page.mouse.move(f.x, f.y);
     await page.mouse.down();
