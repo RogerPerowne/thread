@@ -395,21 +395,38 @@ describe('playing', () => {
      * useful thing to say is which clue stopped holding — not which line is
      * tightest.
      */
-    const s = new ShapeSession(board);
-    for (let c = 0; c < board.w; c++) s.set(c, 0);
+    /* A board with a clue that actually reads along row 0, chosen rather than
+       assumed: five hundred boards do not all carry one on the same line. */
+    const withRowClue = shipped.find((b) => b.clues.some(
+      (c) => (c.side === 'left' || c.side === 'right') && c.line === 0,
+    ))!;
+    const s = new ShapeSession(withRowClue);
+    for (let c = 0; c < withRowClue.w; c++) s.set(c, 0);
 
-    const broken = judge(board, s.cells).badClues;
+    const broken = judge(withRowClue, s.cells).badClues;
     expect(broken.length, 'a row of blanks should break a clue').toBeGreaterThan(0);
 
     const hint = s.hint()!;
-    const clue = board.clues[broken[0]];
-    const line = sightLine(board, clue.side, clue.line).map((i) => `cell:${i}`);
+    const clue = withRowClue.clues[broken[0]];
+    const line = sightLine(withRowClue, clue.side, clue.line).map((i) => `cell:${i}`);
     expect(hint.focus, 'the hint points somewhere else entirely').toEqual(line);
     expect(hint.move).toMatch(/take/i);
   });
 
   it('says a shape used twice is a shape used twice', () => {
-    const s = new ShapeSession(board);
+    /*
+     * Two of one shape side by side is a broken ROW. It is only the first
+     * thing the hint says if no clue is broken as well, and on a board whose
+     * top-edge clues read those two columns one usually is — so the board is
+     * chosen to isolate the rule being checked rather than assumed to.
+     */
+    const clean = shipped.find((b) => {
+      const t = new ShapeSession(b);
+      t.set(0, 1);
+      t.set(1, 1);
+      return judge(b, t.cells).badClues.length === 0;
+    })!;
+    const s = new ShapeSession(clean);
     s.set(0, 1);
     s.set(1, 1);
     const hint = s.hint()!;

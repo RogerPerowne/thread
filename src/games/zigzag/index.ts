@@ -5,13 +5,14 @@
 import { svg } from '../../platform/dom.js';
 import { ZigSession } from './session.js';
 import { mountZigzag } from './view.js';
+import { LADDER } from './design.js';
 import type { Zig } from './model.js';
 import type { ZigState } from './session.js';
 import type { Band, GamePackage, Puzzle } from '../../platform/types.js';
 import raw from '../../../puzzles/zigzag.json';
 import './zigzag.css';
 
-type Shipped = Zig & { id: string; band: Band; nodes: number; forced: number };
+type Shipped = Zig & { id: string; band: Band; nodes: number; forced: number; chapter: number };
 
 const ALL = raw as unknown as Shipped[];
 
@@ -94,21 +95,17 @@ export const zigzag: GamePackage<Zig, ZigState> = {
     ],
   },
   puzzles: () => puzzles,
-  chapters: () => {
-    /*
-     * One chapter per board size, in ladder order. The size is what actually
-     * changes between them, so naming them anything else would be decoration
-     * pretending to be structure.
-     */
-    const out: { name: string; puzzles: Puzzle<Zig>[] }[] = [];
-    for (const p of puzzles) {
-      const name = `${p.data.w} by ${p.data.h}`;
-      const last = out[out.length - 1];
-      if (last && last.name === name) last.puzzles.push(p);
-      else out.push({ name, puzzles: [p] });
-    }
-    return out;
-  },
+  /*
+   * The chapters are the ladder's, read off the boards themselves. Naming them
+   * by board size stopped working the moment two chapters shared one: the
+   * ladder's steps are diagonals and how many numbers as much as they are
+   * size, and those do not show up in "6 by 5".
+   */
+  chapters: () => LADDER.map((c, i) => ({
+    name: c.name,
+    puzzles: puzzles.filter((p) => (p.data as Shipped).chapter === i + 1),
+  })).filter((c) => c.puzzles.length > 0),
+
   begin: (puzzle) => new ZigSession(puzzle.data),
   mount: (host, session, view) => mountZigzag(host, session as ZigSession, view),
   miniature,

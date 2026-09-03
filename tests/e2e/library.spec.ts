@@ -33,36 +33,49 @@ test('a card opens today\'s puzzle, and back returns to the path', async ({ page
   await expect(page).toHaveURL(/#\/g\/[a-z-]+\/[a-z0-9-]+$/);
   await expect(page.locator('.gamebar .title')).toBeVisible();
 
+  /* Back from a board goes to the chapter it is in, and back again to the
+     path — the way the player came, one step at a time. */
+  await page.locator('.gamebar .icon').first().click();
+  await expect(page).toHaveURL(/#\/g\/[a-z-]+\/c\/\d+$/);
+  await expect(page.locator('.levelgrid')).toBeVisible();
+
   await page.locator('.gamebar .icon').first().click();
   await expect(page).toHaveURL(/#\/g\/[a-z-]+$/);
-  await expect(page.locator('.ptile').first()).toBeVisible();
+  await expect(page.locator('.ptiles-over .ptile').first()).toBeVisible();
 
   await page.locator('.gamebar .icon').first().click();
   await expect(page.locator('.masthead .wordmark')).toBeVisible();
 });
 
-test('the path carries a game\'s whole ladder, chapter by chapter', async ({ page }) => {
+test('the path carries a game\'s chapters, one tile each', async ({ page }) => {
   await gotoApp(page);
   const games = await page.evaluate(() => window.__puzzles.games());
   for (const g of games) {
     await page.goto(`/#/g/${g}`);
-    const ids = await page.evaluate((id) => window.__puzzles.puzzles(id), g);
-    // Every puzzle is on the path exactly once, and in ladder order.
-    await expect(page.locator('.ptile')).toHaveCount(ids.length);
+    await page.waitForSelector('.pathsvg');
+    const chapters = await page.evaluate((id) => window.__puzzles.chapters(id), g);
+
+    /*
+     * One tile per CHAPTER, not one per puzzle. Five hundred tiles on a
+     * meander is a scroll bar with pictures on it; seventeen is a path.
+     */
+    await expect(page.locator('.ptiles-over .ptile')).toHaveCount(chapters.length);
     const onPath = await page.evaluate(
-      () => [...document.querySelectorAll('.ptile')].map((t) => t.getAttribute('data-puzzle')),
+      () => [...document.querySelectorAll('.ptiles-over .ptile')]
+        .map((t) => Number(t.getAttribute('data-chapter'))),
     );
     // The path climbs, and it is drawn from its foot upward, so the order it
     // is written in is the ladder's own order.
-    expect(onPath).toEqual([...ids]);
+    expect(onPath).toEqual(chapters.map((_, i) => i));
 
     /*
-     * One band per chapter, and the rail has one mark for each — the rail is a
-     * map of the path, so a mark with no band is a jump to nowhere.
+     * The rail has one mark per chapter — it is a map of the path, so a mark
+     * with nothing to jump to is a jump to nowhere.
      */
-    const bands = await page.locator('.pband').count();
-    expect(bands).toBeGreaterThan(0);
-    await expect(page.locator('.chaprail .mark')).toHaveCount(bands);
+    await expect(page.locator('.chaprail .mark')).toHaveCount(chapters.length);
+    /* And the ruled bands are gone: a chapter that IS a tile does not also
+       need a heading announcing it. */
+    await expect(page.locator('.pband')).toHaveCount(0);
   }
 });
 

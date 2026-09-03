@@ -1,21 +1,21 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, threadBoard, threadMapper, dragStrand,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, threadBoard, threadMapper, dragStrand,
   solveThread, isSolved, noteOf, control,
 } from './helpers.js';
 
 /*
- * Every shipped board, solved by real drags, in chunks.
+ * A spread of the ladder, solved by real drags — see `ladderSpread`.
  *
- * A hundred and ninety boards in one test is several minutes of pointer events
- * and a failure that tells you nothing about which board broke.
+ * Five hundred boards in one test is an hour of pointer events and a failure
+ * that tells you nothing about which board broke.
  */
-const CHUNK = 20;
-for (let from = 0; from < 190; from += CHUNK) {
-  test(`thread boards ${from + 1} to ${from + CHUNK} are solvable by dragging`, async ({ page }) => {
+for (const half of [0, 1]) {
+  test(`thread, half ${half + 1} of the ladder, is solvable by dragging`, async ({ page }) => {
     await gotoApp(page);
-    const ids = await puzzleIds(page, 'thread');
-    for (const id of ids.slice(from, from + CHUNK)) {
+    const all = await ladderSpread(page, 'thread');
+    const ids = half === 0 ? all.slice(0, Math.ceil(all.length / 2)) : all.slice(Math.ceil(all.length / 2));
+    for (const id of ids) {
       await openPuzzle(page, 'thread', id);
       const board = await threadBoard(page);
       await solveThread(page, board);

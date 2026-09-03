@@ -183,9 +183,9 @@ describe('the designer', () => {
   });
 
   it('bands by the measured score and nothing else', () => {
-    expect(bandOf(50)).toBe('gentle');
-    expect(bandOf(70)).toBe('steady');
-    expect(bandOf(80)).toBe('tricky');
+    expect(bandOf(60)).toBe('gentle');
+    expect(bandOf(80)).toBe('steady');
+    expect(bandOf(95)).toBe('tricky');
     expect(bandOf(120)).toBe('severe');
   });
 

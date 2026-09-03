@@ -4,7 +4,7 @@ import {
   judge, neighbours, wants, adjacency, type Zig,
 } from '../../src/games/zigzag/model.js';
 import { solve } from '../../src/games/zigzag/solve.js';
-import { makeZig, hamiltonian } from '../../src/games/zigzag/design.js';
+import { makeZig, hamiltonian, orthogonalPossible } from '../../src/games/zigzag/design.js';
 import { makeRng } from '../../src/platform/rng.js';
 import { ZigSession } from '../../src/games/zigzag/session.js';
 
@@ -17,7 +17,7 @@ import { ZigSession } from '../../src/games/zigzag/session.js';
  */
 function aBoard(tag: string, w = 5, h = 5): Zig {
   for (let i = 0; i < 60; i++) {
-    const made = makeZig({ w, h, sequence: [1, 2, 3, 4] }, makeRng(`${tag}/${i}`));
+    const made = makeZig({ w, h, sequence: [1, 2, 3, 4], diagonal: true }, makeRng(`${tag}/${i}`));
     if (made) return made.zig;
   }
   throw new Error(`no ${w}x${h} board from "${tag}"`);
@@ -36,6 +36,48 @@ const board = (over: Partial<Zig> = {}): Zig => ({
 });
 
 describe('where a line may step', () => {
+  it('goes only up, down, left and right when the board forbids corners', () => {
+    /*
+     * The game's biggest difficulty lever, and it is one rule rather than a
+     * different engine. Four ways out of a cell, about one of them carrying
+     * the next number, so most steps are forced and the line nearly draws
+     * itself. Measured against the same boards with corners open it is the
+     * difference between 47 and 90.
+     */
+    expect(neighbours(3, 3, 4, false).sort((a, b) => a - b)).toEqual([1, 3, 5, 7]);
+    expect(neighbours(3, 3, 0, false).sort((a, b) => a - b)).toEqual([1, 3]);
+    // Absent means eight, because that is what every board built before the
+    // flag existed meant.
+    expect(neighbours(3, 3, 4)).toHaveLength(8);
+  });
+
+  it('knows which boards have no straight-only answer at all', () => {
+    /*
+     * Parity, not a search that gives up. A line stepping only orthogonally
+     * changes chessboard colour every step, so a path over all w*h cells has
+     * endpoints of the same colour when w*h is odd and opposite when it is
+     * even. Start and finish are opposite corners, and exactly one shape
+     * fails: both sides even. Six by six has no answer and never will.
+     */
+    expect(orthogonalPossible(6, 6)).toBe(false);
+    expect(orthogonalPossible(8, 6)).toBe(false);
+    expect(orthogonalPossible(5, 5)).toBe(true);
+    expect(orthogonalPossible(6, 5)).toBe(true);
+    expect(orthogonalPossible(7, 6)).toBe(true);
+
+    // And the designer refuses rather than hunting for something impossible.
+    // Refusing has to be instant: left to search, one of these boards spends
+    // its entire budget proving a negative parity already knew.
+    const t0 = Date.now();
+    for (let i = 0; i < 30; i++) {
+      const made = makeZig(
+        { w: 6, h: 6, sequence: [1, 2, 3, 4, 5], diagonal: false }, makeRng(`imp/${i}`),
+      );
+      expect(made, 'a 6x6 straight-only board came out of nowhere').toBeNull();
+    }
+    expect(Date.now() - t0, 'the designer searched instead of refusing').toBeLessThan(200);
+  });
+
   it('reaches all eight neighbours, and stops at the edge', () => {
     expect(neighbours(3, 3, 4).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 5, 6, 7, 8]);
     expect(neighbours(3, 3, 0).sort((a, b) => a - b)).toEqual([1, 3, 4]);
@@ -148,7 +190,7 @@ describe('the designer', () => {
 
   it('only returns boards with exactly one line', () => {
     for (let i = 0; i < 6; i++) {
-      const made = makeZig({ w: 5, h: 5, sequence: [1, 2, 3, 4] }, makeRng(`u/${i}`));
+      const made = makeZig({ w: 5, h: 5, sequence: [1, 2, 3, 4], diagonal: true }, makeRng(`u/${i}`));
       if (!made) continue;
       const found = solve(made.zig, 3);
       expect(found.exhausted).toBe(false);

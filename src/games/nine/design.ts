@@ -59,9 +59,9 @@ export function scoreOf(r: Reading): number {
  * changes, these are re-measured rather than nudged.
  */
 export function bandOf(score: number): Band {
-  if (score < 62) return 'gentle';
-  if (score < 100) return 'steady';
-  if (score < 128) return 'tricky';
+  if (score < 65) return 'gentle';
+  if (score < 112) return 'steady';
+  if (score < 130) return 'tricky';
   return 'severe';
 }
 
@@ -125,6 +125,9 @@ export function makeNine(recipe: Recipe, rng: Rng): (Nine & { reading: Reading }
  * what the brief asked for: difficulty from deduction complexity, not from
  * harder arithmetic. Nothing here gets harder by making the sums bigger.
  */
+/** How long one chapter may spend looking, before it ships what it has. */
+const CHAPTER_MS = Number(process.env.CHAPTER_MS ?? 300_000);
+
 export type Chapter = {
   readonly name: string;
   readonly count: number;
@@ -137,16 +140,31 @@ export type Chapter = {
 const PM: readonly Op[] = ['+', '-'];
 const PMT: readonly Op[] = ['+', '-', '*'];
 const ALL: readonly Op[] = ['+', '-', '*', '/'];
+/* The narrower sets, which is where the ladder's hard end comes from: taking
+   an operator AWAY is what makes a line say less. */
+const MT: readonly Op[] = ['-', '*'];
+const PT: readonly Op[] = ['+', '*'];
+const PMD: readonly Op[] = ['+', '-', '/'];
+const PL: readonly Op[] = ['+'];
 
 export const LADDER: readonly Chapter[] = [
-  { name: 'A Way In', count: 8, recipe: { ops: PMT, cap: 90, mode: 'precedence', n: 3 }, from: 0, to: 60 },
-  { name: 'Sharing Out', count: 8, recipe: { ops: ALL, cap: 120, mode: 'precedence', n: 3 }, from: 0, to: 62 },
-  { name: 'Products', count: 8, recipe: { ops: PMT, cap: 140, mode: 'precedence', n: 3 }, from: 62, to: 78 },
-  { name: 'All Four', count: 8, recipe: { ops: ALL, cap: 200, mode: 'precedence', n: 3 }, from: 62, to: 90 },
-  { name: 'Longer Reach', count: 8, recipe: { ops: PMT, cap: 200, mode: 'precedence', n: 3 }, from: 78, to: 999 },
-  { name: 'Plus and Minus', count: 8, recipe: { ops: PM, cap: 45, mode: 'precedence', n: 3 }, from: 0, to: 118 },
-  { name: 'Both Ways', count: 8, recipe: { ops: PM, cap: 60, mode: 'precedence', n: 3 }, from: 118, to: 128 },
-  { name: 'Nothing Given', count: 8, recipe: { ops: PM, cap: 60, mode: 'precedence', n: 3 }, from: 128, to: 999 },
+  { name: 'Everything Allowed', count: 30, recipe: { ops: PT, cap: 140, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Bigger Products', count: 30, recipe: { ops: MT, cap: 140, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Times and Add', count: 30, recipe: { ops: PT, cap: 200, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Times and Take', count: 30, recipe: { ops: MT, cap: 200, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'A Way In', count: 30, recipe: { ops: PMT, cap: 90, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'In Order', count: 30, recipe: { ops: ALL, cap: 200, mode: 'leftToRight', n: 3 }, from: 0, to: 999 },
+  { name: 'All Four', count: 30, recipe: { ops: ALL, cap: 200, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Sharing Out', count: 30, recipe: { ops: ALL, cap: 120, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Longer Reach', count: 30, recipe: { ops: PMT, cap: 200, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Products', count: 30, recipe: { ops: PMT, cap: 140, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Left to Right', count: 30, recipe: { ops: PMT, cap: 200, mode: 'leftToRight', n: 3 }, from: 0, to: 999 },
+  { name: 'Plus and Minus', count: 30, recipe: { ops: PM, cap: 45, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Nothing Given', count: 30, recipe: { ops: PM, cap: 90, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Both Ways', count: 30, recipe: { ops: PM, cap: 60, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'No Multiplying', count: 30, recipe: { ops: PMD, cap: 90, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Sharing Only', count: 30, recipe: { ops: PMD, cap: 200, mode: 'precedence', n: 3 }, from: 0, to: 999 },
+  { name: 'Adding Alone', count: 20, recipe: { ops: PL, cap: 45, mode: 'precedence', n: 3 }, from: 0, to: 999 },
 ];
 
 export type Built = Nine & {
@@ -166,17 +184,32 @@ export function buildNine(seed = 'nine-1', onProgress?: (msg: string) => void): 
   const out: Built[] = [];
   let no = 0;
 
+  /*
+   * Seeded by the RECIPE, not by where the chapter sits.
+   *
+   * The ladder's order is decided by measuring the boards, which means the
+   * chapters get moved after they are built. Seeded by position, moving one
+   * changes which boards it makes, which changes its median, which changes
+   * where it should sit — a ladder that will not sit still. Seeded by what it
+   * is, a chapter makes the same thirty boards wherever it ends up, so putting
+   * them in order is a permutation and one pass settles it.
+   */
+  const seenRecipe = new Map<string, number>();
   LADDER.forEach((chapter, ci) => {
-    const rng = makeRng(`${seed}:${ci}`);
+    const r = chapter.recipe;
+    const key = `${r.ops.join('')}|${r.cap}|${r.mode}|${r.n}`;
+    const nth = seenRecipe.get(key) ?? 0;
+    seenRecipe.set(key, nth + 1);
+    const rng = makeRng(`${seed}:${key}:${nth}`);
     const seen = new Set<string>();
-    let made = 0;
+    const batch: Omit<Built, 'id'>[] = [];
     let tries = 0;
-    while (made < chapter.count && tries < 400_000) {
+    const until = Date.now() + CHAPTER_MS;
+    while (batch.length < chapter.count && tries < 400_000 && Date.now() < until) {
       tries++;
       const board = makeNine(chapter.recipe, rng);
       if (!board) continue;
       const score = scoreOf(board.reading);
-      if (score < chapter.from || score >= chapter.to) continue;
 
       /* Two boards with the same six targets and the same operators are the
          same puzzle wearing a different number. */
@@ -184,9 +217,7 @@ export function buildNine(seed = 'nine-1', onProgress?: (msg: string) => void): 
       if (seen.has(key)) continue;
       seen.add(key);
 
-      no++;
-      made++;
-      out.push({
+      batch.push({
         n: board.n,
         mode: board.mode,
         rowOps: board.rowOps,
@@ -194,13 +225,16 @@ export function buildNine(seed = 'nine-1', onProgress?: (msg: string) => void): 
         rowTargets: board.rowTargets,
         colTargets: board.colTargets,
         answer: board.answer,
-        id: `nine-${no}`,
         band: bandOf(score),
         score: Math.round(score * 10) / 10,
         chapter: ci + 1,
       });
     }
-    onProgress?.(`${chapter.name}: ${made}/${chapter.count} in ${tries} draws`);
+    /* Sorted inside the chapter, so its levels climb rather than arriving in
+       whatever order the generator happened to find them. */
+    batch.sort((a, b) => a.score - b.score);
+    for (const b of batch) out.push({ ...b, id: `nine-${++no}` });
+    onProgress?.(`${chapter.name}: ${batch.length}/${chapter.count} in ${tries} draws`);
   });
 
   return out;

@@ -1,21 +1,22 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, hexBoard, hexMapper, dragTile, tapTileInto,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, hexBoard, hexMapper, dragTile, tapTileInto,
   solveHex, isSolved, noteOf, control,
 } from './helpers.js';
 
 /**
- * Every shipped board, filled by real drags, in chunks.
+ * A spread of the ladder, filled by real drags.
  *
  * A board solved by calling into the session would prove the matching rule
  * works and nothing at all about whether nineteen tiles can be moved with a
  * thumb, and those are different questions.
  */
 test.describe('every board can be filled', () => {
-  for (const chunk of [0, 1, 2, 3]) {
-    test(`hexagony boards ${chunk * 17 + 1} to ${chunk * 17 + 17}`, async ({ page }) => {
+  for (const chunk of [0, 1]) {
+    test(`hexagony, half ${chunk + 1} of the ladder`, async ({ page }) => {
       await gotoApp(page);
-      const ids = (await puzzleIds(page, 'hex')).slice(chunk * 17, chunk * 17 + 17);
+      const all = await ladderSpread(page, 'hex');
+      const ids = chunk === 0 ? all.slice(0, Math.ceil(all.length / 2)) : all.slice(Math.ceil(all.length / 2));
       for (const id of ids) {
         await openPuzzle(page, 'hex', id);
         const board = await hexBoard(page);
@@ -62,8 +63,14 @@ test('a tile can be moved four ways and they all mean what they look like', asyn
 
 test('a clash is shown only where two tiles actually disagree', async ({ page }) => {
   await gotoApp(page);
-  const ids = await puzzleIds(page, 'hex');
-  await openPuzzle(page, 'hex', ids[0]);
+  /*
+   * A board from the middle of the ladder, because the first one cannot show
+   * this. Four tiles drawing on three numbers is the gentlest board there is
+   * and every tile agrees with every other in every space — there is no clash
+   * on it to be shown, which is a fact about that board rather than a fault.
+   */
+  const chapters = await page.evaluate(() => window.__puzzles.chapters('hex'));
+  await openPuzzle(page, 'hex', chapters[Math.floor(chapters.length / 2)][0]);
   const board = await hexBoard(page);
 
   /*

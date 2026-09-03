@@ -10,10 +10,9 @@
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { buildShape, LADDER, makeShape, scoreOf } from '../src/games/shape/design.js';
+import { buildShape, LADDER, scoreOf } from '../src/games/shape/design.js';
 import { search, isUnique, analyse } from '../src/games/shape/solve.js';
 import { judge } from '../src/games/shape/model.js';
-import { makeRng } from '../src/platform/rng.js';
 
 const SEED = process.env.SEED ?? 'shape-1';
 
@@ -74,29 +73,12 @@ writeFileSync('puzzles/shape.json', json);
 console.log('');
 for (const [band, n] of counts) console.log(`  ${band.padEnd(8)} ${n}`);
 
-console.log('\nthe spread the bands are cut from');
-for (const chapter of LADDER) {
-  if (chapter.from !== 0) continue;
-  const rng = makeRng(`spread:${chapter.recipe.w}${chapter.recipe.h}${chapter.recipe.shapes}`);
-  const scores: number[] = [];
-  let tries = 0;
-  let reasoned = 0;
-  const until = Date.now() + 6000;
-  while (scores.length < 40 && tries < 400 && Date.now() < until) {
-    tries++;
-    const b = makeShape(chapter.recipe, rng);
-    if (!b) continue;
-    scores.push(scoreOf(b.reading));
-    if (b.reading.byReason) reasoned++;
-  }
-  scores.sort((a, b) => a - b);
-  const q = (p: number) => (scores[Math.floor(scores.length * p)] ?? 0).toFixed(0);
-  console.log(
-    `  ${chapter.recipe.w}x${chapter.recipe.h} ${chapter.recipe.shapes} shapes`
-    + `  n=${String(scores.length).padStart(2)}  reasoned out ${String(Math.round((reasoned / Math.max(1, scores.length)) * 100)).padStart(3)}%`
-    + `   q1 ${q(0.25)}  med ${q(0.5)}  q3 ${q(0.75)}`,
-  );
-}
+console.log('\nchapter medians — the ladder has to climb');
+LADDER.forEach((c, ci) => {
+  const xs = shipped.filter((s) => s.chapter === ci + 1).map((s) => s.score).sort((a, b) => a - b);
+  const med = xs.length ? xs[Math.floor(xs.length / 2)] : 0;
+  console.log(`  ${String(ci + 1).padStart(2)} ${c.name.padEnd(18)} ${String(xs.length).padStart(3)} boards  median ${med.toFixed(1)}`);
+});
 
 console.log(`\n${shipped.length} boards, ${Math.round(json.length / 1024)} kB, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 if (bad > 0) {

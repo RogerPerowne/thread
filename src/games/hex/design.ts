@@ -76,9 +76,9 @@ export function scoreOf(r: Reading): number {
  * nudged if the score ever changes.
  */
 export function bandOf(score: number): Band {
-  if (score < 53) return 'gentle';
-  if (score < 61) return 'steady';
-  if (score < 79) return 'tricky';
+  if (score < 57) return 'gentle';
+  if (score < 68) return 'steady';
+  if (score < 83) return 'tricky';
   return 'severe';
 }
 
@@ -134,6 +134,9 @@ export function makeHex(recipe: Recipe, rng: Rng): Made | null {
   return { ...hex, reading: analyse(hex), nodes: found.nodes };
 }
 
+/** How long one chapter may spend looking, before it ships what it has. */
+const CHAPTER_MS = Number(process.env.CHAPTER_MS ?? 300_000);
+
 export type Chapter = {
   readonly name: string;
   readonly count: number;
@@ -162,15 +165,23 @@ export type Chapter = {
  * is a different kind — so those are not laddered, they are dropped.
  */
 export const LADDER: readonly Chapter[] = [
-  { name: 'Four Tiles', count: 8, recipe: { cells: rhombus(2, 2), values: 3, name: '2 by 2' }, from: 0, to: 999 },
-  { name: 'Six Tiles', count: 8, recipe: { cells: rhombus(3, 2), values: 4, name: '3 by 2' }, from: 0, to: 999 },
-  { name: 'The Wedge', count: 8, recipe: { cells: triangle(3), values: 4, name: 'triangle' }, from: 0, to: 999 },
-  { name: 'The Flower', count: 8, recipe: { cells: flower(1), values: 5, name: 'flower' }, from: 0, to: 999 },
-  { name: 'Crowded', count: 8, recipe: { cells: flower(1), values: 4, name: 'flower' }, from: 53, to: 999 },
-  { name: 'Nine Spaces', count: 8, recipe: { cells: rhombus(3, 3), values: 5, name: '3 by 3' }, from: 0, to: 999 },
-  { name: 'A Wider Field', count: 8, recipe: { cells: rhombus(4, 3), values: 6, name: '4 by 3' }, from: 0, to: 999 },
-  { name: 'Fifteen', count: 6, recipe: { cells: rhombus(5, 3), values: 7, name: '5 by 3' }, from: 0, to: 999 },
-  { name: 'The Honeycomb', count: 6, recipe: { cells: flower(2), values: 8, name: 'honeycomb' }, from: 0, to: 999 },
+  { name: 'Four Tiles', count: 30, recipe: { cells: rhombus(2, 2), values: 3, name: '2 by 2' }, from: 0, to: 999 },
+  { name: 'The Flower', count: 30, recipe: { cells: flower(1), values: 5, name: 'flower' }, from: 0, to: 999 },
+  { name: 'A Fourth Number', count: 30, recipe: { cells: rhombus(3, 2), values: 4, name: '3 by 2' }, from: 0, to: 999 },
+  { name: 'The Wedge', count: 30, recipe: { cells: triangle(3), values: 4, name: 'triangle' }, from: 0, to: 999 },
+  { name: 'Crowded', count: 30, recipe: { cells: flower(1), values: 4, name: 'flower' }, from: 0, to: 999 },
+  { name: 'Three Numbers', count: 30, recipe: { cells: triangle(3), values: 3, name: 'triangle' }, from: 0, to: 999 },
+  { name: 'Six Tiles', count: 30, recipe: { cells: rhombus(3, 2), values: 3, name: '3 by 2' }, from: 0, to: 999 },
+  { name: 'Five Numbers', count: 30, recipe: { cells: rhombus(3, 3), values: 5, name: '3 by 3' }, from: 0, to: 999 },
+  { name: 'The Long Wedge', count: 30, recipe: { cells: triangle(4), values: 5, name: 'big triangle' }, from: 0, to: 999 },
+  { name: 'Nine Spaces', count: 30, recipe: { cells: rhombus(3, 3), values: 4, name: '3 by 3' }, from: 0, to: 999 },
+  { name: 'Six Numbers', count: 30, recipe: { cells: rhombus(4, 3), values: 6, name: '4 by 3' }, from: 0, to: 999 },
+  { name: 'A Wider Field', count: 30, recipe: { cells: rhombus(4, 3), values: 5, name: '4 by 3' }, from: 0, to: 999 },
+  { name: 'The Honeycomb', count: 30, recipe: { cells: flower(2), values: 8, name: 'honeycomb' }, from: 0, to: 999 },
+  { name: 'Seven Numbers', count: 30, recipe: { cells: rhombus(5, 3), values: 7, name: '5 by 3' }, from: 0, to: 999 },
+  { name: 'Fifteen', count: 30, recipe: { cells: rhombus(5, 3), values: 6, name: '5 by 3' }, from: 0, to: 999 },
+  { name: 'Sixteen', count: 30, recipe: { cells: rhombus(4, 4), values: 6, name: '4 by 4' }, from: 0, to: 999 },
+  { name: 'Twenty Spaces', count: 20, recipe: { cells: rhombus(5, 4), values: 7, name: '5 by 4' }, from: 0, to: 999 },
 ];
 
 export type Built = Hex & {
@@ -184,37 +195,45 @@ export function buildHex(seed = 'hex-1', onProgress?: (msg: string) => void): Bu
   const out: Built[] = [];
   let no = 0;
 
+  /* Seeded by the recipe rather than by position — see One to Nine's note:
+     the ladder is ordered by measuring it, so a chapter has to make the same
+     boards wherever it ends up or the order will not settle. */
+  const seenRecipe = new Map<string, number>();
   LADDER.forEach((chapter, ci) => {
-    const rng = makeRng(`${seed}:${ci}`);
+    const key = `${chapter.recipe.name}|${chapter.recipe.values}`;
+    const nth = seenRecipe.get(key) ?? 0;
+    seenRecipe.set(key, nth + 1);
+    const rng = makeRng(`${seed}:${key}:${nth}`);
     const seen = new Set<string>();
-    let made = 0;
+    const batch: Omit<Built, 'id'>[] = [];
     let tries = 0;
-    while (made < chapter.count && tries < 200_000) {
+    const until = Date.now() + CHAPTER_MS;
+    while (batch.length < chapter.count && tries < 200_000 && Date.now() < until) {
       tries++;
       const board = makeHex(chapter.recipe, rng);
       if (!board) continue;
       if (!board.reading.byReason) continue;
       const score = scoreOf(board.reading);
-      if (score < chapter.from || score >= chapter.to) continue;
 
       const key = board.tiles.map((t) => t.join('')).sort().join('|');
       if (seen.has(key)) continue;
       seen.add(key);
 
-      no++;
-      made++;
-      out.push({
+      batch.push({
         cells: board.cells,
         tiles: board.tiles,
         answer: board.answer,
         values: board.values,
-        id: `hex-${no}`,
         band: bandOf(score),
         score: Math.round(score * 10) / 10,
         chapter: ci + 1,
       });
     }
-    onProgress?.(`${chapter.name}: ${made}/${chapter.count} in ${tries} draws`);
+    /* Sorted inside the chapter, so its levels climb rather than arriving in
+       whatever order the generator happened to find them. */
+    batch.sort((a, b) => a.score - b.score);
+    for (const b of batch) out.push({ ...b, id: `hex-${++no}` });
+    onProgress?.(`${chapter.name}: ${batch.length}/${chapter.count} in ${tries} draws`);
   });
 
   return out;

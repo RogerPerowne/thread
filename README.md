@@ -170,7 +170,80 @@ in three of those boards come out by pure deduction. So the ladder opens on
 multiplication and ends on addition, and nothing on it gets harder by making
 the sums bigger.
 
-## The path
+## Five hundred levels, and a ladder that climbs
+
+Every game ships 500 puzzles in 17 chapters — sixteen of thirty and a last of
+twenty. None of them is authored; all 3,000 are generated and proven, and the
+order they are in is a measurement rather than an opinion.
+
+**The ramp is built the same way in all six.** Each chapter is one recipe. The
+boards it makes are scored by that game's own analyser — the same one the bands
+come from, which counts DEDUCTION rather than board size — and then sorted, so
+the thirty levels inside a chapter climb. Where two chapters share a recipe,
+because the recipes have run out before the chapters have, they are generated
+as one pool and split by score: the earlier chapter takes the easier half. No
+difficulty window is ever chosen by eye.
+
+What actually makes each game harder is different, and worth stating, because
+in three of the six it is not the thing you would reach for:
+
+- **Thread** — posts, then colours. Sixteen posts to fifty-six, and two strings
+  to six. Colour count matters more than size: a board with six strings on it
+  has six sets of ends to keep apart.
+- **Zigzag** — diagonals first, then how many numbers, then size. Measured, the
+  diagonal lever dwarfs the other two: the same board with corners closed
+  scores 47 where open it scores 90. So **the whole first half of the ladder is
+  boards the line can only be drawn on straight**, which is also the half where
+  a player can follow it with a finger. How many numbers runs backwards from
+  how it looks — five numbers is EASIER than four, because a longer run means a
+  smaller share of the neighbours carry the next one — and two numbers is not a
+  difficulty at all but a broken puzzle, with half of every neighbourhood legal
+  and no unique answer at any size.
+- **One to Nine** — which operators are allowed, and it runs backwards too.
+  Multiplication says the most (`a x b x c = 336` allows one triple), addition
+  says the least (`a + b + c = 15` allows twenty-five), so the ladder opens on
+  all four operators and ends on addition alone.
+- **Shape Up** — size and how many shapes. Eleven recipes is every one there
+  is: the board must be square (see below) and the glyph set holds five shapes,
+  so four sizes by three shape counts, less the one that does not fit.
+- **Hexagony** — how many spaces, then how many numbers the sectors draw on.
+  More numbers is easier: a sector that could be any of three matches far more
+  neighbours than one that could be any of eight.
+- **Isolate** — the grid, then the largest room allowed. A bigger room is a
+  longer thing to have to see.
+
+Two impossibilities were found while laddering, and both are now refused in a
+line rather than searched for:
+
+- **Zigzag cannot go corner to corner without diagonals when both sides are
+  even.** Colour the grid like a chessboard: an orthogonal step changes colour,
+  so a path over all `w*h` cells has endpoints of the same colour when `w*h` is
+  odd and opposite colours when it is even. Work both cases through and exactly
+  one shape fails. Six by six has no answer, and the designer used to spend its
+  entire budget proving it.
+- **Shape Up's board has to be square.** Every row holds one of each shape, so
+  an `h`-row board carries `shapes * h` marks; every column does too, so it
+  carries `shapes * w`. Both count the same marks. A five by four would need
+  fifteen and twelve at once.
+
+## The path, and the levels
+
+The path carries the seventeen CHAPTERS, not the five hundred levels. Five
+hundred tiles on a meander is not a journey, it is a scroll bar with pictures
+on it: nobody can find level 314 on it and nobody wants to. Seventeen is a
+length a thumb can walk. Pressing one opens its thirty levels as a grid, which
+is a shape you take in at a glance and a path is the wrong shape for.
+
+The level grid is coloured by BAND, which is measured rather than asserted. A
+band is an ordered thing — gentle, steady, tricky, severe — so it gets a ramp
+mixed from the game's own accent and not four unrelated hues: four hues would
+say "four kinds", a ramp says "more of the same thing". A level you have not
+solved shows its band mixed back towards the paper and one you have shows it at
+full strength, so the grid says how hard and how far at once without either
+needing a second ink. Colour is never the only carrier: every tile has its
+number, a tick when it is solved, and its band in the name a screen reader
+reads. And because the thirty are sorted by score, the grid is a picture of the
+chapter's shape — pale at the top, dark at the bottom.
 
 A game's whole ladder is a path you climb, not a grid you scan: puzzles sit on
 isometric tiles along a meandering ribbon, with a band across it at each
@@ -191,12 +264,34 @@ placed by hand goes wrong the moment a size changes:
 - **The chapter bands.** A band is a row of the ladder like any other. It takes
   a slot on the meander, so the space it needs exists in the layout instead of
   being made by pushing tiles about.
-- **One slab.** The ribbon and the tiles are extruded between the same two
-  heights, so their top faces are one plane and their bases another, and a tile
-  is simply the place where the slab is wide. They used to be two objects — a
-  tile straddling a ribbon three quarters as deep — and every tile read as a
-  block dropped onto a strip, because the little step where they met is the
-  first thing the eye finds. There is now one pair of heights, used by both.
+- **The road is a road.** Its width is a real width on the GROUND — the
+  centreline offset either side and then projected — so it foreshortens as it
+  turns like everything else in the scene. Stroked instead, a line is given its
+  width on the screen, and the same road comes out fat where it runs across the
+  view and thin where it runs into it.
+- **A tile is drawn in two passes and the road goes between them.** Skirts,
+  then the road, then the faces. This is the whole of why the two used to look
+  like separate objects: a tile's skirt was painted after the road, straight
+  across the place the road ran into the tile, so the one thing you had to see
+  to believe they were joined was the one thing covered up. Matching their
+  heights could never fix that, because the skirt was in front either way.
+  Painted in the right order, the order IS the occlusion — nothing is clipped
+  and nothing is nudged.
+- **The road stops at the tile, exactly.** It is cut where the centreline
+  crosses the tile's own square, by slab clipping, so the end lands on the edge
+  the tile draws rather than within some tolerance of it. Sampling the line and
+  dropping what fell inside — the first attempt — stopped the road up to a step
+  short, and looked exactly like what it was. A cut end on an extruded slab is
+  a vertical face, which is what makes the road arrive at a tile rather than
+  fade into it.
+- **The tile stands slightly proud.** The road's surface is a fixed fraction of
+  the tile's height, so a tile's own side shows above it as a step. Level with
+  it, the two are one flat sheet and a tile is only a wider part of the road.
+- **There is a 2D version, and it is one function.** `flatCam()` is the same
+  camera at pitch zero, where the projection has no height term at all: every
+  extrusion collapses onto the ground and what comes out is the same meander
+  with the same tiles in the same places, seen from above. Not a second drawing
+  to keep in step with the first — the same drawing, differently projected.
 - **The tap targets.** A tile is 144 by 88 in the drawing's units, which on the
   narrowest phone still in use is about thirty pixels tall. Each tile carries a
   rectangle sized so it clears 44px at the smallest width the drawing is ever

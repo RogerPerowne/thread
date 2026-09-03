@@ -1,15 +1,16 @@
 import { test, expect } from '@playwright/test';
 import {
-  gotoApp, openPuzzle, puzzleIds, zigBoard, zigMapper, drawLine, isSolved,
-  noteOf, control,
+  gotoApp, openPuzzle, puzzleIds, ladderSpread, zigBoard, zigMapper, drawLine,
+  isSolved, noteOf, control,
 } from './helpers.js';
 
-const CHUNK = 15;
-for (let from = 0; from < 45; from += CHUNK) {
-  test(`zigzag boards ${from + 1} to ${from + CHUNK} are drawable`, async ({ page }) => {
+/* A spread of the ladder rather than all five hundred — see `ladderSpread`. */
+for (const half of [0, 1]) {
+  test(`zigzag, half ${half + 1} of the ladder, is drawable`, async ({ page }) => {
     await gotoApp(page);
-    const ids = await puzzleIds(page, 'zigzag');
-    for (const id of ids.slice(from, from + CHUNK)) {
+    const all = await ladderSpread(page, 'zigzag');
+    const ids = half === 0 ? all.slice(0, Math.ceil(all.length / 2)) : all.slice(Math.ceil(all.length / 2));
+    for (const id of ids) {
       await openPuzzle(page, 'zigzag', id);
       const zig = await zigBoard(page);
       await drawLine(page, zig.answer);

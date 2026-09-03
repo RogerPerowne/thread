@@ -38,28 +38,37 @@ const VIEWPORTS = [
  * be edited when a game is added is a fit audit that stops covering the new
  * ones.
  */
-const ROUTES = [
-  ['library', '#/'],
-  ['archive thread', '#/g/thread'],
-  ['archive zigzag', '#/g/zigzag'],
-  ['archive nine', '#/g/nine'],
-  ['archive shape', '#/g/shape'],
-  ['archive hex', '#/g/hex'],
-  ['archive isolate', '#/g/isolate'],
-  ['thread small', '#/g/thread/thread-1'],
-  ['thread middle', '#/g/thread/thread-30'],
-  ['thread biggest', '#/g/thread/thread-56'],
-  ['zigzag small', '#/g/zigzag/zigzag-1'],
-  ['zigzag biggest', '#/g/zigzag/zigzag-44'],
-  ['nine first', '#/g/nine/nine-1'],
-  ['nine last', '#/g/nine/nine-64'],
-  ['shape first', '#/g/shape/shape-1'],
-  ['shape last', '#/g/shape/shape-66'],
-  ['hex first', '#/g/hex/hex-1'],
-  ['hex last', '#/g/hex/hex-68'],
-  ['isolate first', '#/g/isolate/isolate-1'],
-  ['isolate last', '#/g/isolate/isolate-48'],
-];
+/*
+ * Asked of the running app rather than written down here — which is what the
+ * paragraph above always claimed and, until the ladders grew to five hundred,
+ * was not true. The hand-written list named `shape-66` as the last Shape Up
+ * board long after it had stopped being one, so the audit was quietly checking
+ * a middling board and calling it the biggest. A list of routes that has to be
+ * edited when the boards change is a list that stops covering them.
+ */
+async function routesFrom(page) {
+  await page.goto(`${BASE}#/`);
+  await page.waitForFunction(() => Boolean(window.__puzzles), null, { timeout: 15000 });
+  const found = await page.evaluate(() => {
+    const out = [['library', '#/']];
+    for (const g of window.__puzzles.games()) {
+      const chapters = window.__puzzles.chapters(g);
+      const ids = window.__puzzles.puzzles(g);
+      out.push([`path ${g}`, `#/g/${g}`]);
+      /* The first chapter's grid and the last one's: the two are the same
+         screen, but the last chapter is the short one. */
+      out.push([`levels ${g} first`, `#/g/${g}/c/1`]);
+      out.push([`levels ${g} last`, `#/g/${g}/c/${chapters.length}`]);
+      /* And the smallest board, one from the middle, and the biggest — the
+         three that stretch a board's layout in different directions. */
+      for (const [what, at] of [['small', 0], ['middle', ids.length >> 1], ['biggest', ids.length - 1]]) {
+        out.push([`${g} ${what}`, `#/g/${g}/${ids[at]}`]);
+      }
+    }
+    return out;
+  });
+  return found;
+}
 
 /*
  * Every size is walked twice: once flat, and once as a phone with a notch and
@@ -75,6 +84,13 @@ const SKINS = [
 
 const browser = await chromium.launch();
 const problems = [];
+
+const ROUTES = await (async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const found = await routesFrom(page);
+  await page.close();
+  return found;
+})();
 
 for (const [vname, w, h] of VIEWPORTS) {
   const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });

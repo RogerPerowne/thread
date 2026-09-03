@@ -152,9 +152,9 @@ describe('the designer', () => {
   });
 
   it('bands by the measured score and nothing else', () => {
-    expect(bandOf(40)).toBe('gentle');
-    expect(bandOf(55)).toBe('steady');
-    expect(bandOf(70)).toBe('tricky');
+    expect(bandOf(50)).toBe('gentle');
+    expect(bandOf(60)).toBe('steady');
+    expect(bandOf(75)).toBe('tricky');
     expect(bandOf(95)).toBe('severe');
   });
 });
@@ -180,7 +180,15 @@ describe('every shipped board', () => {
     }
   });
 
-  it('gets harder up the ladder', () => {
+  it('opens easier than it ends', () => {
+    /*
+     * That the ladder CLIMBS, chapter by chapter, is checked for all six games
+     * in ladder.test.ts, which is where the one definition of it lives — this
+     * used to have its own, on means where that one is on medians, and two
+     * statistics of the same property disagree at the margins and leave nobody
+     * sure which is the rule. What is left here is the end-to-end claim, which
+     * is Hexagony's own and worth stating on its own boards.
+     */
     const byChapter = new Map<number, number[]>();
     for (const b of shipped) {
       const list = byChapter.get(b.chapter) ?? [];
@@ -190,13 +198,7 @@ describe('every shipped board', () => {
     const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
     const chapters = [...byChapter.keys()].sort((a, b) => a - b);
     const means = chapters.map((c) => mean(byChapter.get(c)!));
-    /* The first chapter is the easiest and the last the hardest; in between
-       the ladder is allowed to be flat, but never to run backwards overall. */
-    expect(means[0]).toBeLessThan(means[means.length - 1]);
-    for (let i = 1; i < means.length; i++) {
-      expect(means[i], `chapter ${chapters[i]} is easier than two before it`)
-        .toBeGreaterThan(means[Math.max(0, i - 2)] - 1);
-    }
+    expect(means[means.length - 1]).toBeGreaterThan(means[0] * 1.4);
   });
 });
 

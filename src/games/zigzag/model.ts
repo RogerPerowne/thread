@@ -3,13 +3,21 @@
  *
  * The board is a rectangle of numbered cells. You draw a single continuous
  * line from the start cell to the finish cell that visits every cell exactly
- * once, moving to any of the eight neighbours, and the numbers you cross have
- * to run in a repeating sequence — 1, 2, 3, 4, 1, 2, 3, 4 and round again.
+ * once, and the numbers you cross have to run in a repeating sequence — 1, 2,
+ * 3, 4, 1, 2, 3, 4 and round again.
  *
  * So it is a Hamiltonian path with a colouring constraint, and the colouring
  * is what makes it tractable: from a cell at step i the only legal moves are
- * to neighbours carrying the next number in the sequence, which is typically
- * two of the eight rather than all of them.
+ * to neighbours carrying the next number in the sequence, which is a fraction
+ * of the neighbours rather than all of them.
+ *
+ * HOW MANY NEIGHBOURS is the board's own business, and it is the game's
+ * biggest difficulty lever. On a straight board the line steps to any of the
+ * eight cells around it; on a straight-only board it steps to four. Four
+ * neighbours of which about one carries the next number means most steps have
+ * exactly one continuation and the line very nearly draws itself; eight
+ * neighbours means two or three ways on at every cell and a real search. It is
+ * the same rule either way, and the board says which it is.
  *
  * Nothing here assumes the sequence is 1..4 or that the board is square. The
  * sequence is data and the board is w by h, so a five-number variant or a
@@ -25,18 +33,28 @@ export type Zig = {
   readonly sequence: readonly number[];
   readonly start: number;
   readonly finish: number;
+  /**
+   * May the line step corner to corner?
+   *
+   * Absent means yes, because that is what every board built before this
+   * existed did, and a saved board without the field has to keep meaning what
+   * it meant. Boards low on the ladder set it false: a line that can only go
+   * up, down, left and right is a line a player can follow with a finger.
+   */
+  readonly diagonal?: boolean;
   /** The path the designer built it from. Never shown; used by the gate. */
   readonly answer: readonly number[];
 };
 
-/** The eight neighbours of a cell, as indices. */
-export function neighbours(w: number, h: number, at: number): number[] {
+/** The cells a line may step to from `at`. Eight of them, or four. */
+export function neighbours(w: number, h: number, at: number, diagonal = true): number[] {
   const x = at % w;
   const y = (at / w) | 0;
   const out: number[] = [];
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
       if (dx === 0 && dy === 0) continue;
+      if (!diagonal && dx !== 0 && dy !== 0) continue;
       const nx = x + dx;
       const ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
@@ -46,10 +64,21 @@ export function neighbours(w: number, h: number, at: number): number[] {
   return out;
 }
 
+/**
+ * The steps a board allows, read off the board itself.
+ *
+ * Everything that asks "can the line go there" goes through this rather than
+ * through `neighbours` directly, so no caller can forget to pass the flag and
+ * quietly let a diagonal onto a board that forbids them.
+ */
+export function stepsFrom(zig: Zig, at: number): number[] {
+  return neighbours(zig.w, zig.h, at, zig.diagonal !== false);
+}
+
 /** Neighbour lists for every cell, worked out once. */
-export function adjacency(w: number, h: number): number[][] {
+export function adjacency(w: number, h: number, diagonal = true): number[][] {
   const out: number[][] = [];
-  for (let i = 0; i < w * h; i++) out.push(neighbours(w, h, i));
+  for (let i = 0; i < w * h; i++) out.push(neighbours(w, h, i, diagonal));
   return out;
 }
 
@@ -104,7 +133,7 @@ export function judge(zig: Zig, path: readonly number[], partial = false): Judge
       faults.add('order');
       if (wrongAt < 0) wrongAt = i;
     }
-    if (i > 0 && !neighbours(zig.w, zig.h, path[i - 1]).includes(cell)) {
+    if (i > 0 && !stepsFrom(zig, path[i - 1]).includes(cell)) {
       faults.add('apart');
       if (wrongAt < 0) wrongAt = i;
     }
