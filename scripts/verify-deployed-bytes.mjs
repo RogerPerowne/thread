@@ -103,12 +103,17 @@ for (const game of games) {
     const board = handle.board;
     const svg = page.locator('.board-svg').first();
     const box = await svg.boundingBox();
-    const [vx, vy, vw] = (await svg.getAttribute('viewBox')).split(/\s+/).map(Number);
-    const side = Math.min(box.width, box.height);
-    const at = (p) => ({
-      x: box.x + (box.width - side) / 2 + ((p[0] - vx) / vw) * side,
-      y: box.y + (box.height - side) / 2 + ((p[1] - vy) / vw) * side,
-    });
+    const [vx, vy, vw, vh] = (await svg.getAttribute('viewBox')).split(/\s+/).map(Number);
+    /* Both axes off the element's own window. Fitted with xMidYMid meet, so
+       the scale is the smaller ratio and the slack is split evenly either
+       side. This read the height through `vw` and called the board square,
+       which it was until a board's shape started following what it holds —
+       and then every board that is not square was dragged through empty
+       space. Same arithmetic as threadMapper in tests/e2e/helpers.ts. */
+    const scale = Math.min(box.width / vw, box.height / vh);
+    const ox = box.x + (box.width - scale * vw) / 2;
+    const oy = box.y + (box.height - scale * vh) / 2;
+    const at = (p) => ({ x: ox + (p[0] - vx) * scale, y: oy + (p[1] - vy) * scale });
     for (const path of board.solution) {
       const f = at(board.posts[path[0]]);
       await page.mouse.move(f.x, f.y);
