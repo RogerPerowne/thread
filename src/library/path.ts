@@ -466,8 +466,8 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
    * curve in the dome's own skin, and the hole it masks out is a hole in
    * the dome and not a shape over it.
    */
-  const ARCH_W = 0.74;
-  const ARCH_H = 1.08;
+  const ARCH_W = 0.8;
+  const ARCH_H = 1.15;
   const onSkin = (x: number, z: number): Pt2 => P(x, -Math.sqrt(Math.max(0, R * R - x * x - z * z)), z);
   const archPts: Pt2[] = [onSkin(-ARCH_W, 0)];
   for (let k = 0; k <= 14; k++) {
@@ -476,18 +476,22 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   }
   archPts.push(onSkin(ARCH_W, 0));
   const arch = pathOf(archPts);
+  /* The rim is the curve only. A line drawn along the ground across the
+     opening is a line drawn across the road, and the road looked cut off
+     at it. */
+  const rim = archPts.map((q, i) => `${i === 0 ? 'M' : 'L'} ${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' ');
 
   const back = svg('g', { class: 'cave', 'aria-hidden': 'true' });
-  /* The dark of the inside: the whole footprint, painted behind the road.
-     Only the arch will ever show it, but painting it all means nothing
-     depends on the two outlines agreeing to a pixel. */
+  /* The dark of the inside, painted behind the road: the arch's own shape,
+     the same path the dome is cut with, so the two agree to the pixel. Not
+     the whole footprint — dark behind every face shows through as a hair
+     of black wherever two faces meet. */
+  back.appendChild(svg('path', { class: 'dark', d: arch }));
   const floor: Pt2[] = [];
   for (let j = 0; j <= SEGS; j++) {
     const c = at3(0, j);
     floor.push(P(c[0], c[1], 0));
   }
-  back.appendChild(svg('path', { class: 'dark', d: pathOf(floor) }));
-  back.appendChild(svg('path', { class: 'dark', d: arch }));
 
   const front = svg('g', { class: 'cave', 'aria-hidden': 'true' });
   const mask = svg('mask', { id: 'cavecut', maskUnits: 'userSpaceOnUse' });
@@ -508,7 +512,7 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   for (const f of faces) shell.appendChild(svg('path', { class: `face ${f.shade}`, d: f.d }));
   front.appendChild(shell);
   /* The edge of the cut, so the opening reads as an opening in the stone. */
-  front.appendChild(svg('path', { class: 'rim', d: arch }));
+  front.appendChild(svg('path', { class: 'rim', d: rim }));
 
   /*
    * The road going in. Its last stretch fades from the road's own colour to
@@ -518,13 +522,13 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const zRoad = ROAD_TOP - BOT_Z;
   const into = svg('linearGradient', {
     id: 'caveinto', gradientUnits: 'userSpaceOnUse',
-    x1: P(0, -R, zRoad)[0], y1: P(0, -R, zRoad)[1], x2: P(0, -R * 0.45, zRoad)[0], y2: P(0, -R * 0.45, zRoad)[1],
+    x1: P(0, -R - 0.1, zRoad)[0], y1: P(0, -R - 0.1, zRoad)[1], x2: P(0, -R * 0.5, zRoad)[0], y2: P(0, -R * 0.5, zRoad)[1],
   });
   into.append(svg('stop', { class: 'into-near', offset: '0' }), svg('stop', { class: 'into-far', offset: '1' }));
   front.appendChild(svg('defs', {}, into));
   front.appendChild(svg('path', {
     class: 'into',
-    d: pathOf([P(-ROAD_W / 2, -R, zRoad), P(ROAD_W / 2, -R, zRoad), P(ROAD_W / 2, -R * 0.45, zRoad), P(-ROAD_W / 2, -R * 0.45, zRoad)]),
+    d: pathOf([P(-ROAD_W / 2, -R - 0.1, zRoad), P(ROAD_W / 2, -R - 0.1, zRoad), P(ROAD_W / 2, -R * 0.5, zRoad), P(-ROAD_W / 2, -R * 0.5, zRoad)]),
   }));
 
   /*
