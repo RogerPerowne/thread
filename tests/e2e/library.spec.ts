@@ -79,13 +79,16 @@ test('the path carries a game\'s chapters, one tile each', async ({ page }) => {
   }
 });
 
-test('the path runs off both edges of the screen and cannot be scrolled to its end', async ({ page }) => {
+test('the path runs off the top of the screen, and comes out of a cave at the foot', async ({ page }) => {
   /*
-   * The ribbon never ends on screen. It is drawn well past both ends of the
-   * ladder and the scroll stops early, so at either limit the drawing is still
+   * At the top the ribbon never ends on screen: it is drawn well past the last
+   * chapter and the scroll stops early, so at the limit the drawing is still
    * crossing the edge of the view — cut by the edge of the phone rather than
-   * by anything of ours. Measured at both limits, because "it looks fine on
-   * mine" is exactly the claim that was wrong the first time.
+   * by anything of ours. At the foot it ends on a picture instead: the road
+   * comes out of a cave, and scrolled all the way down the cave's mouth is in
+   * view, whole, with its rim inside the box. Measured at both limits,
+   * because "it looks fine on mine" is exactly the claim that was wrong the
+   * first time.
    */
   await gotoApp(page, '#/g/thread');
 
@@ -106,9 +109,16 @@ test('the path runs off both edges of the screen and cannot be scrolled to its e
     const s = document.querySelector('.pathscroll') as HTMLElement;
     s.scrollTop = s.scrollHeight;
   });
-  const atBottom = await edges();
-  expect(atBottom.bottom, 'the drawing stops short of the bottom of the view')
-    .toBeGreaterThan(atBottom.viewBottom);
+  const mouth = await page.evaluate(() => {
+    const scroll = document.querySelector('.pathscroll') as HTMLElement;
+    const m = document.querySelector('.cave .mouth') as SVGPathElement;
+    const s = scroll.getBoundingClientRect();
+    const d = m.getBoundingClientRect();
+    return { top: d.top, bottom: d.bottom, viewTop: s.top, viewBottom: s.bottom, height: d.height };
+  });
+  expect(mouth.height, 'the cave has no mouth').toBeGreaterThan(20);
+  expect(mouth.top, 'the cave mouth is above the view').toBeGreaterThan(mouth.viewTop);
+  expect(mouth.bottom, 'the cave mouth is cut off by the foot of the view').toBeLessThan(mouth.viewBottom);
 
   // And there is genuinely something to scroll.
   const room = await page.evaluate(() => {

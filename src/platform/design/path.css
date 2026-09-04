@@ -76,6 +76,34 @@
 .ribbon .walked { fill: var(--ink-2); }
 .ribbon .walked.side { fill: var(--ink); }
 
+/* --- the cave ------------------------------------------------------------- */
+/*
+ * The hill is stone like the tiles ahead — paper on top, the line colour down
+ * its side — so it belongs to the same ground; the mouth is the deepest ink
+ * on the screen, because a cave is a place the light does not go. Its rim is
+ * the one stroke, so the opening reads as cut into the hill rather than laid
+ * on it.
+ */
+.cave .hill.side { fill: var(--line-2); }
+.cave .hill.top { fill: var(--paper-3); }
+.cave .hill.crest { fill: var(--paper-2); }
+.cave .mouth { fill: var(--ink); }
+.cave .mouth.rim { fill: none; stroke: var(--line); stroke-width: 7; stroke-linejoin: round; }
+.cave .mist {
+  fill: var(--paper);
+  opacity: 0;
+  animation: mist calc(var(--look) * 3) linear infinite;
+  animation-delay: calc(var(--k, 0) * var(--look) * 1.5);
+}
+@keyframes mist {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  25% { opacity: 0.55; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cave .mist { animation: none; opacity: 0.25; }
+}
+
 /* --- the tiles ------------------------------------------------------------ */
 /*
  * Every length below is in the drawing's own units, not pixels: a transform or

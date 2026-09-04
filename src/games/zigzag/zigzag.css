@@ -14,6 +14,9 @@
   transition: fill var(--fast) var(--ease);
 }
 .zig-cell.on { fill: var(--wash); }
+/* The end of the line: where the next step leaves from, and where a finger
+   goes to pick the line up again. The strongest edge on the board. */
+.zig-cell.head { stroke: var(--accent); stroke-width: 0.7; stroke-opacity: 0.9; }
 /*
  * A cell the line can step into next: touching the end of the line, carrying
  * the number the run wants, not yet used. The rule applied, not the answer.

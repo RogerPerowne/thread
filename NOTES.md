@@ -272,3 +272,40 @@ the rules sheet, so a refused step was refused for a reason you had to
 remember. The run strip under the grid says it once and lights the number
 wanted next; the cells the line can legally enter are marked, which is the
 rule applied and not the answer.
+
+## Hints reasoned forward from wrong boards
+
+Every game's hint took the board as a premise. That is exactly right until the
+player lays one legal move the answer does not contain — a string along a run
+that breaks nothing, a shape in a cell where a different shape goes — and from
+then on every deduction is sound and wrong. The fix is not cleverer deduction,
+it is the answer: every session has it, so the first thing a hint does is check
+what is down against it, and a wrong move is named as a `fix` before any step
+is proposed. `tests/unit/hints.test.ts` builds those wrong boards on purpose.
+
+## Zigzag shipped two games and called them one
+
+Half the ladder allowed only straight steps, because the measurement said
+diagonals were the biggest lever there was. True — and it meant the rule
+changed from board to board with nothing on the board to say so, and the
+marked moves left out the diagonals on one board and not the next. The lever
+survives as how straight the ANSWER is, which the designer is told rather than
+the player; the rule is eight ways out, everywhere. What it cost: a board with
+a straight route is much harder to make unique under the eight-way rule (a
+straight route has too many wandering rivals), so the big boards wander and the
+small ones are the ones that can afford to be straight.
+
+## A drag that painted
+
+Shape Up's drag wrote the chosen mark into every cell it crossed. Efficient on
+paper; in the hand it was a board that filled itself in whenever a thumb rested
+on it to think. One mark per gesture, where the gesture ends. Nine and Hexagony
+already worked that way, which should have been the hint.
+
+## A string stuck with its first end
+
+Once a Thread string had left one pin, pressing the other pin was refused for
+good — `reach` selected the strand and then had nothing it could do. Restart
+was the only way to lay the string the other way round, and it took every
+other string with it. A press on the unused pin now winds the string off and
+starts it there.
