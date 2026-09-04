@@ -111,7 +111,7 @@ test('the path runs off the top of the screen, and comes out of a cave at the fo
   });
   const mouth = await page.evaluate(() => {
     const scroll = document.querySelector('.pathscroll') as HTMLElement;
-    const m = document.querySelector('.cave .mouth') as SVGPathElement;
+    const m = document.querySelector('.cave .rim') as SVGPathElement;
     const s = scroll.getBoundingClientRect();
     const d = m.getBoundingClientRect();
     return { top: d.top, bottom: d.bottom, viewTop: s.top, viewBottom: s.bottom, height: d.height };

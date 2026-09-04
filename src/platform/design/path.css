@@ -78,29 +78,29 @@
 
 /* --- the cave ------------------------------------------------------------- */
 /*
- * Stone in the same paper the tiles are cut from: the line colour for the
- * body of a rock, paper for the facet the light lands on, and a thin ink
- * edge so one boulder can be told from the next. The mouth is the deepest
- * ink on the screen, because a cave is a place the light does not go; the
- * road runs into it and fades to the same ink, so it plainly goes on.
+ * Stone in the same paper the tiles are cut from, in four flat shades by
+ * which way a face looks at the light: the tile's own top colour where it
+ * looks straight up, paper where the light lands, the line colour side-on,
+ * the darker line turned away. No gradient on the stone anywhere — a rock is
+ * faces, and a face is one colour — and a thin ink edge between them so one
+ * face can be told from the next. The inside is the deepest ink on the
+ * screen, because a cave is a place the light does not go; the road runs
+ * into it and fades to the same ink, so it plainly goes on.
  */
-.cave .body { fill: var(--line-2); }
-.cave .mouth { fill: var(--ink); }
-.cave .into { fill: url(#caveinto); }
-.cave .into-near { stop-color: var(--ink-2); stop-opacity: 1; }
-.cave .into-far { stop-color: var(--ink); stop-opacity: 0; }
-/* Three shades of one stone, flat: the body, the face the light lands on,
-   the face turned from it. No gradient anywhere; a rock is faces. */
-.cave .rock { fill: var(--line); }
-.cave .rock.lit { fill: var(--paper-3); }
-.cave .rock.dim { fill: var(--line-2); }
-.cave .rock.edge {
-  fill: none;
-  stroke: var(--ink-2);
-  stroke-width: 1.8;
-  stroke-opacity: 0.42;
+.cave .face {
+  stroke: var(--paper);
+  stroke-width: 1.6;
   stroke-linejoin: miter;
 }
+.cave .face.top { fill: var(--paper-2); }
+.cave .face.lit { fill: var(--paper-3); }
+.cave .face.mid { fill: var(--line); }
+.cave .face.dim { fill: var(--line-2); }
+.cave .dark { fill: var(--ink); }
+.cave .rim { fill: none; stroke: var(--ink-2); stroke-width: 3; stroke-opacity: 0.55; stroke-linejoin: round; }
+.cave .into { fill: url(#caveinto); }
+.cave .into-near { stop-color: var(--ink); stop-opacity: 0; }
+.cave .into-far { stop-color: var(--ink); stop-opacity: 1; }
 .cave .mist {
   fill: var(--paper);
   opacity: 0;

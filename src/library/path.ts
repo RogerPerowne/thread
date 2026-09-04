@@ -33,7 +33,6 @@ import { h, svg } from '../platform/dom.js';
 import { iconButton } from '../platform/ui/components.js';
 import * as store from '../platform/store.js';
 import * as haptics from '../platform/haptics.js';
-import { makeRng } from '../platform/rng.js';
 import {
   type Pt2, project, groundOf, isoCam, flatCam, ISO_PITCH, TILE_H, HALF_W, HALF_H,
 } from '../platform/ui/camera.js';
@@ -366,30 +365,26 @@ function faceTransform(g: Pt2): string {
 }
 
 /*
- * The cave the road comes out of.
+ * The cave the road comes out of: a low-poly dome with an arch cut into it.
  *
- * A pile of boulders with an arch through it, and the road coming out of the
- * dark. It is built in the same scene as everything else — the arch is a
- * vertical face across the road, each boulder is a shape standing in that
- * face, the road runs into the opening and the last of it is swallowed by
- * the dark — so it is seen through the same camera and cannot disagree with
- * the road it is the end of.
+ * Perfectly geometrical, by construction. `dome()` lays a hemisphere out as
+ * rings of latitude and segments of longitude — every face a flat quad, the
+ * crown a ring of triangles — and every face is shaded by the angle its own
+ * normal makes with one light, in a few flat shades. The arch is not drawn
+ * on the dome, it is CUT from it: its outline is a set of points that lie on
+ * the sphere's surface exactly, and the dome's faces are masked by that
+ * outline. So the road, painted before the dome, is seen through a real hole
+ * in it, with the dark of the inside painted behind the road. Front to
+ * back: the dome, the road, the dark.
  *
  * Where it stands is a fact about the camera, not a choice. A mouth is only
  * a mouth if you can see INTO it, which means it has to be on a face that
  * looks towards the camera; and the road has to run into that face, which
  * means the road, on its way there, has to be running AWAY from the camera.
- * So the arch goes across the first stretch below the foot where the road
- * climbs the screen — on this meander that is the third leg of every turn —
- * and the road is cut where it meets the dark. The stretch before it runs
- * towards the camera, turns, and climbs to the first tile, which is what a
- * path coming out of a cave does.
- *
- * The boulders are placed on an arch and shaped by a seeded generator, so
- * the pile is irregular the way a pile is and identical every time it is
- * drawn. Each one is a rounded lump with a lit facet on its upper side, which
- * is what makes stone read as stone rather than as a grey blob: the light
- * comes from above and the top of a rock catches it.
+ * So the dome goes at the end of the first stretch below the foot where the
+ * road climbs the screen — on this meander that is the third leg of every
+ * turn. The stretch before it runs towards the camera, turns, and climbs to
+ * the first tile, which is what a path coming out of a cave does.
  */
 function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; front: SVGGElement } {
   const yOfPt = (g: Pt2) => project(FLAT, g[0], g[1], 0)[1];
@@ -404,202 +399,133 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
   /** Along the road, in the direction it is walked towards the cave. */
   const u: Pt2 = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
-  /** Across it, left to right as the camera sees the face. */
+  /** Across it. */
   const nrm: Pt2 = [-u[1], u[0]];
-  /* The mouth, a little way up the leg so the turn before it is in view. */
-  const mouth: Pt2 = [a[0] + u[0] * 1.2, a[1] + u[1] * 1.2];
-  const road = [...run.slice(0, leg + 1), mouth];
 
-  /**
-   * The face the cave is built in stands ACROSS the road, and the road runs
-   * straight into it.
-   *
-   * `x` runs across the road, `z` up, `d` back into the hill along the road.
-   * Seen from this camera the face is at an angle — the angle the road is
-   * at — which is the point: the arch is in line with the path coming out of
-   * it, and the pile is a thing the road goes into rather than a picture the
-   * road happens to pass. (A face turned to look straight at the camera was
-   * tried, and read as a postcard propped beside the road.)
-   *
-   * A boulder is a lump, not a shape in that plane: its centre is placed in
-   * the face and its silhouette is drawn round about that centre on the
-   * screen, the way a stone's is from any angle. That is what lets the pile
-   * stand at an angle and still be a pile of rocks rather than a pile of
-   * slanted leaves — the arch foreshortens, the stones do not.
-   */
-  const ex: Pt2 = nrm;
-  const ez: Pt2 = u;
-  const P = (x: number, z: number, d = 0): Pt2 =>
-    project(FLAT, mouth[0] + ex[0] * x + ez[0] * d, mouth[1] + ex[1] * x + ez[1] * d, BOT_Z + z);
-  /** One ground unit, as it comes out on the screen in the face. */
-  const px = (Math.hypot(P(1, 0)[0] - P(0, 0)[0], P(1, 0)[1] - P(0, 0)[1])
-    + Math.hypot(P(0, 1)[0] - P(0, 0)[0], P(0, 1)[1] - P(0, 0)[1])) / 2;
+  /* The dome: its middle a little way up the leg, its radius, and where the
+     road meets its front — which is where the mouth is. */
+  const R = 1.35;
+  const centre: Pt2 = [a[0] + u[0] * (1.05 + R), a[1] + u[1] * (1.05 + R)];
+  const mouth: Pt2 = [centre[0] - u[0] * R, centre[1] - u[1] * R];
+  /* The road runs INTO the dome, well past the mouth, so it is seen going
+     in through the arch rather than stopping at it. */
+  const inside: Pt2 = [mouth[0] + u[0] * R * 0.55, mouth[1] + u[1] * R * 0.55];
+  const road = [...run.slice(0, leg + 1), inside];
+
+  /** A point in the dome's own frame: `x` across the road, `d` along it
+      from the middle (towards the mouth is negative), `z` up. */
+  const P = (x: number, d: number, z: number): Pt2 =>
+    project(FLAT, centre[0] + nrm[0] * x + u[0] * d, centre[1] + nrm[1] * x + u[1] * d, BOT_Z + z);
   const pathOf = (pts: Pt2[]): string =>
     pts.map((q, i) => `${i === 0 ? 'M' : 'L'} ${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' ') + ' Z';
-  const smooth = (pts: Pt2[]): string => {
-    /* A closed curve through the points, each edge a quadratic through the
-       midpoints, so a lump has no corners. */
-    const n = pts.length;
-    const mid = (i: number): Pt2 => {
-      const p = pts[i % n];
-      const q = pts[(i + 1) % n];
-      return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-    };
-    let d = `M ${mid(0)[0].toFixed(1)} ${mid(0)[1].toFixed(1)}`;
-    for (let i = 1; i <= n; i++) {
-      const c = pts[i % n];
-      const m = mid(i);
-      d += ` Q ${c[0].toFixed(1)} ${c[1].toFixed(1)} ${m[0].toFixed(1)} ${m[1].toFixed(1)}`;
-    }
-    return `${d} Z`;
+
+  // --- the dome, as faces -----------------------------------------------
+  /*
+   * Rings of latitude from the ground to the crown, segments of longitude
+   * round each. A face's normal on a sphere is the direction of its middle
+   * from the centre, so the shading needs no geometry beyond the point
+   * itself. Segment zero is turned so that a seam runs straight down the
+   * front, and the arch is cut symmetrically about it.
+   */
+  const RINGS = 3;
+  const SEGS = 10;
+  const at3 = (i: number, j: number): [number, number, number] => {
+    const phi = (i / RINGS) * (Math.PI / 2);
+    const theta = ((j + 0.5) / SEGS) * Math.PI * 2 + Math.PI / 2;
+    return [Math.cos(phi) * Math.cos(theta) * R, Math.cos(phi) * Math.sin(theta) * R, Math.sin(phi) * R];
   };
+  /* The light: from the screen's upper left and well above. */
+  const LX = -0.55;
+  const LD = -0.35;
+  const LZ = 0.76;
+  type Face = { d: string; shade: string; y: number };
+  const faces: Face[] = [];
+  for (let i = 0; i < RINGS; i++) {
+    for (let j = 0; j < SEGS; j++) {
+      const corners = i === RINGS - 1
+        ? [at3(i, j), at3(i, j + 1), at3(RINGS, 0)]
+        : [at3(i, j), at3(i, j + 1), at3(i + 1, j + 1), at3(i + 1, j)];
+      const mid = corners.reduce((m, c) => [m[0] + c[0], m[1] + c[1], m[2] + c[2]], [0, 0, 0]);
+      const ml = Math.hypot(mid[0], mid[1], mid[2]) || 1;
+      const lit = (mid[0] * LX + mid[1] * LD + mid[2] * LZ) / ml;
+      const pts = corners.map((c) => P(c[0], c[1], c[2]));
+      faces.push({
+        d: pathOf(pts),
+        shade: lit > 0.66 ? 'top' : lit > 0.3 ? 'lit' : lit > -0.05 ? 'mid' : 'dim',
+        y: pts.reduce((s, q) => s + q[1], 0) / pts.length,
+      });
+    }
+  }
+  /* Back to front: the faces lowest on the screen are nearest the camera. */
+  faces.sort((p, q) => p.y - q.y);
 
+  // --- the arch, cut from it ---------------------------------------------
   /*
-   * Two groups, and the road goes between them. The body of the hill and
-   * the dark of the opening are BEHIND the road, so the road's last slab
-   * runs over the dark and is seen going in; the boulders and the fade into
-   * the dark are in front of it. A road drawn over the piers would look
-   * painted on; a road drawn under the mouth would stop at the rocks.
+   * The outline lies ON the sphere: for a point `x` across and `z` up, the
+   * surface is sqrt(R² - x² - z²) in front of the middle. So the arch is a
+   * curve in the dome's own skin, and the hole it masks out is a hole in
+   * the dome and not a shape over it.
    */
+  const ARCH_W = 0.74;
+  const ARCH_H = 1.08;
+  const onSkin = (x: number, z: number): Pt2 => P(x, -Math.sqrt(Math.max(0, R * R - x * x - z * z)), z);
+  const archPts: Pt2[] = [onSkin(-ARCH_W, 0)];
+  for (let k = 0; k <= 14; k++) {
+    const t = Math.PI * (k / 14);
+    archPts.push(onSkin(-Math.cos(t) * ARCH_W, ARCH_H * 0.45 + Math.sin(t) * ARCH_H * 0.55));
+  }
+  archPts.push(onSkin(ARCH_W, 0));
+  const arch = pathOf(archPts);
+
   const back = svg('g', { class: 'cave', 'aria-hidden': 'true' });
-  const el = svg('g', { class: 'cave', 'aria-hidden': 'true' });
+  /* The dark of the inside: the whole footprint, painted behind the road.
+     Only the arch will ever show it, but painting it all means nothing
+     depends on the two outlines agreeing to a pixel. */
+  const floor: Pt2[] = [];
+  for (let j = 0; j <= SEGS; j++) {
+    const c = at3(0, j);
+    floor.push(P(c[0], c[1], 0));
+  }
+  back.appendChild(svg('path', { class: 'dark', d: pathOf(floor) }));
+  back.appendChild(svg('path', { class: 'dark', d: arch }));
 
-  /* The opening: a road-width and a half either side of the road, and tall
-     enough to walk into. */
-  const IN_W = 0.88;
-  const IN_H = 2.05;
-  /* A boulder, and how far out from the opening's edge the ring of them
-     sits. Big, and closer together than they are wide, so the ring is a wall
-     of stone with no daylight through it. */
-  const ROCK = 0.5;
-  const OUT_W = IN_W + ROCK * 0.98;
-  const OUT_H = IN_H + ROCK * 0.98;
+  const front = svg('g', { class: 'cave', 'aria-hidden': 'true' });
+  const mask = svg('mask', { id: 'cavecut', maskUnits: 'userSpaceOnUse' });
+  const all = archPts.concat(floor);
+  const xs = all.map((q) => q[0]);
+  const ys = all.map((q) => q[1]);
+  mask.append(
+    svg('rect', {
+      x: (Math.min(...xs) - 400).toFixed(1), y: (Math.min(...ys) - 400).toFixed(1),
+      width: (Math.max(...xs) - Math.min(...xs) + 800).toFixed(1),
+      height: (Math.max(...ys) - Math.min(...ys) + 800).toFixed(1),
+      fill: '#fff',
+    }),
+    svg('path', { d: arch, fill: '#000' }),
+  );
+  front.appendChild(svg('defs', {}, mask));
+  const shell = svg('g', { class: 'shell', mask: 'url(#cavecut)' });
+  for (const f of faces) shell.appendChild(svg('path', { class: `face ${f.shade}`, d: f.d }));
+  front.appendChild(shell);
+  /* The edge of the cut, so the opening reads as an opening in the stone. */
+  front.appendChild(svg('path', { class: 'rim', d: arch }));
 
   /*
-   * The body of the pile behind the arch: a low irregular mound a little way
-   * back, wider and taller than the arch, so the front boulders have
-   * something to be piled against and the cave has somewhere to go.
+   * The road going in. Its last stretch fades from the road's own colour to
+   * the ink of the inside, painted over it, from the arch inwards — so what
+   * the eye sees is a road that carries on into somewhere it cannot follow.
    */
-  const rng = makeRng('the cave at the foot of the path');
-  const body: Pt2[] = [];
-  for (let i = 0; i < 12; i++) {
-    const t = Math.PI * (i / 11);
-    const wob = 0.88 + rng() * 0.24;
-    body.push(P(-Math.cos(t) * (OUT_W + 0.5) * wob, Math.sin(t) * (OUT_H + 0.15) * wob, 0.8));
-  }
-  back.appendChild(svg('path', { class: 'body', d: smooth(body) }));
-
-  /* The opening, and the last of the road going into it. */
-  const arch: Pt2[] = [P(-IN_W, 0)];
-  for (let i = 0; i <= 12; i++) {
-    const t = Math.PI * (i / 12);
-    arch.push(P(-Math.cos(t) * IN_W, IN_H * 0.4 + Math.sin(t) * IN_H * 0.6));
-  }
-  arch.push(P(IN_W, 0));
-  back.appendChild(svg('path', { class: 'mouth', d: pathOf(arch) }));
-
-  /* The road inside, along its own direction, fading into the dark. */
-  const R = (along: number, across: number, z: number): Pt2 => project(
-    FLAT,
-    mouth[0] + u[0] * along + nrm[0] * across, mouth[1] + u[1] * along + nrm[1] * across, BOT_Z + z,
-  );
+  const zRoad = ROAD_TOP - BOT_Z;
   const into = svg('linearGradient', {
     id: 'caveinto', gradientUnits: 'userSpaceOnUse',
-    x1: R(-0.05, 0, 0)[0], y1: R(-0.05, 0, 0)[1], x2: R(0.7, 0, 0)[0], y2: R(0.7, 0, 0)[1],
+    x1: P(0, -R, zRoad)[0], y1: P(0, -R, zRoad)[1], x2: P(0, -R * 0.45, zRoad)[0], y2: P(0, -R * 0.45, zRoad)[1],
   });
   into.append(svg('stop', { class: 'into-near', offset: '0' }), svg('stop', { class: 'into-far', offset: '1' }));
-  el.appendChild(svg('defs', {}, into));
-  const zRoad = ROAD_TOP - BOT_Z;
-  el.appendChild(svg('path', {
+  front.appendChild(svg('defs', {}, into));
+  front.appendChild(svg('path', {
     class: 'into',
-    d: pathOf([R(-0.05, -ROAD_W / 2, zRoad), R(-0.05, ROAD_W / 2, zRoad), R(0.7, ROAD_W / 2, zRoad), R(0.7, -ROAD_W / 2, zRoad)]),
+    d: pathOf([P(-ROAD_W / 2, -R, zRoad), P(ROAD_W / 2, -R, zRoad), P(ROAD_W / 2, -R * 0.45, zRoad), P(-ROAD_W / 2, -R * 0.45, zRoad)]),
   }));
-
-  /*
-   * The boulders. A ring of big ones round the opening, a scatter of smaller
-   * ones outside it and a little behind, and a few on the ground in front.
-   * Each is an irregular round lump with a lit facet on its upper left,
-   * because the light comes from above and the top of a rock catches it.
-   * Drawn back to front and top to bottom, so every lump sits on the one
-   * under it and in front of the one behind.
-   */
-  type Lump = { x: number; z: number; r: number; d: number };
-  const lumps: Lump[] = [];
-  const RING = 13;
-  for (let i = 0; i < RING; i++) {
-    const t = Math.PI * (i / (RING - 1));
-    const r = ROCK * (0.86 + rng() * 0.3);
-    lumps.push({ x: -Math.cos(t) * OUT_W * (0.97 + rng() * 0.08), z: Math.max(r * 0.75, Math.sin(t) * OUT_H + r * 0.1), r, d: 0 });
-  }
-  for (let i = 0; i < 10; i++) {
-    const t = Math.PI * ((i + 0.5) / 10);
-    const r = ROCK * (0.7 + rng() * 0.35);
-    lumps.push({
-      x: -Math.cos(t) * (OUT_W + ROCK * 1.05) * (0.95 + rng() * 0.1),
-      z: Math.max(r * 0.75, Math.sin(t) * (OUT_H + ROCK * 0.95) * (0.92 + rng() * 0.1)),
-      r, d: 0.32,
-    });
-  }
-  /* Chips: small stones wedged between the big ones round the crown, so the
-     ring reads as a pile rather than a necklace. */
-  for (let i = 0; i < 5; i++) {
-    const t = Math.PI * ((i + 0.5) / 5);
-    const r = ROCK * (0.36 + rng() * 0.2);
-    lumps.push({
-      x: -Math.cos(t) * (OUT_W + ROCK * 0.7) * (0.95 + rng() * 0.1),
-      z: Math.max(r, Math.sin(t) * (OUT_H + ROCK * 0.6) + r * 0.3),
-      r, d: -0.12,
-    });
-  }
-  /* On the ground in front: to the right, clear of the road, and one far
-     out on the left where the road has already turned away. */
-  for (let k = 0; k < 2; k++) {
-    const r = ROCK * (0.5 + rng() * 0.3);
-    lumps.push({ x: OUT_W + ROCK * (0.95 + k * 1.0) + rng() * 0.2, z: r * 0.7, r, d: -0.3 - k * 0.3 });
-  }
-  {
-    const r = ROCK * 0.55;
-    lumps.push({ x: -(OUT_W + ROCK * 2.2), z: r * 0.7, r, d: -0.4 });
-  }
-  lumps.sort((p, q) => (q.d - p.d) || (q.z - p.z));
-
-  /*
-   * A boulder is cut, not rounded: a convex polygon of five to seven sides
-   * with two flat facets on it, the upper-left one lit and the lower-right
-   * one in shadow, in three shades of the same stone and nothing between
-   * them. Three flat tones and straight edges are what make it read as rock
-   * — a rock is a thing with faces, and a face is one colour.
-   *
-   * The facets are built from the outline's own vertices and one point
-   * inside it, so their edges are the boulder's edges and the ridge between
-   * them is a straight line across the stone.
-   */
-  for (const L of lumps) {
-    const c = P(L.x, L.z, L.d);
-    const rad = L.r * px;
-    const sides = 5 + Math.floor(rng() * 3);
-    const spin = rng() * Math.PI * 2;
-    const verts: { p: Pt2; t: number }[] = [];
-    for (let i = 0; i < sides; i++) {
-      const t = (spin + (Math.PI * 2 * i) / sides + (rng() - 0.5) * 0.5) % (Math.PI * 2);
-      const rr = rad * (0.74 + rng() * 0.44);
-      verts.push({ p: [c[0] + Math.cos(t) * rr * 1.1, c[1] + Math.sin(t) * rr * 0.84], t });
-    }
-    verts.sort((a, b) => a.t - b.t);
-    const outline = verts.map((v) => v.p);
-    /* Angles run clockwise on the screen: up is 3π/2, right is 0. */
-    const within = (t: number, lo: number, hi: number) => {
-      const a = ((t - lo) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-      return a <= ((hi - lo) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-    };
-    const inner: Pt2 = [c[0] + rad * 0.08, c[1] + rad * 0.1];
-    const lit = verts.filter((v) => within(v.t, Math.PI * 0.95, Math.PI * 1.75)).map((v) => v.p);
-    const dim = verts.filter((v) => within(v.t, -Math.PI * 0.05, Math.PI * 0.6)).map((v) => v.p);
-    el.appendChild(svg('path', { class: 'rock', d: pathOf(outline) }));
-    if (lit.length >= 2) el.appendChild(svg('path', { class: 'rock lit', d: pathOf([inner, ...lit]) }));
-    if (dim.length >= 2) el.appendChild(svg('path', { class: 'rock dim', d: pathOf([inner, ...dim]) }));
-    el.appendChild(svg('path', { class: 'rock edge', d: pathOf(outline) }));
-  }
 
   /*
    * Mist, coming out of the dark. Two soft discs that drift out of the mouth
@@ -607,8 +533,8 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
    * and the thing that says the cave goes somewhere. Stilled by the
    * stylesheet when the player has asked for less motion.
    */
-  const out = P(0, IN_H * 0.3);
-  const away = R(-0.9, 0, IN_H * 0.5);
+  const out = P(0, -R, ARCH_H * 0.35);
+  const away = P(0, -R - 0.9, ARCH_H * 0.6);
   for (let k = 0; k < 2; k++) {
     const m = svg('ellipse', {
       class: 'mist', cx: out[0].toFixed(1), cy: out[1].toFixed(1), rx: 26, ry: 14,
@@ -616,9 +542,9 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
     m.style.setProperty('--dx', `${(away[0] - out[0]).toFixed(1)}px`);
     m.style.setProperty('--dy', `${(away[1] - out[1]).toFixed(1)}px`);
     m.style.setProperty('--k', String(k));
-    el.appendChild(m);
+    front.appendChild(m);
   }
-  return { road, back, front: el };
+  return { road, back, front };
 }
 
 // -- the screen -------------------------------------------------------------
