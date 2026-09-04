@@ -87,19 +87,20 @@
  * screen, because a cave is a place the light does not go; the road runs
  * into it and fades to the same ink, so it plainly goes on.
  */
-.cave .face {
-  stroke: var(--paper);
-  stroke-width: 1.6;
-  stroke-linejoin: miter;
-}
-.cave .face.top { fill: var(--paper-2); }
-.cave .face.lit { fill: var(--paper-3); }
-.cave .face.mid { fill: var(--line); }
-.cave .face.dim { fill: var(--line-2); }
+/* Each face is stroked in its own colour, a hair wide, so two faces meet
+   with no seam of background between them and no line either. */
+.cave .face { stroke-width: 1; stroke-linejoin: miter; }
+.cave .face.top { fill: var(--paper-2); stroke: var(--paper-2); }
+.cave .face.lit { fill: var(--paper-3); stroke: var(--paper-3); }
+.cave .face.mid { fill: var(--line); stroke: var(--line); }
+.cave .face.dim { fill: var(--line-2); stroke: var(--line-2); }
 .cave .dark { fill: var(--ink); }
-.cave .rim { fill: none; stroke: var(--ink-2); stroke-width: 3; stroke-opacity: 0.55; stroke-linejoin: round; }
+.cave .rim { fill: none; stroke: var(--ink-2); stroke-width: 3; stroke-opacity: 0.55; stroke-linejoin: round; stroke-linecap: round; }
+/* The road inside: its own surface colour at the mouth, lost to the ink a
+   little way in. Painted over the road and the dark alike, so the road is
+   plainly the same road on both sides of the arch. */
 .cave .into { fill: url(#caveinto); }
-.cave .into-near { stop-color: var(--ink); stop-opacity: 0; }
+.cave .into-near { stop-color: var(--ink-2); stop-opacity: 1; }
 .cave .into-far { stop-color: var(--ink); stop-opacity: 1; }
 .cave .mist {
   fill: var(--paper);
