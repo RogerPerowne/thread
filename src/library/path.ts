@@ -466,12 +466,14 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
 
   /* The opening: a road-width and a half either side of the road, and tall
      enough to walk into. */
-  const IN_W = 0.72;
-  const IN_H = 1.75;
-  /* A boulder, and how far out from the opening's edge the ring of them sits. */
-  const ROCK = 0.36;
-  const OUT_W = IN_W + ROCK * 0.7;
-  const OUT_H = IN_H + ROCK * 0.7;
+  const IN_W = 0.88;
+  const IN_H = 2.05;
+  /* A boulder, and how far out from the opening's edge the ring of them
+     sits. Big, and closer together than they are wide, so the ring is a wall
+     of stone with no daylight through it. */
+  const ROCK = 0.5;
+  const OUT_W = IN_W + ROCK * 0.98;
+  const OUT_H = IN_H + ROCK * 0.98;
 
   /*
    * The body of the pile behind the arch: a low irregular mound a little way
@@ -523,54 +525,80 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
    */
   type Lump = { x: number; z: number; r: number; d: number };
   const lumps: Lump[] = [];
-  const RING = 11;
+  const RING = 13;
   for (let i = 0; i < RING; i++) {
     const t = Math.PI * (i / (RING - 1));
-    const r = ROCK * (0.82 + rng() * 0.36);
-    lumps.push({ x: -Math.cos(t) * OUT_W * (0.96 + rng() * 0.1), z: Math.max(r * 0.8, Math.sin(t) * OUT_H + r * 0.15), r, d: 0 });
+    const r = ROCK * (0.86 + rng() * 0.3);
+    lumps.push({ x: -Math.cos(t) * OUT_W * (0.97 + rng() * 0.08), z: Math.max(r * 0.75, Math.sin(t) * OUT_H + r * 0.1), r, d: 0 });
   }
-  for (let i = 0; i < 9; i++) {
-    const t = Math.PI * ((i + 0.5) / 9);
-    const r = ROCK * (0.6 + rng() * 0.4);
+  for (let i = 0; i < 10; i++) {
+    const t = Math.PI * ((i + 0.5) / 10);
+    const r = ROCK * (0.7 + rng() * 0.35);
     lumps.push({
-      x: -Math.cos(t) * (OUT_W + ROCK * 1.1) * (0.94 + rng() * 0.12),
-      z: Math.max(r * 0.8, Math.sin(t) * (OUT_H + ROCK) * (0.9 + rng() * 0.12)),
-      r, d: 0.3,
+      x: -Math.cos(t) * (OUT_W + ROCK * 1.05) * (0.95 + rng() * 0.1),
+      z: Math.max(r * 0.75, Math.sin(t) * (OUT_H + ROCK * 0.95) * (0.92 + rng() * 0.1)),
+      r, d: 0.32,
+    });
+  }
+  /* Chips: small stones wedged between the big ones round the crown, so the
+     ring reads as a pile rather than a necklace. */
+  for (let i = 0; i < 5; i++) {
+    const t = Math.PI * ((i + 0.5) / 5);
+    const r = ROCK * (0.36 + rng() * 0.2);
+    lumps.push({
+      x: -Math.cos(t) * (OUT_W + ROCK * 0.7) * (0.95 + rng() * 0.1),
+      z: Math.max(r, Math.sin(t) * (OUT_H + ROCK * 0.6) + r * 0.3),
+      r, d: -0.12,
     });
   }
   /* On the ground in front: to the right, clear of the road, and one far
      out on the left where the road has already turned away. */
   for (let k = 0; k < 2; k++) {
-    const r = ROCK * (0.42 + rng() * 0.3);
-    lumps.push({ x: OUT_W + ROCK * (0.9 + k * 0.95) + rng() * 0.2, z: r * 0.75, r, d: -0.25 - k * 0.25 });
+    const r = ROCK * (0.5 + rng() * 0.3);
+    lumps.push({ x: OUT_W + ROCK * (0.95 + k * 1.0) + rng() * 0.2, z: r * 0.7, r, d: -0.3 - k * 0.3 });
   }
   {
-    const r = ROCK * 0.5;
-    lumps.push({ x: -(OUT_W + ROCK * 2.4), z: r * 0.75, r, d: -0.35 });
+    const r = ROCK * 0.55;
+    lumps.push({ x: -(OUT_W + ROCK * 2.2), z: r * 0.7, r, d: -0.4 });
   }
   lumps.sort((p, q) => (q.d - p.d) || (q.z - p.z));
 
+  /*
+   * A boulder is cut, not rounded: a convex polygon of five to seven sides
+   * with two flat facets on it, the upper-left one lit and the lower-right
+   * one in shadow, in three shades of the same stone and nothing between
+   * them. Three flat tones and straight edges are what make it read as rock
+   * — a rock is a thing with faces, and a face is one colour.
+   *
+   * The facets are built from the outline's own vertices and one point
+   * inside it, so their edges are the boulder's edges and the ridge between
+   * them is a straight line across the stone.
+   */
   for (const L of lumps) {
     const c = P(L.x, L.z, L.d);
     const rad = L.r * px;
-    const sides = 9;
+    const sides = 5 + Math.floor(rng() * 3);
     const spin = rng() * Math.PI * 2;
-    const outline: Pt2[] = [];
+    const verts: { p: Pt2; t: number }[] = [];
     for (let i = 0; i < sides; i++) {
-      const t = spin + (Math.PI * 2 * i) / sides + (rng() - 0.5) * 0.3;
-      const rr = rad * (0.8 + rng() * 0.32);
-      outline.push([c[0] + Math.cos(t) * rr * 1.08, c[1] + Math.sin(t) * rr * 0.86]);
+      const t = (spin + (Math.PI * 2 * i) / sides + (rng() - 0.5) * 0.5) % (Math.PI * 2);
+      const rr = rad * (0.74 + rng() * 0.44);
+      verts.push({ p: [c[0] + Math.cos(t) * rr * 1.1, c[1] + Math.sin(t) * rr * 0.84], t });
     }
-    el.appendChild(svg('path', { class: 'rock', d: smooth(outline) }));
-    /* The facet: a smaller lump towards the upper left of this one. */
-    const lit: Pt2[] = [];
-    const lc: Pt2 = [c[0] - rad * 0.2, c[1] - rad * 0.28];
-    for (let i = 0; i < 7; i++) {
-      const t = Math.PI * 0.75 + (Math.PI * 1.55 * i) / 6;
-      const rr = rad * (0.42 + rng() * 0.16);
-      lit.push([lc[0] + Math.cos(t) * rr * 1.08, lc[1] + Math.sin(t) * rr * 0.8]);
-    }
-    el.appendChild(svg('path', { class: 'rock lit', d: smooth(lit) }));
+    verts.sort((a, b) => a.t - b.t);
+    const outline = verts.map((v) => v.p);
+    /* Angles run clockwise on the screen: up is 3π/2, right is 0. */
+    const within = (t: number, lo: number, hi: number) => {
+      const a = ((t - lo) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      return a <= ((hi - lo) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    };
+    const inner: Pt2 = [c[0] + rad * 0.08, c[1] + rad * 0.1];
+    const lit = verts.filter((v) => within(v.t, Math.PI * 0.95, Math.PI * 1.75)).map((v) => v.p);
+    const dim = verts.filter((v) => within(v.t, -Math.PI * 0.05, Math.PI * 0.6)).map((v) => v.p);
+    el.appendChild(svg('path', { class: 'rock', d: pathOf(outline) }));
+    if (lit.length >= 2) el.appendChild(svg('path', { class: 'rock lit', d: pathOf([inner, ...lit]) }));
+    if (dim.length >= 2) el.appendChild(svg('path', { class: 'rock dim', d: pathOf([inner, ...dim]) }));
+    el.appendChild(svg('path', { class: 'rock edge', d: pathOf(outline) }));
   }
 
   /*

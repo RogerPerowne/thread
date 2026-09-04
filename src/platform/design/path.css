@@ -89,14 +89,18 @@
 .cave .into { fill: url(#caveinto); }
 .cave .into-near { stop-color: var(--ink-2); stop-opacity: 1; }
 .cave .into-far { stop-color: var(--ink); stop-opacity: 0; }
-.cave .rock {
-  fill: var(--line);
+/* Three shades of one stone, flat: the body, the face the light lands on,
+   the face turned from it. No gradient anywhere; a rock is faces. */
+.cave .rock { fill: var(--line); }
+.cave .rock.lit { fill: var(--paper-3); }
+.cave .rock.dim { fill: var(--line-2); }
+.cave .rock.edge {
+  fill: none;
   stroke: var(--ink-2);
-  stroke-width: 2.2;
+  stroke-width: 1.8;
   stroke-opacity: 0.42;
-  stroke-linejoin: round;
+  stroke-linejoin: miter;
 }
-.cave .rock.lit { fill: var(--paper-3); stroke: none; }
 .cave .mist {
   fill: var(--paper);
   opacity: 0;
