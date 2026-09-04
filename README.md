@@ -411,6 +411,53 @@ pressing again is plainly an option, the spotlight is dropped the moment the
 board changes, and every third rung names a move, because a hint that repeats
 itself when pressed again is a hint that stopped.
 
+## Hints that cannot lie
+
+A hint is the one part of a puzzle that can be wrong without anybody noticing.
+Nothing checks it, a wrong one looks exactly like a right one, and the player
+who follows it and gets stuck blames themselves. And the way a hint goes wrong
+is systematic: every game here used to reason forward from whatever was on the
+board, which is right on a board that is right and confidently wrong on one
+that has drifted — and a board drifts long before it breaks a rule. A shape in
+a cell where a different shape goes, a string laid along a legal run the answer
+never uses: from there, "only one tile fits this space" was true of the board
+and false of the puzzle.
+
+So a hint is held to the answer. Every game is built answer-first, which means
+the session holding the board also holds the one answer it was cut from, and a
+hint has three kinds, looked for in this order:
+
+- **fix** — something already down is not in the answer. Said first, because a
+  board with a wrong move on it has no next step, only a step back.
+- **step** — a move forced by what is on the board, with the reason.
+- **look** — nothing is forced. A true thing about where the board is
+  tightest, and at the third rung one move the answer makes.
+
+Each hint carries a *claim* in the board's own vocabulary — `cell:5=3`,
+`run:4-9`, `edge:12=wall` — and `tests/unit/hints.test.ts` holds every claim
+of every game to the shipped answer: forty boards a game, five points along
+each solve, and the same again with one legal-but-wrong move laid, where the
+hint must be a `fix` pointing at exactly that move. A "forced" that was not
+fails the build rather than the player.
+
+The shell writes the rung on the note — "2 of 3" — because a hint that says
+"Look here" and nothing about there being more to ask for is one most people
+press once and give up on; and it drops the spotlight the moment the board
+changes, since a highlight left standing is about a board that no longer
+exists.
+
+## The foot of the path
+
+The road has somewhere it comes from. Below the first chapter it runs on,
+turns with the meander, and comes out of the mouth of a cave in a hillside —
+built in the same scene as the tiles, through the same camera, so it cannot
+disagree with the road it is the end of. Where the hill stands is a fact
+about the camera rather than a choice: a mouth is only a mouth if you can see
+into it, so it has to sit on a face that looks towards you, and the road has
+to run into that face, so on its way there it has to be running away from
+you. The first stretch below the foot that climbs the screen is the only
+place that is true, and that is where the hill is.
+
 ## Showing the answer
 
 Every puzzle has a Reveal, because a board nobody can finish needs a way out of

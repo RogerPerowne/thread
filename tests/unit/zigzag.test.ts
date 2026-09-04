@@ -17,7 +17,7 @@ import { ZigSession } from '../../src/games/zigzag/session.js';
  */
 function aBoard(tag: string, w = 5, h = 5): Zig {
   for (let i = 0; i < 60; i++) {
-    const made = makeZig({ w, h, sequence: [1, 2, 3, 4], diagonal: true }, makeRng(`${tag}/${i}`));
+    const made = makeZig({ w, h, sequence: [1, 2, 3, 4], straight: 0 }, makeRng(`${tag}/${i}`));
     if (made) return made.zig;
   }
   throw new Error(`no ${w}x${h} board from "${tag}"`);
@@ -65,17 +65,30 @@ describe('where a line may step', () => {
     expect(orthogonalPossible(6, 5)).toBe(true);
     expect(orthogonalPossible(7, 6)).toBe(true);
 
-    // And the designer refuses rather than hunting for something impossible.
-    // Refusing has to be instant: left to search, one of these boards spends
-    // its entire budget proving a negative parity already knew.
-    const t0 = Date.now();
-    for (let i = 0; i < 30; i++) {
-      const made = makeZig(
-        { w: 6, h: 6, sequence: [1, 2, 3, 4, 5], diagonal: false }, makeRng(`imp/${i}`),
-      );
-      expect(made, 'a 6x6 straight-only board came out of nowhere').toBeNull();
+    /*
+     * Nothing ships without diagonals any more, so the designer is never
+     * asked for the impossible — but a route asked for as straight as it can
+     * be, on a board where parity forbids a fully straight one, still comes
+     * out: it takes the corner it has to and no more. And every board it
+     * makes, straight or wandering, is one line under the one rule of eight
+     * ways out.
+     */
+    let made = 0;
+    let diagonals = 0;
+    for (let i = 0; i < 40 && made < 3; i++) {
+      const m = makeZig({ w: 6, h: 6, sequence: [1, 2, 3, 4, 5], straight: 1 }, makeRng(`imp/${i}`));
+      if (!m) continue;
+      made++;
+      const { answer, w } = m.zig;
+      for (let k = 1; k < answer.length; k++) {
+        const a = answer[k - 1];
+        const b = answer[k];
+        if (a % w !== b % w && ((a / w) | 0) !== ((b / w) | 0)) diagonals++;
+      }
+      expect(m.zig.diagonal, 'a board shipped with diagonals off').toBe(true);
     }
-    expect(Date.now() - t0, 'the designer searched instead of refusing').toBeLessThan(200);
+    expect(made, 'no straight six by six came out at all').toBeGreaterThan(0);
+    expect(diagonals, 'a six by six was drawn with no corner, which parity forbids').toBeGreaterThan(0);
   });
 
   it('reaches all eight neighbours, and stops at the edge', () => {
@@ -190,7 +203,7 @@ describe('the designer', () => {
 
   it('only returns boards with exactly one line', () => {
     for (let i = 0; i < 6; i++) {
-      const made = makeZig({ w: 5, h: 5, sequence: [1, 2, 3, 4], diagonal: true }, makeRng(`u/${i}`));
+      const made = makeZig({ w: 5, h: 5, sequence: [1, 2, 3, 4], straight: 0 }, makeRng(`u/${i}`));
       if (!made) continue;
       const found = solve(made.zig, 3);
       expect(found.exhausted).toBe(false);

@@ -46,10 +46,11 @@ const CHAPTER_MS = Number(process.env.CHAPTER_MS ?? 240_000);
  * about a millisecond.
  */
 export function hamiltonian(
-  w: number, h: number, start: number, finish: number, rng: Rng, diagonal = true,
+  w: number, h: number, start: number, finish: number, rng: Rng, straight = 0,
 ): number[] | null {
   const n = w * h;
-  const nbr = adjacency(w, h, diagonal);
+  const nbr = adjacency(w, h, true);
+  const isStraight = (a: number, b: number) => a % w === b % w || ((a / w) | 0) === ((b / w) | 0);
   const seen = new Uint8Array(n);
   const path: number[] = [];
   const queue = new Int32Array(n);
@@ -82,7 +83,19 @@ export function hamiltonian(
     if (at === finish) return false;
     if (!connected(at)) return false;
 
-    for (const q of rng.shuffle(nbr[at].filter((c) => !seen[c]))) {
+    /*
+     * The bias towards straight steps. With `straight` at 1 the orthogonal
+     * neighbours are always tried first and a diagonal is taken only when
+     * nothing else finishes the path; at 0 the eight ways out are shuffled
+     * together. The rule of the game is the same either way — eight ways —
+     * and only the ANSWER is straighter, which is what makes the early
+     * chapters easy to read without making them a different game.
+     */
+    const open = rng.shuffle(nbr[at].filter((c) => !seen[c]));
+    const ordered = rng() < straight
+      ? [...open.filter((q) => isStraight(at, q)), ...open.filter((q) => !isStraight(at, q))]
+      : open;
+    for (const q of ordered) {
       seen[q] = 1;
       path.push(q);
       if (rec(q)) return true;
@@ -107,19 +120,25 @@ export type Recipe = {
   readonly w: number;
   readonly h: number;
   readonly sequence: readonly number[];
-  /** May the line step corner to corner? Four ways on instead of eight. */
-  readonly diagonal: boolean;
+  /**
+   * How strongly the answer prefers straight steps, 0..1.
+   *
+   * Not whether diagonals are ALLOWED — they always are; the line may step
+   * to any of the eight cells round it on every board, and the solver that
+   * proves a board unique reasons with all eight. This only bends the answer
+   * the board was cut from towards up, down, left and right, so that an
+   * early chapter's line is mostly straight and easy to see, while a late
+   * one wanders corner to corner.
+   */
+  readonly straight: number;
 };
 
 /** One board, or null if this seed did not produce a sound one. */
 export function makeZig(r: Recipe, rng: Rng): Made | null {
-  /* Refused, not searched for. Without this the designer spends its whole
-     budget looking for a path parity says cannot exist. */
-  if (!r.diagonal && !orthogonalPossible(r.w, r.h)) return null;
   const n = r.w * r.h;
   const start = 0;
   const finish = n - 1;
-  const path = hamiltonian(r.w, r.h, start, finish, rng, r.diagonal);
+  const path = hamiltonian(r.w, r.h, start, finish, rng, r.straight);
   if (!path) return null;
 
   const cells = new Array<number>(n).fill(0);
@@ -129,7 +148,7 @@ export function makeZig(r: Recipe, rng: Rng): Made | null {
 
   const zig: Zig = {
     w: r.w, h: r.h, cells, sequence: r.sequence, start, finish,
-    diagonal: r.diagonal, answer: path,
+    diagonal: true, answer: path,
   };
 
   const found = solve(zig, 2, VERIFY_NODES);
@@ -166,17 +185,27 @@ export function scoreOf(made: Made): number {
   return Math.log10(Math.max(1, made.nodes)) * 22 + choosing * 60;
 }
 
+/*
+ * The quartiles of the measured spread under the one rule — sixty-three,
+ * seventy-four, eighty-six over the five hundred shipped boards — and nothing
+ * else. scripts/build-zigzag.ts prints the medians on every run, so the cuts
+ * can be re-measured rather than nudged if the score ever changes.
+ */
 export function bandOf(made: Made): Band {
   const score = scoreOf(made);
-  if (score < 48) return 'gentle';
-  if (score < 59) return 'steady';
-  if (score < 71) return 'tricky';
+  if (score < 63) return 'gentle';
+  if (score < 74) return 'steady';
+  if (score < 86) return 'tricky';
   return 'severe';
 }
 
 /**
- * Corner to corner without diagonals is impossible on some boards, and it is
- * a parity fact rather than a search that fails.
+ * Corner to corner without a single diagonal is impossible on some boards,
+ * and it is a parity fact rather than a search that fails. Nothing ships
+ * without diagonals any more, but the designer's straightest routes are
+ * straight only where parity lets them be — on a six by six even a route
+ * asked for at `straight: 1` has to take at least one corner — and this is
+ * the statement of why.
  *
  * Colour the grid like a chessboard. A line stepping only up, down, left and
  * right changes colour every step, so a path through all w*h cells has
@@ -193,47 +222,56 @@ export function orthogonalPossible(w: number, h: number): boolean {
 /**
  * The ladder: seventeen chapters, ordered by what the measure says.
  *
- * Three levers, and the measurement is the whole reason they are in this
- * order rather than in the order they look like they should be in.
+ * One rule on every board: the line may step to any of the eight cells round
+ * it. There used to be two kinds of board — half the ladder allowed only
+ * straight steps — and the board could not show which kind it was, so the
+ * marked moves left out the diagonals on one board and not the next and the
+ * rules sheet promised a thing eight chapters refused. A rule that changes
+ * from board to board is not a rule the player can learn.
  *
- * **Diagonals.** The biggest lever by a distance, and the one that separates
- * the easy end from the rest. Off, the line has four ways out of a cell and
- * about one of them carries the next number, so most steps are forced and the
- * line very nearly draws itself; on, it has eight and two or three are legal,
- * which is a search. Measured on the same sizes the difference is 47 against
- * 90, and 41 against 104 — bigger than going from a five by five to an eight
- * by seven. So every chapter below the halfway mark is a board the line can
- * only be drawn on straight.
+ * So the levers are these three, and the first is the one that used to be
+ * the on/off switch.
+ *
+ * **How straight the answer is.** The designer can be told to prefer straight
+ * steps when it draws the route the board is cut from. A route that is nearly
+ * all straight is easy to SEE — the eye runs along it — and the diagonal
+ * steps it does take stand out as the moments to think. Measured on a five by
+ * five with five numbers, a straight route scores 60 and a wandering one 64;
+ * the lever is real but gentle, and it is the gentleness that makes the
+ * bottom of the ladder a bottom.
  *
  * **How many numbers.** Backwards from how it looks. MORE numbers in the
  * sequence is EASIER, because a longer run means a smaller share of the
- * neighbours carry the next one: five numbers measures 35 where four measures
- * 65 on the same board. Two numbers is not a difficulty at all, it is a broken
- * puzzle — half of every neighbourhood is legal and no board of any size came
- * out with one answer. Three, four and five are the range.
+ * neighbours carry the next one: five numbers measures 60 where four measures
+ * 70 and three 92 on the same board. Two numbers is not a difficulty at all,
+ * it is a broken puzzle — half of every neighbourhood is legal and no board
+ * of any size came out with one answer. Three, four and five are the range.
  *
  * **Size.** The weakest of the three, and the one everybody reaches for first.
  * Across a whole ladder it moves the measure about as far as one step of
- * either of the others.
+ * either of the others — and it is what the designer pays for: a seven by six
+ * with a straight route is nearly impossible to make unique, because with
+ * eight ways out of every cell a straight route has too many wandering
+ * rivals. The bigger boards wander.
  */
 export const LADDER: readonly (Recipe & { name: string; count: number })[] = [
-  { name: 'Straight Lines', w: 5, h: 5, sequence: [1, 2, 3, 4, 5], diagonal: false, count: 30 },
-  { name: 'A Longer Run', w: 6, h: 5, sequence: [1, 2, 3, 4, 5], diagonal: false, count: 30 },
-  { name: 'Six by Five', w: 7, h: 6, sequence: [1, 2, 3, 4, 5], diagonal: false, count: 30 },
-  { name: 'Three Numbers', w: 5, h: 5, sequence: [1, 2, 3], diagonal: false, count: 30 },
-  { name: 'Seven Across', w: 7, h: 7, sequence: [1, 2, 3, 4, 5], diagonal: false, count: 30 },
-  { name: 'Fewer to Go On', w: 6, h: 5, sequence: [1, 2, 3], diagonal: false, count: 30 },
-  { name: 'The Long Board', w: 8, h: 7, sequence: [1, 2, 3, 4, 5], diagonal: false, count: 30 },
-  { name: 'Wider Still', w: 7, h: 6, sequence: [1, 2, 3], diagonal: false, count: 30 },
-  { name: 'Corners Open', w: 5, h: 5, sequence: [1, 2, 3, 4, 5], diagonal: true, count: 30 },
-  { name: 'Forty-Nine', w: 7, h: 7, sequence: [1, 2, 3], diagonal: false, count: 30 },
-  { name: 'Eight Ways Out', w: 6, h: 5, sequence: [1, 2, 3, 4, 5], diagonal: true, count: 30 },
-  { name: 'Four and Free', w: 5, h: 5, sequence: [1, 2, 3, 4], diagonal: true, count: 30 },
-  { name: 'Thirty-Six', w: 6, h: 6, sequence: [1, 2, 3, 4, 5], diagonal: true, count: 30 },
-  { name: 'Room to Wander', w: 6, h: 5, sequence: [1, 2, 3, 4], diagonal: true, count: 30 },
-  { name: 'Across the Diagonal', w: 7, h: 6, sequence: [1, 2, 3, 4, 5], diagonal: true, count: 30 },
-  { name: 'Four Numbers', w: 7, h: 6, sequence: [1, 2, 3, 4], diagonal: false, count: 30 },
-  { name: 'Three and Free', w: 5, h: 5, sequence: [1, 2, 3], diagonal: true, count: 20 },
+  { name: 'A Corner Here and There', w: 5, h: 5, sequence: [1, 2, 3, 4, 5], straight: 0.7, count: 30 },
+  { name: 'Straight Ahead', w: 5, h: 5, sequence: [1, 2, 3, 4, 5], straight: 1, count: 30 },
+  { name: 'Corners Open', w: 5, h: 5, sequence: [1, 2, 3, 4, 5], straight: 0, count: 30 },
+  { name: 'A Longer Run', w: 6, h: 5, sequence: [1, 2, 3, 4, 5], straight: 1, count: 30 },
+  { name: 'Six by Five', w: 6, h: 5, sequence: [1, 2, 3, 4, 5], straight: 0.5, count: 30 },
+  { name: 'Room to Wander', w: 6, h: 5, sequence: [1, 2, 3, 4, 5], straight: 0, count: 30 },
+  { name: 'Four Numbers', w: 5, h: 5, sequence: [1, 2, 3, 4], straight: 1, count: 30 },
+  { name: 'Four and Free', w: 5, h: 5, sequence: [1, 2, 3, 4], straight: 0, count: 30 },
+  { name: 'Thirty-Six', w: 6, h: 6, sequence: [1, 2, 3, 4, 5], straight: 0.5, count: 30 },
+  { name: 'Eight Ways Out', w: 6, h: 6, sequence: [1, 2, 3, 4, 5], straight: 0, count: 30 },
+  { name: 'Fewer to Go On', w: 6, h: 5, sequence: [1, 2, 3, 4], straight: 0.6, count: 30 },
+  { name: 'Wider Still', w: 6, h: 5, sequence: [1, 2, 3, 4], straight: 0, count: 30 },
+  { name: 'Across the Diagonal', w: 7, h: 6, sequence: [1, 2, 3, 4, 5], straight: 0, count: 30 },
+  { name: 'Four on Thirty-Six', w: 6, h: 6, sequence: [1, 2, 3, 4], straight: 0, count: 30 },
+  { name: 'Three Numbers', w: 5, h: 5, sequence: [1, 2, 3], straight: 0, count: 30 },
+  { name: 'Forty-Nine', w: 7, h: 7, sequence: [1, 2, 3, 4, 5], straight: 0, count: 30 },
+  { name: 'Three and Free', w: 6, h: 5, sequence: [1, 2, 3], straight: 0, count: 20 },
 ];
 
 /** Build the whole ladder, deterministically from one seed. */
@@ -246,10 +284,7 @@ export function buildZigzag(
   const seen = new Set<string>();
   /* Seeded by the recipe rather than by position — see One to Nine's note. */
   LADDER.forEach((recipe, ci) => {
-    const key = `${recipe.w}x${recipe.h}s${recipe.sequence.length}${recipe.diagonal ? 'd' : 'o'}`;
-    if (!recipe.diagonal && !orthogonalPossible(recipe.w, recipe.h)) {
-      throw new Error(`${recipe.name}: ${recipe.w}x${recipe.h} has no straight-only answer`);
-    }
+    const key = `${recipe.w}x${recipe.h}s${recipe.sequence.length}t${recipe.straight}`;
     const batch: Chaptered[] = [];
     const until = Date.now() + CHAPTER_MS;
     for (let attempt = 0; batch.length < recipe.count && attempt < recipe.count * 4000; attempt++) {

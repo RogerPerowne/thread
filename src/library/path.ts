@@ -58,19 +58,27 @@ const GLOW_PX = 78;
 /*
  * The run past each end of the ladder, and how much of it you can reach.
  *
- * The ribbon does not stop and does not fade: it is drawn RUN units past the
- * top and bottom rows and simply carries on. What stops is the SCROLL. Only
- * SHOW of that run is inside the scrollable box; the last CLIP units at each
- * end are outside it and clipped away.
+ * At the TOP the ribbon does not stop and does not fade: it is drawn RUN_T
+ * units past the top row and simply carries on. What stops is the SCROLL.
+ * Only SHOW_T of that run is inside the scrollable box; the last CLIP_T units
+ * are outside it and clipped away. So at the limit of the scroll the clip
+ * line sits exactly on the edge of the screen and the ribbon is cut by the
+ * edge of the phone rather than by anything of ours — it reads as running on
+ * past the screen, because as far as anyone can see, it does.
  *
- * That is what makes the end of the path invisible. At the limit of the scroll
- * the clip line sits exactly on the edge of the screen, so the ribbon is cut
- * by the edge of the phone rather than by anything of ours — it reads as
- * running on past the screen, because as far as anyone can see, it does.
+ * At the FOOT the road has somewhere it comes from. It runs on past the first
+ * chapter, turns, and comes out of the mouth of a cave in a hillside — see
+ * `caveAt` — so the scroll can end on a picture rather than on a cut. The run
+ * below the foot is long enough to reach the first stretch of the meander
+ * that runs away from the camera, because that is the only place a mouth
+ * can face you with the road coming out of it, and a little more for the
+ * ground the hill stands on.
  */
-const RUN = 460;
-const SHOW = 220;
-const CLIP = RUN - SHOW;
+const RUN_T = 460;
+const SHOW_T = 220;
+const CLIP_T = RUN_T - SHOW_T;
+const RUN_B = 600;
+const CLIP_B = 0;
 
 /*
  * The tap target round a tile, in view units.
@@ -356,6 +364,146 @@ function faceTransform(g: Pt2): string {
   return `translate(${cx.toFixed(2)} ${cy.toFixed(2)}) scale(1 ${sy.toFixed(4)})`;
 }
 
+/*
+ * The cave the road comes out of.
+ *
+ * A picture at the foot of the ladder rather than a cut: the road runs on past
+ * the first chapter, turns with the meander, and comes out of an arched mouth
+ * in a hillside. It is built in the same scene as everything else — a mound
+ * on the ground, a vertical face cut into it, the road ending inside the
+ * dark — so it is seen through the same camera and cannot disagree with the
+ * road it is the end of.
+ *
+ * Where it stands is a fact about the camera, not a choice. A mouth is only
+ * a mouth if you can see INTO it, which means it has to be on a face that
+ * looks towards the camera; and the road has to run into that face, which
+ * means the road, on its way there, has to be running AWAY from the camera.
+ * So the mound goes at the end of the first stretch below the foot where the
+ * road climbs the screen — on this meander that is the third leg of every
+ * turn — and the road is cut where it meets the hill. The stretch before it
+ * runs towards the camera, turns, and climbs to the first tile, which is what
+ * a path coming out of a cave does.
+ */
+function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; el: SVGGElement } {
+  const yOfPt = (g: Pt2) => project(FLAT, g[0], g[1], 0)[1];
+  /* The first leg below the foot that runs up the screen. */
+  let leg = -1;
+  for (let i = 0; i + 1 < run.length; i++) {
+    if (yOfPt(run[i]) > yFoot + 40 && yOfPt(run[i + 1]) < yOfPt(run[i])) { leg = i; break; }
+  }
+  if (leg < 0) return { road: run, el: svg('g') };
+  const a = run[leg];
+  const b = run[leg + 1];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  /** Along the road, in the direction it is walked towards the cave. */
+  const u: Pt2 = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+  /** Across it. */
+  const nrm: Pt2 = [-u[1], u[0]];
+  /* The mouth, a little way up the leg so the turn before it is in view. */
+  const mouth: Pt2 = [a[0] + u[0] * 1.15, a[1] + u[1] * 1.15];
+  const road = [...run.slice(0, leg + 1), mouth];
+
+  /*
+   * The hill: a rounded footprint on the ground, its mouth-side edge through
+   * the mouth, swept up from the floor. Its outline is the projected footprint
+   * at the top plus the band down to the footprint at the floor — the same
+   * construction as a tile's skirt, on a rounder shape.
+   */
+  const HILL_R = 1.1;
+  const HILL_H = TILE_H * 4.4;
+  /* The top is smaller than the foot: a hill, not a drum. */
+  const TAPER = 0.72;
+  const centre: Pt2 = [mouth[0] + u[0] * HILL_R * 0.94, mouth[1] + u[1] * HILL_R * 0.94];
+  const footprint = (scale: number): Pt2[] => {
+    const out: Pt2[] = [];
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI * 2;
+      /* Longer across the road than along it, so it reads as a bank the road
+         has cut through rather than a boulder dropped on it. */
+      const dx = Math.cos(t) * HILL_R * 1.55 * scale;
+      const dy = Math.sin(t) * HILL_R * scale;
+      out.push([centre[0] + nrm[0] * dx + u[0] * dy, centre[1] + nrm[1] * dx + u[1] * dy]);
+    }
+    return out;
+  };
+  const N = 32;
+  const lo = footprint(1).map((g) => project(FLAT, g[0], g[1], BOT_Z));
+  const hi = footprint(TAPER).map((g) => project(FLAT, g[0], g[1], BOT_Z + HILL_H));
+  const ring = (pts: Pt2[]) => pts.map((q, i) => `${i === 0 ? 'M' : 'L'} ${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' ') + ' Z';
+  const xs = hi.map((q) => q[0]);
+  const left = xs.indexOf(Math.min(...xs));
+  const right = xs.indexOf(Math.max(...xs));
+  /* The side band: from the top's leftmost point round the FAR side of the
+     bottom outline to its rightmost, and back along the top. */
+  const nearHalf = (pts: Pt2[]): Pt2[] => {
+    const out: Pt2[] = [];
+    for (let k = 0; k <= N; k++) {
+      const i = (left + k) % N;
+      out.push(pts[i]);
+      if (i === right) break;
+    }
+    /* Whichever way round the arc went, keep the one that dips lowest. */
+    const other: Pt2[] = [];
+    for (let k = 0; k <= N; k++) {
+      const i = (left - k + N) % N;
+      other.push(pts[i]);
+      if (i === right) break;
+    }
+    const low = (arc: Pt2[]) => Math.max(...arc.map((q) => q[1]));
+    return low(out) >= low(other) ? out : other;
+  };
+  const bottomArc = nearHalf(lo);
+  const topArc = nearHalf(hi);
+  const side = `M ${topArc[0][0].toFixed(1)} ${topArc[0][1].toFixed(1)} `
+    + bottomArc.map((q) => `L ${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' ')
+    + ` L ${topArc[topArc.length - 1][0].toFixed(1)} ${topArc[topArc.length - 1][1].toFixed(1)} Z`;
+
+  /*
+   * The mouth: a vertical face across the road, its top an arch. Drawn as the
+   * projected corners of that face with the arch as a curve through the
+   * projected crown, so it is a real opening in the scene and not a shape
+   * pasted on.
+   */
+  const MOUTH_W = 0.95;
+  const MOUTH_H = TILE_H * 2.9;
+  const at = (dn: number, z: number) => project(FLAT, mouth[0] + nrm[0] * dn, mouth[1] + nrm[1] * dn, z);
+  const bl = at(-MOUTH_W / 2, BOT_Z);
+  const br = at(MOUTH_W / 2, BOT_Z);
+  const tl = at(-MOUTH_W / 2, BOT_Z + MOUTH_H * 0.62);
+  const tr = at(MOUTH_W / 2, BOT_Z + MOUTH_H * 0.62);
+  const crown = at(0, BOT_Z + MOUTH_H);
+  const arch = `M ${bl[0].toFixed(1)} ${bl[1].toFixed(1)} L ${tl[0].toFixed(1)} ${tl[1].toFixed(1)}`
+    + ` Q ${crown[0].toFixed(1)} ${(crown[1] - (tl[1] - crown[1]) * 0.35).toFixed(1)} ${tr[0].toFixed(1)} ${tr[1].toFixed(1)}`
+    + ` L ${br[0].toFixed(1)} ${br[1].toFixed(1)} Z`;
+
+  const el = svg('g', { class: 'cave', 'aria-hidden': 'true' });
+  el.append(
+    svg('path', { class: 'hill side', d: side }),
+    svg('path', { class: 'hill top', d: ring(hi) }),
+    svg('path', { class: 'hill crest', d: ring(footprint(TAPER * 0.55).map((g) => project(FLAT, g[0], g[1], BOT_Z + HILL_H * 1.12))) }),
+    svg('path', { class: 'mouth', d: arch }),
+    svg('path', { class: 'mouth rim', d: arch }),
+  );
+  /*
+   * Mist, coming out of the dark. Two soft discs that drift out of the mouth
+   * along the road and fade — the one moving thing at the foot of the path,
+   * and the thing that says the cave goes somewhere. Stilled by the
+   * stylesheet when the player has asked for less motion.
+   */
+  const out = at(0, BOT_Z + MOUTH_H * 0.3);
+  const away = project(FLAT, mouth[0] - u[0] * 0.9, mouth[1] - u[1] * 0.9, BOT_Z + MOUTH_H * 0.55);
+  for (let k = 0; k < 2; k++) {
+    const m = svg('ellipse', {
+      class: 'mist', cx: out[0].toFixed(1), cy: out[1].toFixed(1), rx: 26, ry: 14,
+    });
+    m.style.setProperty('--dx', `${(away[0] - out[0]).toFixed(1)}px`);
+    m.style.setProperty('--dy', `${(away[1] - out[1]).toFixed(1)}px`);
+    m.style.setProperty('--k', String(k));
+    el.appendChild(m);
+  }
+  return { road, el };
+}
+
 // -- the screen -------------------------------------------------------------
 
 /**
@@ -416,13 +564,13 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   const yOf = (g: Pt2) => project(FLAT, g[0], g[1], 0)[1];
   const yTop = yOf(groundOfRow(R - 1));
   const yBot = yOf(groundOfRow(0));
-  const y0 = yTop - RUN;
+  const y0 = yTop - RUN_T;
   /** The whole drawing, including the run past both ends. */
-  const H = yBot + RUN - y0;
+  const H = yBot + RUN_B - y0;
   /** The part of it you can scroll to: the drawing less the clip at each end. */
-  const BED = H - 2 * CLIP;
+  const BED = H - CLIP_T - CLIP_B;
   /** A row's y within the bed — which is the space the scroll measures in. */
-  const rowY = (j: number) => yOf(groundOfRow(j)) - y0 - CLIP;
+  const rowY = (j: number) => yOf(groundOfRow(j)) - y0 - CLIP_T;
 
   const root = svg('svg', {
     class: 'pathsvg',
@@ -604,9 +752,11 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
   scene.appendChild(skirts);
   const centres: Pt2[] = [];
   for (let j = 0; j < R; j++) centres.push(groundOfRow(j));
+  const cave = caveAt(halves.after, yBot);
   for (const piece of cutAtTiles(halves.before, centres)) laySlab('ahead', piece);
-  for (const piece of cutAtTiles(halves.after, centres)) laySlab('walked', piece);
+  for (const piece of cutAtTiles(cave.road, centres)) laySlab('walked', piece);
   scene.appendChild(ribbon);
+  scene.appendChild(cave.el);
   scene.appendChild(faces);
 
   /*
@@ -618,7 +768,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
    * to be a ruled band across the path is now one line of arithmetic.
    */
   const bandY: number[] = [];
-  for (let j = 0; j < R; j++) bandY[rows[j].chapter] = yOf(groundOfRow(j)) - y0 - CLIP;
+  for (let j = 0; j < R; j++) bandY[rows[j].chapter] = yOf(groundOfRow(j)) - y0 - CLIP_T;
 
   // --- the tiles -----------------------------------------------------------
   const STATE_WORD = { done: 'solved', now: 'where you are up to', ahead: 'not started' };
@@ -752,7 +902,7 @@ export function pathScreen(game: AnyGame, hooks: PathHooks): { el: HTMLElement; 
    */
   const bed = h('div', { class: 'pathbed' }, root);
   bed.style.aspectRatio = `${VIEW_W} / ${BED.toFixed(1)}`;
-  root.style.marginTop = `${((-CLIP / VIEW_W) * 100).toFixed(4)}%`;
+  root.style.marginTop = `${((-CLIP_T / VIEW_W) * 100).toFixed(4)}%`;
   const scroller = h('div', { class: 'pathscroll' }, bed);
 
   const meter = h('i');
