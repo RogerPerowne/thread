@@ -411,25 +411,24 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const road = [...run.slice(0, leg + 1), mouth];
 
   /**
-   * The face the cave is built in looks straight at the camera.
+   * The face the cave is built in stands ACROSS the road, and the road runs
+   * straight into it.
    *
-   * Not across the road. A face across this leg would be seen at forty-five
-   * degrees, and everything in it — the arch, every boulder — would come out
-   * as a slanted sliver. So the face is the vertical plane whose normal
-   * points at the camera: `x` runs level across the screen, `z` runs up, and
-   * `d` runs back into the picture. The road meets it obliquely, which is
-   * what a road coming out of a cave and turning towards you does.
+   * `x` runs across the road, `z` up, `d` back into the hill along the road.
+   * Seen from this camera the face is at an angle — the angle the road is
+   * at — which is the point: the arch is in line with the path coming out of
+   * it, and the pile is a thing the road goes into rather than a picture the
+   * road happens to pass. (A face turned to look straight at the camera was
+   * tried, and read as a postcard propped beside the road.)
    *
    * A boulder is a lump, not a shape in that plane: its centre is placed in
    * the face and its silhouette is drawn round about that centre on the
-   * screen, the way a stone's is from any angle. That is the whole
-   * difference between a pile of rocks and a pile of leaves.
+   * screen, the way a stone's is from any angle. That is what lets the pile
+   * stand at an angle and still be a pile of rocks rather than a pile of
+   * slanted leaves — the arch foreshortens, the stones do not.
    */
-  const SQ = Math.SQRT1_2;
-  const ex: Pt2 = [SQ, -SQ];
-  /* Ground (+1, +1) comes TOWARDS the camera on this meander, so "back into
-     the picture" is its negative. */
-  const ez: Pt2 = [-SQ, -SQ];
+  const ex: Pt2 = nrm;
+  const ez: Pt2 = u;
   const P = (x: number, z: number, d = 0): Pt2 =>
     project(FLAT, mouth[0] + ex[0] * x + ez[0] * d, mouth[1] + ex[1] * x + ez[1] * d, BOT_Z + z);
   /** One ground unit, as it comes out on the screen in the face. */
@@ -467,8 +466,8 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
 
   /* The opening: a road-width and a half either side of the road, and tall
      enough to walk into. */
-  const IN_W = 0.66;
-  const IN_H = 1.7;
+  const IN_W = 0.72;
+  const IN_H = 1.75;
   /* A boulder, and how far out from the opening's edge the ring of them sits. */
   const ROCK = 0.36;
   const OUT_W = IN_W + ROCK * 0.7;
