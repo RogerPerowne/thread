@@ -78,17 +78,25 @@
 
 /* --- the cave ------------------------------------------------------------- */
 /*
- * The hill is stone like the tiles ahead — paper on top, the line colour down
- * its side — so it belongs to the same ground; the mouth is the deepest ink
- * on the screen, because a cave is a place the light does not go. Its rim is
- * the one stroke, so the opening reads as cut into the hill rather than laid
- * on it.
+ * Stone in the same paper the tiles are cut from: the line colour for the
+ * body of a rock, paper for the facet the light lands on, and a thin ink
+ * edge so one boulder can be told from the next. The mouth is the deepest
+ * ink on the screen, because a cave is a place the light does not go; the
+ * road runs into it and fades to the same ink, so it plainly goes on.
  */
-.cave .hill.side { fill: var(--line-2); }
-.cave .hill.top { fill: var(--paper-3); }
-.cave .hill.crest { fill: var(--paper-2); }
+.cave .body { fill: var(--line-2); }
 .cave .mouth { fill: var(--ink); }
-.cave .mouth.rim { fill: none; stroke: var(--line); stroke-width: 7; stroke-linejoin: round; }
+.cave .into { fill: url(#caveinto); }
+.cave .into-near { stop-color: var(--ink-2); stop-opacity: 1; }
+.cave .into-far { stop-color: var(--ink); stop-opacity: 0; }
+.cave .rock {
+  fill: var(--line);
+  stroke: var(--ink-2);
+  stroke-width: 2.2;
+  stroke-opacity: 0.42;
+  stroke-linejoin: round;
+}
+.cave .rock.lit { fill: var(--paper-3); stroke: none; }
 .cave .mist {
   fill: var(--paper);
   opacity: 0;
