@@ -94,8 +94,8 @@
 .cave .face.lit { fill: var(--paper-3); stroke: var(--paper-3); }
 .cave .face.mid { fill: var(--line); stroke: var(--line); }
 .cave .face.dim { fill: var(--line-2); stroke: var(--line-2); }
-.cave .dark { fill: var(--ink); }
-.cave .rim { fill: none; stroke: var(--ink-2); stroke-width: 3; stroke-opacity: 0.55; stroke-linejoin: round; stroke-linecap: round; }
+/* The entrance: faces the light does not reach, painted behind the road. */
+.cave .face.dark { fill: var(--ink); stroke: var(--ink); }
 /* The road inside: its own surface colour at the mouth, lost to the ink a
    little way in. Painted over the road and the dark alike, so the road is
    plainly the same road on both sides of the arch. */

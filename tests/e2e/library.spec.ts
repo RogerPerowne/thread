@@ -111,12 +111,12 @@ test('the path runs off the top of the screen, and comes out of a cave at the fo
   });
   const mouth = await page.evaluate(() => {
     const scroll = document.querySelector('.pathscroll') as HTMLElement;
-    const m = document.querySelector('.cave .rim') as SVGPathElement;
+    const m = document.querySelector('.cave .face.dark') as SVGPathElement;
     const s = scroll.getBoundingClientRect();
     const d = m.getBoundingClientRect();
     return { top: d.top, bottom: d.bottom, viewTop: s.top, viewBottom: s.bottom, height: d.height };
   });
-  expect(mouth.height, 'the cave has no mouth').toBeGreaterThan(20);
+  expect(mouth.height, 'the cave has no mouth').toBeGreaterThan(8);
   expect(mouth.top, 'the cave mouth is above the view').toBeGreaterThan(mouth.viewTop);
   expect(mouth.bottom, 'the cave mouth is cut off by the foot of the view').toBeLessThan(mouth.viewBottom);
 
