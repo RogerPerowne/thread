@@ -439,6 +439,19 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const LX = -0.55;
   const LD = -0.35;
   const LZ = 0.76;
+  /*
+   * The eye, in the dome's own frame. The camera is pitched above the
+   * ground looking along ground (-1, -1), so the direction from the scene
+   * to the eye is ground (+1, +1) tilted up by the pitch. Written in the
+   * dome's frame (across the road, along it, up), so a face can be asked
+   * whether it looks at the camera at all. A face that does not is not
+   * drawn — it is the far side of the dome, and no painting order makes a
+   * far face come out behind a near one on every phone.
+   */
+  const toward: Pt2 = [Math.SQRT1_2, Math.SQRT1_2];
+  const EX = (toward[0] * nrm[0] + toward[1] * nrm[1]) * Math.cos(ISO_PITCH);
+  const ED = (toward[0] * u[0] + toward[1] * u[1]) * Math.cos(ISO_PITCH);
+  const EZ = Math.sin(ISO_PITCH);
   type Face = { d: string; shade: string; y: number; dark: boolean };
   const faces: Face[] = [];
   /* Three faces wide: the one the road runs at and its neighbours either
@@ -451,6 +464,9 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
         : [at3(i, j), at3(i, j + 1), at3(i + 1, j + 1), at3(i + 1, j)];
       const mid = corners.reduce((m, c) => [m[0] + c[0], m[1] + c[1], m[2] + c[2]], [0, 0, 0]);
       const ml = Math.hypot(mid[0], mid[1], mid[2]) || 1;
+      /* On a sphere the normal is the direction of the face's middle. */
+      const facing = (mid[0] * EX + mid[1] * ED + mid[2] * EZ) / ml;
+      if (facing <= 0) continue;
       const lit = (mid[0] * LX + mid[1] * LD + mid[2] * LZ) / ml;
       const pts = corners.map((c) => P(c[0], c[1], c[2]));
       faces.push({
