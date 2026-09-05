@@ -365,17 +365,18 @@ function faceTransform(g: Pt2): string {
 }
 
 /*
- * The cave the road comes out of: a low-poly dome with an arch cut into it.
+ * The cave the road comes out of: a low-poly dome, some of whose faces are
+ * black.
  *
- * Perfectly geometrical, by construction. `dome()` lays a hemisphere out as
+ * Perfectly geometrical, by construction. The hemisphere is laid out as
  * rings of latitude and segments of longitude — every face a flat quad, the
  * crown a ring of triangles — and every face is shaded by the angle its own
- * normal makes with one light, in a few flat shades. The arch is not drawn
- * on the dome, it is CUT from it: its outline is a set of points that lie on
- * the sphere's surface exactly, and the dome's faces are masked by that
- * outline. So the road, painted before the dome, is seen through a real hole
- * in it, with the dark of the inside painted behind the road. Front to
- * back: the dome, the road, the dark.
+ * normal makes with one light, in a few flat shades. The opening is not a
+ * shape drawn on the dome or cut from it: it is the faces at the foot of
+ * the front painted black, and painted BEHIND the road while every other
+ * face is painted in front of it. So the road is seen running over the dark
+ * and under the stone, and its last stretch fades into the same black —
+ * going in. Front to back: the stone, the road, the dark.
  *
  * Where it stands is a fact about the camera, not a choice. A mouth is only
  * a mouth if you can see INTO it, which means it has to be on a face that
@@ -409,7 +410,7 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const mouth: Pt2 = [centre[0] - u[0] * R, centre[1] - u[1] * R];
   /* The road runs INTO the dome, well past the mouth, so it is seen going
      in through the arch rather than stopping at it. */
-  const inside: Pt2 = [mouth[0] + u[0] * R * 0.55, mouth[1] + u[1] * R * 0.55];
+  const inside: Pt2 = [mouth[0] + u[0] * R * 0.4, mouth[1] + u[1] * R * 0.4];
   const road = [...run.slice(0, leg + 1), inside];
 
   /** A point in the dome's own frame: `x` across the road, `d` along it
@@ -428,7 +429,7 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
    * front, and the arch is cut symmetrically about it.
    */
   const RINGS = 3;
-  const SEGS = 10;
+  const SEGS = 12;
   const at3 = (i: number, j: number): [number, number, number] => {
     const phi = (i / RINGS) * (Math.PI / 2);
     const theta = ((j + 0.5) / SEGS) * Math.PI * 2 + Math.PI / 2;
@@ -438,8 +439,11 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const LX = -0.55;
   const LD = -0.35;
   const LZ = 0.76;
-  type Face = { d: string; shade: string; y: number };
+  type Face = { d: string; shade: string; y: number; dark: boolean };
   const faces: Face[] = [];
+  /* Three faces wide: the one the road runs at and its neighbours either
+     side, thirty degrees each. */
+  const ENTRANCE = 0.6;
   for (let i = 0; i < RINGS; i++) {
     for (let j = 0; j < SEGS; j++) {
       const corners = i === RINGS - 1
@@ -453,66 +457,28 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
         d: pathOf(pts),
         shade: lit > 0.66 ? 'top' : lit > 0.3 ? 'lit' : lit > -0.05 ? 'mid' : 'dim',
         y: pts.reduce((s, q) => s + q[1], 0) / pts.length,
+        /* The entrance: the faces at the foot of the front, either side of
+           the seam the road runs at, two rings high. */
+        dark: i <= 1 && Math.abs(Math.atan2(mid[0], -mid[1])) < ENTRANCE,
       });
     }
   }
   /* Back to front: the faces lowest on the screen are nearest the camera. */
   faces.sort((p, q) => p.y - q.y);
 
-  // --- the arch, cut from it ---------------------------------------------
+  // --- the entrance: some of the faces, black ------------------------------
   /*
-   * The outline lies ON the sphere: for a point `x` across and `z` up, the
-   * surface is sqrt(R² - x² - z²) in front of the middle. So the arch is a
-   * curve in the dome's own skin, and the hole it masks out is a hole in
-   * the dome and not a shape over it.
+   * The opening is not a shape cut into the dome, it is the dome with some
+   * of its faces painted black: the ones at the foot of the front, either
+   * side of the seam the road runs at, two rings high. They go BEHIND the
+   * road while every other face goes in front of it, so the road is seen
+   * running over the dark and under the stone — going in.
    */
-  const ARCH_W = 0.8;
-  const ARCH_H = 1.15;
-  const onSkin = (x: number, z: number): Pt2 => P(x, -Math.sqrt(Math.max(0, R * R - x * x - z * z)), z);
-  const archPts: Pt2[] = [onSkin(-ARCH_W, 0)];
-  for (let k = 0; k <= 14; k++) {
-    const t = Math.PI * (k / 14);
-    archPts.push(onSkin(-Math.cos(t) * ARCH_W, ARCH_H * 0.45 + Math.sin(t) * ARCH_H * 0.55));
-  }
-  archPts.push(onSkin(ARCH_W, 0));
-  const arch = pathOf(archPts);
-  /* The rim is the curve only. A line drawn along the ground across the
-     opening is a line drawn across the road, and the road looked cut off
-     at it. */
-  const rim = archPts.map((q, i) => `${i === 0 ? 'M' : 'L'} ${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' ');
-
   const back = svg('g', { class: 'cave', 'aria-hidden': 'true' });
-  /* The dark of the inside, painted behind the road: the arch's own shape,
-     the same path the dome is cut with, so the two agree to the pixel. Not
-     the whole footprint — dark behind every face shows through as a hair
-     of black wherever two faces meet. */
-  back.appendChild(svg('path', { class: 'dark', d: arch }));
-  const floor: Pt2[] = [];
-  for (let j = 0; j <= SEGS; j++) {
-    const c = at3(0, j);
-    floor.push(P(c[0], c[1], 0));
-  }
-
   const front = svg('g', { class: 'cave', 'aria-hidden': 'true' });
-  const mask = svg('mask', { id: 'cavecut', maskUnits: 'userSpaceOnUse' });
-  const all = archPts.concat(floor);
-  const xs = all.map((q) => q[0]);
-  const ys = all.map((q) => q[1]);
-  mask.append(
-    svg('rect', {
-      x: (Math.min(...xs) - 400).toFixed(1), y: (Math.min(...ys) - 400).toFixed(1),
-      width: (Math.max(...xs) - Math.min(...xs) + 800).toFixed(1),
-      height: (Math.max(...ys) - Math.min(...ys) + 800).toFixed(1),
-      fill: '#fff',
-    }),
-    svg('path', { d: arch, fill: '#000' }),
-  );
-  front.appendChild(svg('defs', {}, mask));
-  const shell = svg('g', { class: 'shell', mask: 'url(#cavecut)' });
-  for (const f of faces) shell.appendChild(svg('path', { class: `face ${f.shade}`, d: f.d }));
-  front.appendChild(shell);
-  /* The edge of the cut, so the opening reads as an opening in the stone. */
-  front.appendChild(svg('path', { class: 'rim', d: rim }));
+  for (const f of faces) {
+    (f.dark ? back : front).appendChild(svg('path', { class: `face ${f.dark ? 'dark' : f.shade}`, d: f.d }));
+  }
 
   /*
    * The road going in. Its last stretch fades from the road's own colour to
@@ -522,13 +488,13 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const zRoad = ROAD_TOP - BOT_Z;
   const into = svg('linearGradient', {
     id: 'caveinto', gradientUnits: 'userSpaceOnUse',
-    x1: P(0, -R - 0.1, zRoad)[0], y1: P(0, -R - 0.1, zRoad)[1], x2: P(0, -R * 0.5, zRoad)[0], y2: P(0, -R * 0.5, zRoad)[1],
+    x1: P(0, -R - 0.05, zRoad)[0], y1: P(0, -R - 0.05, zRoad)[1], x2: P(0, -R * 0.62, zRoad)[0], y2: P(0, -R * 0.62, zRoad)[1],
   });
   into.append(svg('stop', { class: 'into-near', offset: '0' }), svg('stop', { class: 'into-far', offset: '1' }));
   front.appendChild(svg('defs', {}, into));
   front.appendChild(svg('path', {
     class: 'into',
-    d: pathOf([P(-ROAD_W / 2, -R - 0.1, zRoad), P(ROAD_W / 2, -R - 0.1, zRoad), P(ROAD_W / 2, -R * 0.5, zRoad), P(-ROAD_W / 2, -R * 0.5, zRoad)]),
+    d: pathOf([P(-ROAD_W / 2, -R - 0.05, zRoad), P(ROAD_W / 2, -R - 0.05, zRoad), P(ROAD_W / 2, -R * 0.62, zRoad), P(-ROAD_W / 2, -R * 0.62, zRoad)]),
   }));
 
   /*
@@ -537,8 +503,8 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
    * and the thing that says the cave goes somewhere. Stilled by the
    * stylesheet when the player has asked for less motion.
    */
-  const out = P(0, -R, ARCH_H * 0.35);
-  const away = P(0, -R - 0.9, ARCH_H * 0.6);
+  const out = P(0, -R, R * 0.3);
+  const away = P(0, -R - 0.9, R * 0.5);
   for (let k = 0; k < 2; k++) {
     const m = svg('ellipse', {
       class: 'mist', cx: out[0].toFixed(1), cy: out[1].toFixed(1), rx: 26, ry: 14,
