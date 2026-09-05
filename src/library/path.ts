@@ -36,6 +36,7 @@ import * as haptics from '../platform/haptics.js';
 import {
   type Pt2, project, groundOf, isoCam, flatCam, ISO_PITCH, TILE_H, HALF_W, HALF_H,
 } from '../platform/ui/camera.js';
+import { uvDome } from '../platform/ui/dome.js';
 import type { AnyGame } from '../platform/registry.js';
 import type { Puzzle } from '../platform/types.js';
 
@@ -420,21 +421,17 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   const pathOf = (pts: Pt2[]): string =>
     pts.map((q, i) => `${i === 0 ? 'M' : 'L'} ${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' ') + ' Z';
 
-  // --- the dome, as faces -----------------------------------------------
+  // --- the dome, as a mesh --------------------------------------------------
   /*
-   * Rings of latitude from the ground to the crown, segments of longitude
-   * round each. A face's normal on a sphere is the direction of its middle
-   * from the centre, so the shading needs no geometry beyond the point
-   * itself. Segment zero is turned so that a seam runs straight down the
-   * front, and the arch is cut symmetrically about it.
+   * A UV hemisphere from `uvDome`: every vertex made once and shared, so two
+   * faces that meet along an edge are projected to the same two points and
+   * the dome closes exactly. Each vertex is projected here exactly once, and
+   * a face is drawn through the projected points it indexes.
    */
   const RINGS = 3;
   const SEGS = 12;
-  const at3 = (i: number, j: number): [number, number, number] => {
-    const phi = (i / RINGS) * (Math.PI / 2);
-    const theta = ((j + 0.5) / SEGS) * Math.PI * 2 + Math.PI / 2;
-    return [Math.cos(phi) * Math.cos(theta) * R, Math.cos(phi) * Math.sin(theta) * R, Math.sin(phi) * R];
-  };
+  const dome = uvDome(RINGS, SEGS, R);
+  const projected = dome.verts.map((v) => P(v[0], v[1], v[2]));
   /* The light: from the screen's upper left and well above. */
   const LX = -0.55;
   const LD = -0.35;
@@ -457,27 +454,19 @@ function caveAt(run: Pt2[], yFoot: number): { road: Pt2[]; back: SVGGElement; fr
   /* Three faces wide: the one the road runs at and its neighbours either
      side, thirty degrees each. */
   const ENTRANCE = 0.6;
-  for (let i = 0; i < RINGS; i++) {
-    for (let j = 0; j < SEGS; j++) {
-      const corners = i === RINGS - 1
-        ? [at3(i, j), at3(i, j + 1), at3(RINGS, 0)]
-        : [at3(i, j), at3(i, j + 1), at3(i + 1, j + 1), at3(i + 1, j)];
-      const mid = corners.reduce((m, c) => [m[0] + c[0], m[1] + c[1], m[2] + c[2]], [0, 0, 0]);
-      const ml = Math.hypot(mid[0], mid[1], mid[2]) || 1;
-      /* On a sphere the normal is the direction of the face's middle. */
-      const facing = (mid[0] * EX + mid[1] * ED + mid[2] * EZ) / ml;
-      if (facing <= 0) continue;
-      const lit = (mid[0] * LX + mid[1] * LD + mid[2] * LZ) / ml;
-      const pts = corners.map((c) => P(c[0], c[1], c[2]));
-      faces.push({
-        d: pathOf(pts),
-        shade: lit > 0.66 ? 'top' : lit > 0.3 ? 'lit' : lit > -0.05 ? 'mid' : 'dim',
-        y: pts.reduce((s, q) => s + q[1], 0) / pts.length,
-        /* The entrance: the faces at the foot of the front, either side of
-           the seam the road runs at, two rings high. */
-        dark: i <= 1 && Math.abs(Math.atan2(mid[0], -mid[1])) < ENTRANCE,
-      });
-    }
+  for (const f of dome.faces) {
+    const [nx, nd, nz] = f.normal;
+    if (nx * EX + nd * ED + nz * EZ <= 0) continue;
+    const lit = nx * LX + nd * LD + nz * LZ;
+    const pts = f.idx.map((k) => projected[k]);
+    faces.push({
+      d: pathOf(pts),
+      shade: lit > 0.66 ? 'top' : lit > 0.3 ? 'lit' : lit > -0.05 ? 'mid' : 'dim',
+      y: pts.reduce((s, q) => s + q[1], 0) / pts.length,
+      /* The entrance: the faces at the foot of the front, either side of
+         the seam the road runs at, two rings high. */
+      dark: f.ring <= 1 && Math.abs(Math.atan2(nx, -nd)) < ENTRANCE,
+    });
   }
   /* Back to front: the faces lowest on the screen are nearest the camera. */
   faces.sort((p, q) => p.y - q.y);
