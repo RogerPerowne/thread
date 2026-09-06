@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { gotoApp, openPuzzle, puzzleIds, isSolved, noteOf, control } from './helpers.js';
+import {
+  gotoApp, openPuzzle, puzzleIds, isSolved, noteOf, control, zigBoard, drawLine,
+} from './helpers.js';
 
 /**
  * The way out of a board nobody can finish, on every game there is.
@@ -55,6 +57,62 @@ test.describe('showing the answer', () => {
       expect(Object.keys((await record(page)).games[game]?.done ?? {})).toEqual([]);
     });
   }
+});
+
+test('a board revealed, taken back and then solved says so', async ({ page }) => {
+  /*
+   * The one that made a board impossible to finish. Reveal used to mark the
+   * screen finished for good — the clock stopped, and the check that turns a
+   * solved board into "Solved" was switched off and never switched back on.
+   * Undo put the board back and let you play it, so you could draw the whole
+   * answer yourself, correctly, and be told "The answer" for ever with no way
+   * on. Completion is a fact about the board as it stands now, so:
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'zigzag');
+  await openPuzzle(page, 'zigzag', ids[1]);
+  const zig = await zigBoard(page);
+
+  await control(page, 'Reveal').click();
+  await page.locator('.sheet .btn', { hasText: 'Show me the answer' }).click();
+  await expect(noteOf(page)).toHaveText('The answer');
+  expect(await isSolved(page), 'a revealed board celebrated').toBe(false);
+
+  await control(page, 'Undo').click();
+  await expect(noteOf(page)).not.toHaveText('The answer');
+
+  /* Drawn by hand, and it is the same route the reveal wrote — the board has
+     one answer, so "is this the answer?" cannot tell who put it there. */
+  await drawLine(page, zig.answer);
+  expect(await isSolved(page), 'a board solved by hand did not say so').toBe(true);
+  await expect(noteOf(page)).toHaveText('Solved');
+
+  /* It completes, and it offers the way on — but it is not timed, because the
+     answer had been shown. */
+  const sheet = page.locator('.sheet');
+  await expect(sheet).toContainText('Not timed');
+  await expect(sheet.locator('.btn', { hasText: 'Next puzzle' })).toBeVisible();
+  const after = await record(page);
+  expect(Object.keys(after.games.zigzag?.done ?? {}), 'a shown answer was written down')
+    .not.toContain(ids[1]);
+});
+
+test('a solved board that is undone goes back to being played', async ({ page }) => {
+  /*
+   * The same rule from the other side. "Finished" is not a door that shuts
+   * once: undo the last move of a solved board and it is a board again.
+   */
+  await gotoApp(page);
+  const ids = await puzzleIds(page, 'zigzag');
+  await openPuzzle(page, 'zigzag', ids[2]);
+  const zig = await zigBoard(page);
+  await drawLine(page, zig.answer);
+  expect(await isSolved(page)).toBe(true);
+
+  await page.locator('.sheet .scrim, .sheet').first().press('Escape').catch(() => {});
+  await control(page, 'Undo').click();
+  expect(await isSolved(page), 'an undone board is still celebrating').toBe(false);
+  await expect(control(page, 'Hint')).toBeVisible();
 });
 
 test('asking and then thinking better of it leaves the board alone', async ({ page }) => {

@@ -458,6 +458,39 @@ to run into that face, so on its way there it has to be running away from
 you. The first stretch below the foot that climbs the screen is the only
 place that is true, and that is where the hill is.
 
+## When a board is finished
+
+**Completion is a fact about the board as it stands, checked on every change.**
+Not a door that shuts once. That sounds like a distinction without a
+difference until you watch what the other reading does: Reveal used to mark
+the screen finished for good — the clock stopped, and the check that turns a
+solved board into "Solved" was switched off and never switched back on. Undo
+put the board back and let you play it, so you could draw the whole answer
+yourself, correctly, and be told "The answer" for ever with no way on. A board
+that is right and will not say so is a dead end with nothing to do in it.
+
+So the shell keeps three facts apart where it used to keep two:
+
+- **resting** — the board is done being played for now, so the clock is
+  stopped and nothing is autosaved. True of a solved board and of a revealed
+  one, and false again the moment either is taken back.
+- **saw** — the player has seen the answer to this puzzle. This one sticks,
+  and it is what keeps the record honest: no time, no personal best, no day on
+  the streak. The board still completes and still offers the way on; it simply
+  is not written down, and the result says so instead of quoting a time.
+- **handed** — the board holds the answer because the reveal put it there.
+  An event, not a comparison. Every board has exactly one answer, so a player
+  who draws it themselves reproduces the revealed board *exactly*, and no test
+  that asks "is the board the answer?" can ever tell the two apart. What can
+  be told apart is who wrote it, so the reveal's own write sets this flag and
+  the very next change to the board clears it.
+
+And what "solved" means is each game's own judge, reading the rules off the
+board in front of it — never a comparison with the answer it shipped with.
+Two end-to-end tests hold the whole arrangement down: a board revealed, taken
+back and then solved by hand says Solved and is not timed; a solved board that
+is undone goes back to being played.
+
 ## Showing the answer
 
 Every puzzle has a Reveal, because a board nobody can finish needs a way out of
