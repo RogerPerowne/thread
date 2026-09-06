@@ -58,20 +58,40 @@ export function gameFrame(
   let elapsed = 0;
   let running = true;
   let since = performance.now();
-  let finished = false;
   /*
-   * The board was shown rather than solved.
+   * Three facts about a board, and two of them used to be one — which is how
+   * a board you revealed and then took back could never be completed at all.
+   * You could draw the whole answer yourself, correctly, and the board would
+   * sit there saying "The answer" and never say you had solved it.
    *
-   * Kept apart from `finished` because the two mean opposite things to the
-   * record: `finished` stops the clock and the autosave, which a revealed
-   * board also wants, but a revealed board is never written to the history.
-   * A streak that a Reveal keeps alive is a streak that means nothing, and a
-   * personal best you were handed is not one.
+   * `resting` — the board is done being played for now: the clock is stopped
+   *   and nothing is autosaved. True of a solved board and of a revealed one.
+   *   NOT a latch. Undo a solved board, or take a reveal back, and the board
+   *   is live again, because it is — and solving it then finishes it again.
+   *   Completion is a fact about the board as it stands, checked every time
+   *   anything changes, and never a door that shuts once.
+   *
+   * `saw` — the player has seen the answer to this puzzle. That one sticks,
+   *   and it is what keeps the record honest: no time, no personal best, no
+   *   day on the streak. Solving it yourself afterwards still COMPLETES the
+   *   board, because a board that is right and will not say so is a dead end
+   *   with nothing to do in it. It simply is not written down.
+   *
+   * `handed` — the board holds the answer because the reveal put it there.
+   *   An EVENT, not a comparison: the answer is unique, so a player who draws
+   *   it themselves reproduces the revealed board exactly, and any test that
+   *   asks "is the board the answer?" can never tell the two apart. What can
+   *   be told apart is who wrote it, so the reveal's own write sets this and
+   *   the very next change to the board clears it.
    */
-  let gaveUp = false;
+  let resting = false;
+  let saw = false;
+  let handed = false;
+  /** True only while the reveal is writing, so that write can be told from a move. */
+  let revealing = false;
 
   const tick = (): number => {
-    if (running && !finished) {
+    if (running && !resting) {
       const now = performance.now();
       elapsed += (now - since) / 1000;
       since = now;
@@ -208,20 +228,23 @@ export function gameFrame(
     const now = JSON.stringify(session.state);
     if (now !== lastState) {
       lastState = now;
+      /* Who wrote this. Every change but the reveal's own is the player. */
+      handed = revealing;
       /* The board moved on. A spotlight left standing would light up a place
          the hint was about on a board that no longer exists, and a sentence
          the board asked to have read was about that board too. */
       if (lastHint) dropHint();
       if (spoken) { spoken = false; note.classList.remove('said'); }
     }
-    /* "The answer" only while the board still IS the answer. Take the reveal
-       back and the note goes back to saying what is left, because it is. */
+    /* "The answer" only while the board is still the one the reveal wrote.
+       Take it back and draw it yourself and the board says Solved, because
+       that is what happened. */
     if (!lastHint && !spoken) {
-      note.replaceChildren(gaveUp && v.solved ? 'The answer'
+      note.replaceChildren(handed ? 'The answer'
         : v.solved ? 'Solved' : (v.fault || v.left));
     }
     note.classList.toggle('bad', !lastHint && !spoken && !v.solved && v.fault !== '');
-    note.classList.toggle('good', v.solved && !gaveUp);
+    note.classList.toggle('good', v.solved && !handed);
     bar2.set(v.progress);
 
     /* Dimmed, never removed. Hiding Redo is what makes the row grow a button
@@ -239,21 +262,46 @@ export function gameFrame(
      */
     clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
-      if (!finished) store.keep(game.meta.id, puzzle.id, session.save());
+      if (!resting) store.keep(game.meta.id, puzzle.id, session.save());
     }, 400);
 
-    if (v.solved && !finished) finish();
+    /*
+     * The board is asked whether it is solved on every change, and answers
+     * for the board as it stands — so a board that becomes solved says so
+     * whenever that happens, however it happened, and a board that stops
+     * being solved goes back to being played.
+     */
+    if (v.solved && !resting) {
+      resting = true;
+      if (!handed) finish();
+    } else if (!v.solved && resting) {
+      resting = false;
+      reopen();
+    }
   }
 
   // --- finishing -----------------------------------------------------------
   function finish(): void {
-    finished = true;
     const took = tick();
-    store.finish(game.meta.id, puzzle.id, took);
+    /* Recorded only if the answer was never shown. A time you were handed is
+       not a time, and a streak a Reveal keeps alive means nothing. */
+    if (!saw) store.finish(game.meta.id, puzzle.id, took);
     haptics.win();
     el.classList.add('won');
     // A beat for the board's own confirmation before the result covers it.
     resultTimer = window.setTimeout(() => showResult(took), still() ? 0 : 620);
+  }
+
+  /**
+   * The board was finished and is not any more: undone, or a reveal taken
+   * back. The celebration is called off and the clock picks up from now
+   * rather than from the moment it stopped, which would otherwise hand the
+   * player every second they spent looking at a finished board.
+   */
+  function reopen(): void {
+    clearTimeout(resultTimer);
+    el.classList.remove('won');
+    since = performance.now();
   }
 
   function showResult(took: number): void {
@@ -268,23 +316,40 @@ export function gameFrame(
     const sig = session.signature();
     const line = `${game.meta.shareName} ${hooks.label}\n${store.clock(took)}\n${sig}`;
 
-    const body = [
-      h('div', { class: 'result' },
-        h('div', { class: 'label', text: 'Solved in' }),
-        h('div', { class: 'big num', text: store.clock(took) }),
-        h('div', { class: 'sig', text: sig }),
-        h('div', { class: 'row' },
-          h('div', {}, h('div', { class: 'v num', text: String(stats.streak) }), h('div', { class: 'label', text: 'Day streak' })),
-          h('div', {}, h('div', { class: 'v num', text: stats.best === null ? '—' : store.clock(stats.best) }), h('div', { class: 'label', text: 'Best' })),
-          h('div', {}, h('div', { class: 'v num', text: String(stats.solved) }), h('div', { class: 'label', text: 'Solved' })),
+    /*
+     * A board finished after the answer was shown is finished — it says so,
+     * and it offers the way on — but there is no time on it and nothing to
+     * share. Saying "Solved in 0:12" over a board that was read off the
+     * screen would be the one lie the whole record rests on not telling.
+     */
+    const body = saw
+      ? [
+        h('div', { class: 'result' },
+          h('div', { class: 'label', text: 'Filled in' }),
+          h('div', { class: 'big num', text: '—' }),
+          h('div', { class: 'sig', text: 'Not timed: the answer was shown' }),
         ),
-      ),
-      button('Share result', () => share(line), { wide: true, glyph: 'share' }),
-      h('div', { style: 'height:8px' }),
-      hooks.next
-        ? button('Next puzzle', () => { shut(); hooks.onNext(); }, { wide: true, kind: 'accent', glyph: 'next' })
-        : button('Back to Games', () => { shut(); hooks.onBack(); }, { wide: true, kind: 'accent' }),
-    ];
+        hooks.next
+          ? button('Next puzzle', () => { shut(); hooks.onNext(); }, { wide: true, kind: 'accent', glyph: 'next' })
+          : button('Back to Games', () => { shut(); hooks.onBack(); }, { wide: true, kind: 'accent' }),
+      ]
+      : [
+        h('div', { class: 'result' },
+          h('div', { class: 'label', text: 'Solved in' }),
+          h('div', { class: 'big num', text: store.clock(took) }),
+          h('div', { class: 'sig', text: sig }),
+          h('div', { class: 'row' },
+            h('div', {}, h('div', { class: 'v num', text: String(stats.streak) }), h('div', { class: 'label', text: 'Day streak' })),
+            h('div', {}, h('div', { class: 'v num', text: stats.best === null ? '—' : store.clock(stats.best) }), h('div', { class: 'label', text: 'Best' })),
+            h('div', {}, h('div', { class: 'v num', text: String(stats.solved) }), h('div', { class: 'label', text: 'Solved' })),
+          ),
+        ),
+        button('Share result', () => share(line), { wide: true, glyph: 'share' }),
+        h('div', { style: 'height:8px' }),
+        hooks.next
+          ? button('Next puzzle', () => { shut(); hooks.onNext(); }, { wide: true, kind: 'accent', glyph: 'next' })
+          : button('Back to Games', () => { shut(); hooks.onBack(); }, { wide: true, kind: 'accent' }),
+      ];
     shut = sheet('Solved', body);
   }
 
@@ -385,19 +450,21 @@ export function gameFrame(
   function doReveal(): void {
     if (sweeping) return;
     sweeping = true;
-    gaveUp = true;
-    /* Bank the clock BEFORE stopping it: `tick` only accumulates while the
-       board is unfinished, so the other order loses the last stretch. */
+    /* Sticks. From here this board can be completed but never recorded. */
+    saw = true;
+    /* Bank the clock BEFORE the board goes to rest: `tick` only accumulates
+       while it is being played, so the other order loses the last stretch. */
     tick();
-    /* Finished, for everything except the record: the clock stops, the board
-       stops being autosaved, and `changed` will not call `finish`. */
-    finished = true;
     store.forget(game.meta.id, puzzle.id);
 
     const write = () => {
+      /* The one write that is not a move. `changed` reads this to know that
+         the board it is looking at was handed over rather than played. */
+      revealing = true;
       session.reveal();
       view.refresh();
       changed();
+      revealing = false;
       haptics.bump();
     };
 
@@ -451,7 +518,7 @@ export function gameFrame(
       for (const t of sweepTimers) clearTimeout(t);
       sweepTimers = [];
       document.removeEventListener('visibilitychange', onHidden);
-      if (!finished) store.keep(game.meta.id, puzzle.id, session.save());
+      if (!resting) store.keep(game.meta.id, puzzle.id, session.save());
       view.dispose();
     },
   };

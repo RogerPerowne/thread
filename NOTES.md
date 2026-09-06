@@ -309,3 +309,18 @@ good — `reach` selected the strand and then had nothing it could do. Restart
 was the only way to lay the string the other way round, and it took every
 other string with it. A press on the unused pin now winds the string off and
 starts it there.
+
+## A board you could not finish
+
+Reveal set one flag that meant two things: "stop the clock and the autosave"
+and "never check for completion again". The first is right for a revealed
+board. The second made the board unfinishable for the rest of its life — undo
+the reveal, play on, draw the correct answer, and the screen kept saying "The
+answer" with no completion and no way on.
+
+The fix that did not work first time is worth recording. The obvious way to
+tell a revealed board from a solved one is to remember the state the reveal
+wrote and compare. It cannot work: every board here has exactly ONE answer, so
+a player who draws it themselves reproduces the revealed state exactly, to the
+byte. "Is this the answer?" is the wrong question — both are. "Who wrote it?"
+is the right one, and that is an event, not a comparison.
